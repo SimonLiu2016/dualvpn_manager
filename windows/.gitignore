@@ -9,9 +9,29 @@ flutter/ephemeral/
 # Visual Studio build-related files.
 x64/
 x86/
+**/Debug/
+**/Release/
+**/Build/
+**/build/
 
 # Visual Studio cache files
 # files ending in .cache can be ignored
 *.[Cc]ache
 # but keep track of directories ending in .cache
 !*.[Cc]ache/
+
+# Generated files
+**/Generated Files/
+**/GeneratedFiles/
+**/GeneratedPluginRegistrant.*
+
+# Executable files
+**/*.exe
+**/*.dll
+**/*.pdb
+**/*.lib
+**/*.exp
+**/*.ilk
+**/*.msi
+**/*.msm
+**/*.msp

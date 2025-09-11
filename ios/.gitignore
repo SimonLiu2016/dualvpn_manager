@@ -27,6 +27,18 @@ Flutter/flutter_export_environment.sh
 ServiceDefinitions.json
 Runner/GeneratedPluginRegistrant.*
 
+# Build artifacts
+**/Build/
+**/Products/
+**/build/
+**/ModuleCache/
+**/*.dSYM/
+**/*.ipa
+
+# Generated files
+**/Podfile.lock
+**/Manifest.lock
+
 # Exceptions to above rules.
 !default.mode1v3
 !default.mode2v3

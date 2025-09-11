@@ -1,7 +1,44 @@
 # Flutter-related
 **/Flutter/ephemeral/
 **/Pods/
+**/Podfile.lock
+**/Manifest.lock
 
 # Xcode-related
 **/dgph
 **/xcuserdata/
+**/*.xcodeproj/xcuserdata/
+**/*.xcworkspace/xcuserdata/
+**/Build/
+**/Products/
+**/build/
+**/DerivedData/
+**/ModuleCache/
+**/*.dSYM/
+**/*.ipa
+**/*.app
+
+# Generated files
+**/Generated.xcconfig
+**/flutter_export_environment.sh
+**/Flutter.framework/
+**/Flutter.podspec
+**/FlutterMacOS.framework/
+**/FlutterMacOS.podspec
+
+# IDE files
+**/*.mode1v3
+**/*.mode2v3
+**/*.moved-aside
+**/*.pbxuser
+**/*.perspectivev3
+**/*sync/
+**/.sconsign.dblite
+**/.generated/
+**/ServiceDefinitions.json
+
+# Exceptions to above rules.
+!default.mode1v3
+!default.mode2v3
+!default.pbxuser
+!default.perspectivev3

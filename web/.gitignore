@@ -1,0 +1,25 @@
+# Flutter web build output
+/flutter_service_worker.js
+/flutter_service_worker.js.map
+/version.json
+
+# Generated files
+/*.js
+/*.js.map
+/*.dart.js
+/*.dart.js.map
+/*.part.js
+/*.part.js.map
+
+# Build artifacts
+/build/
+/Build/
+/dist/
+/out/
+
+# Cache files
+**/.cache/
+**/cache/
+
+# Log files
+*.log
