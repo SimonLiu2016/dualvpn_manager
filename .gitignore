@@ -32,6 +32,11 @@ migrate_working_dir/
 .pub/
 /build/
 /coverage/
+*.exe
+*.deb
+*.app
+*.msi
+*.dmg
 
 # Symbolication related
 app.*.symbols
@@ -43,3 +48,89 @@ app.*.map.json
 /android/app/debug
 /android/app/profile
 /android/app/release
+
+# Flutter build outputs
+/build/
+/ephemeral/
+/Pods/
+
+# IDE specific files
+*.vscode
+*.code-workspace
+
+# macOS specific
+**/*.dSYM/
+**/*.app/
+**/*.ipa/
+**/*.xcarchive/
+**/*.mobileprovision
+
+# Windows specific
+**/*.exe
+**/*.msi
+**/*.dll
+**/*.pdb
+
+# Linux specific
+**/*.deb
+**/*.rpm
+**/*.tar.gz
+
+# Generated files
+**/Generated.xcconfig
+**/flutter_export_environment.sh
+**/Flutter.framework/
+**/Flutter.podspec
+**/FlutterMacOS.framework/
+**/FlutterMacOS.podspec
+**/Podfile.lock
+**/pubspec.lock
+**/build/
+
+# Device-specific files
+**/local.properties
+
+# Log files
+*.log
+
+# Temporary files
+*.tmp
+*.temp
+
+# Backup files
+*.bak
+*.backup
+
+# IDE files
+**/.idea/
+**/*.iml
+**/*.iws
+**/*.ipr
+
+# OS generated files
+**/Thumbs.db
+**/.DS_Store
+**/.Spotlight-V100
+**/.Trashes
+**/ehthumbs.db
+**/Desktop.ini
+
+# Test coverage
+coverage/
+**/coverage/
+
+# Environment files
+.env
+.env.local
+.env.production
+
+# Package manager
+**/node_modules/
+**/bower_components/
+
+# Crashlytics
+**/crashlytics-build.properties
+
+# Firebase
+**/google-services.json
+**/GoogleService-Info.plist
