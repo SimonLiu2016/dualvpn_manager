@@ -1,0 +1,70 @@
+# 测试用Clash配置文件，包含多个代理
+port: 7890
+socks-port: 7891
+allow-lan: false
+mode: Rule
+log-level: info
+external-controller: 127.0.0.1:9090
+
+proxies:
+  - name: "代理服务器1"
+    type: http
+    server: 127.0.0.1
+    port: 8080
+  - name: "代理服务器2"
+    type: socks5
+    server: 127.0.0.1
+    port: 1080
+  - name: "代理服务器3"
+    type: http
+    server: 192.168.1.1
+    port: 8080
+  - name: "代理服务器4"
+    type: socks5
+    server: 192.168.1.2
+    port: 1080
+  - name: "代理服务器5"
+    type: http
+    server: 10.0.0.1
+    port: 8080
+  - name: "代理服务器6"
+    type: socks5
+    server: 10.0.0.2
+    port: 1080
+  - name: "代理服务器7"
+    type: http
+    server: 172.16.0.1
+    port: 8080
+  - name: "代理服务器8"
+    type: socks5
+    server: 172.16.0.2
+    port: 1080
+  - name: "代理服务器9"
+    type: http
+    server: 8.8.8.8
+    port: 8080
+  - name: "代理服务器10"
+    type: socks5
+    server: 8.8.4.4
+    port: 1080
+
+proxy-groups:
+  - name: "PROXY"
+    type: select
+    proxies:
+      - "代理服务器1"
+      - "代理服务器2"
+      - "代理服务器3"
+      - "代理服务器4"
+      - "代理服务器5"
+      - "代理服务器6"
+      - "代理服务器7"
+      - "代理服务器8"
+      - "代理服务器9"
+      - "代理服务器10"
+
+rules:
+  - DOMAIN-SUFFIX,google.com,PROXY
+  - DOMAIN-SUFFIX,github.com,PROXY
+  - DOMAIN-SUFFIX,microsoft.com,PROXY
+  - MATCH,DIRECT

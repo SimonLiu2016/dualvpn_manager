@@ -1,0 +1,35 @@
+# 更新后的Clash订阅配置
+port: 7890
+socks-port: 7891
+allow-lan: false
+mode: Rule
+log-level: info
+external-controller: 127.0.0.1:9090
+
+proxies:
+  - name: "更新后的代理1"
+    type: http
+    server: 127.0.0.1
+    port: 8080
+  - name: "更新后的代理2"
+    type: socks5
+    server: 127.0.0.1
+    port: 1080
+  - name: "新增代理3"
+    type: http
+    server: 192.168.1.1
+    port: 8080
+
+proxy-groups:
+  - name: "PROXY"
+    type: select
+    proxies:
+      - "更新后的代理1"
+      - "更新后的代理2"
+      - "新增代理3"
+
+rules:
+  - DOMAIN-SUFFIX,google.com,PROXY
+  - DOMAIN-SUFFIX,github.com,PROXY
+  - DOMAIN-SUFFIX,microsoft.com,PROXY
+  - MATCH,DIRECT

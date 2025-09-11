@@ -1,0 +1,45 @@
+name: dualvpn_manager
+description: "双捷VPN管理器(DualVPN Manager) - 同时管理OpenVPN和ClashX连接的轻量级工具"
+publish_to: "none"
+version: 0.1.0
+
+environment:
+  sdk: ^3.9.0
+
+dependencies:
+  flutter:
+    sdk: flutter
+  # 网络请求库
+  http: ^1.2.0
+  # 状态管理
+  provider: ^6.1.0
+  # 本地数据存储
+  shared_preferences: ^2.3.0
+  # 文件操作
+  path: ^1.9.0
+  path_provider: ^2.1.0
+  # 进程管理(用于启动VPN进程)
+  process_runner: ^4.0.0
+  # 系统托盘支持
+  tray_manager: ^0.5.1
+  # 系统信息获取
+  device_info_plus: ^10.1.0
+  # Base64编码解码
+  crypto: ^3.0.0
+  # 窗口管理
+  window_manager: ^0.5.1
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^5.0.0
+
+flutter:
+  uses-material-design: true
+  # 添加资源文件
+  assets:
+    - assets/icons/app_icon.png
+    - assets/icons/disconnected.png
+    - assets/icons/openvpn_connected.png
+    - assets/icons/clash_connected.png
+    - assets/icons/both_connected.png

@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+    <!-- 背景圆形 -->
+    <circle cx="50" cy="50" r="45" fill="#9E9E9E"/>
+
+    <!-- Dual 字母 D -->
+    <path d="M30 25 L30 75 L55 75 C65 75 70 70 70 60 L70 40 C70 30 65 25 55 25 Z" fill="white"/>
+    <path d="M35 30 L35 70 L55 70 C60 70 65 65 65 60 L65 40 C65 35 60 30 55 30 Z" fill="#9E9E9E"/>
+
+    <!-- VPN 文字 -->
+    <text x="50" y="90" font-family="Arial, sans-serif" font-weight="bold" font-size="14" fill="white" text-anchor="middle">VPN</text>
+
+    <!-- 断开连接的斜线 -->
+    <line x1="25" y1="25" x2="75" y2="75" stroke="#FF5252" stroke-width="5"/>
+    <line x1="75" y1="25" x2="25" y2="75" stroke="#FF5252" stroke-width="5"/>
+</svg>
