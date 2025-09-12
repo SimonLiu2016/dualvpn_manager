@@ -14,12 +14,12 @@ class ProxyManager {
   HttpServer? _proxyServer;
   int _proxyPort = 1080; // 默认SOCKS5代理端口
 
-  // 设置路由规则
-  void setRoutingRules(List<smart_routing_engine.RoutingRule> rules) {
-    _routingEngine.updateRoutingRules(rules);
+  // 更新活动代理配置（公共方法）
+  void updateActiveProxies(Map<String, VPNConfig> proxies) {
+    _routingEngine.updateActiveProxies(proxies);
   }
 
-  // 设置活动配置
+  // 设置活动配置（已废弃，保留以兼容旧代码）
   void setActiveConfigs(List<VPNConfig> configs) {
     // 将活动配置转换为Map格式
     final activeProxies = <String, VPNConfig>{};
@@ -29,6 +29,11 @@ class ProxyManager {
       }
     }
     _routingEngine.updateActiveProxies(activeProxies);
+  }
+
+  // 设置路由规则
+  void setRoutingRules(List<smart_routing_engine.RoutingRule> rules) {
+    _routingEngine.updateRoutingRules(rules);
   }
 
   // 启动代理服务

@@ -175,38 +175,34 @@ class _RoutingScreenState extends State<RoutingScreen> {
                     child: AnimatedContainer(
                       duration: const Duration(milliseconds: 300),
                       child: ElevatedButton.icon(
-                        onPressed: appState.isRunning
-                            ? () {
-                                // 禁用所有路由规则
-                                appState.disableAllRoutingRules();
+                        onPressed: () {
+                          // 路由规则的启用/禁用应该只影响规则本身，而不应该启动或停止代理
+                          // 代理的启动和停止应该由代理源的状态控制
 
-                                // 禁用路由
-                                appState.disableRouting();
-                              }
-                            : () {
-                                // 启用所有路由规则
-                                appState.enableAllRoutingRules();
+                          // 切换所有路由规则的启用状态
+                          if (appState.isRunning) {
+                            // 如果当前是运行状态，则禁用所有路由规则
+                            appState.disableAllRoutingRules();
+                          } else {
+                            // 如果当前是停止状态，则启用所有路由规则
+                            appState.enableAllRoutingRules();
+                          }
 
-                                // 配置并启用路由
-                                appState.configureRouting().then((success) {
-                                  if (success) {
-                                    appState.enableRouting();
-                                  } else {
-                                    // 显示错误提示
-                                    if (context.mounted) {
-                                      ScaffoldMessenger.of(
-                                        context,
-                                      ).showSnackBar(
-                                        const SnackBar(content: Text('路由配置失败')),
-                                      );
-                                    }
-                                  }
-                                });
-                              },
+                          // 显示提示信息
+                          if (context.mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                content: Text(
+                                  appState.isRunning ? '路由规则已禁用' : '路由规则已启用',
+                                ),
+                              ),
+                            );
+                          }
+                        },
                         icon: Icon(
                           appState.isRunning ? Icons.stop : Icons.play_arrow,
                         ),
-                        label: Text(appState.isRunning ? '全部停止' : '全部应用'),
+                        label: Text(appState.isRunning ? '禁用路由' : '启用路由'),
                         style: ElevatedButton.styleFrom(
                           backgroundColor: appState.isRunning
                               ? Colors.red

@@ -911,26 +911,34 @@ class AppState extends ChangeNotifier {
     }
   }
 
+  // 设置活动配置到代理管理器
+  void setActiveConfigs(List<VPNConfig> configs) {
+    // 将活动配置转换为Map格式
+    final activeProxies = <String, VPNConfig>{};
+    for (final config in configs) {
+      if (config.isActive) {
+        activeProxies[config.id] = config;
+      }
+    }
+    _proxyManager.updateActiveProxies(activeProxies);
+  }
+
   // 启用路由
   Future<void> enableRouting() async {
     try {
-      // 更新代理管理器的路由规则和活动配置
+      // 更新代理管理器的路由规则
       _proxyManager.setRoutingRules(_routingRules);
-      final configs = await ConfigManager.loadConfigs();
-      _proxyManager.setActiveConfigs(configs);
 
-      // 启动代理服务
-      final result = await _proxyManager.startProxyService();
-      if (result) {
-        // 启用智能路由（设置系统代理指向我们的代理服务）
-        await _vpnManager.enableSmartRouting();
-        setIsRunning(true);
-        Logger.info('路由已启用');
-      } else {
-        Logger.error('启用路由失败');
-      }
+      // 更新活动配置到代理管理器
+      final configs = await ConfigManager.loadConfigs();
+      setActiveConfigs(configs);
+
+      // 不再直接启动代理服务，代理服务应该由代理源状态控制
+      // 只有在需要时才启动本地代理服务
+      Logger.info('路由规则已更新，代理服务由代理源状态控制');
+      setIsRunning(true);
     } catch (e) {
-      Logger.error('启用路由失败: $e');
+      Logger.error('更新路由规则失败: $e');
       // 通知UI显示错误
     }
   }
@@ -938,13 +946,12 @@ class AppState extends ChangeNotifier {
   // 禔用路由
   Future<void> disableRouting() async {
     try {
-      // 禔用智能路由（清除系统代理设置）
-      await _vpnManager.disableSmartRouting();
-      await _proxyManager.stopProxyService();
+      // 清空路由规则
+      _proxyManager.setRoutingRules([]);
       setIsRunning(false);
-      Logger.info('路由已禁用');
+      Logger.info('路由规则已清空');
     } catch (e) {
-      Logger.error('禁用路由失败: $e');
+      Logger.error('清空路由规则失败: $e');
       // 通知UI显示错误
     }
   }
