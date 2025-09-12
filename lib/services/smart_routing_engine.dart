@@ -1,189 +1,193 @@
 import 'package:dualvpn_manager/models/vpn_config.dart';
 import 'package:dualvpn_manager/utils/logger.dart';
-import 'dart:io';
 
-/// 智能路由决策引擎
-/// 根据路由规则和目标地址决定使用哪个代理
-class SmartRoutingEngine {
-  final List<RoutingRule> _routingRules = [];
-  final List<VPNConfig> _activeConfigs = [];
+/// 路由决策结果
+class RouteDecision {
+  final bool shouldProxy;
+  final VPNConfig? proxyConfig;
+  final String reason;
 
-  // 设置路由规则
-  void setRoutingRules(List<RoutingRule> rules) {
-    _routingRules.clear();
-    _routingRules.addAll(rules);
-    Logger.info('智能路由引擎已更新路由规则，共${rules.length}条');
-  }
+  RouteDecision({
+    required this.shouldProxy,
+    this.proxyConfig,
+    required this.reason,
+  });
+}
 
-  // 设置活动配置
-  void setActiveConfigs(List<VPNConfig> configs) {
-    _activeConfigs.clear();
-    _activeConfigs.addAll(configs);
-    Logger.info('智能路由引擎已更新活动配置，共${configs.length}个');
-  }
+/// 路由规则类型
+enum RuleType {
+  domain, // 域名匹配
+  domainSuffix, // 域名后缀匹配
+  domainKeyword, // 域名关键字匹配
+  ip, // IP地址匹配
+  cidr, // CIDR IP段匹配
+  geoip, // 地理位置IP匹配
+  regexp, // 正则表达式匹配
+  finalRule, // 最终规则（匹配所有）
+}
 
-  // 根据目标地址选择代理配置
-  VPNConfig? selectProxyForDestination(String destination) {
-    // 首先检查是否有匹配的路由规则
-    for (final rule in _routingRules) {
-      if (!rule.isEnabled) continue;
+/// 路由规则
+class RoutingRule {
+  final String id;
+  final String pattern;
+  final RuleType type;
+  final String proxyId; // 对应的代理配置ID
+  final bool isEnabled;
 
-      // 检查目标地址是否匹配规则模式
-      if (_matchesPattern(destination, rule.pattern)) {
-        // 根据规则中的配置ID查找对应的配置
-        if (rule.configId != null) {
-          final config = _activeConfigs.firstWhere(
-            (config) => config.id == rule.configId && config.isActive,
-            orElse: () => _findConfigByType(rule.routeType),
-          );
-          if (config.id.isNotEmpty && config.isActive) {
-            Logger.debug(
-              '目标地址 $destination 匹配路由规则 ${rule.pattern}，使用代理 ${config.name}',
-            );
-            return config;
-          }
-        } else {
-          // 回退到根据路由类型查找配置
-          final config = _findConfigByType(rule.routeType);
-          if (config.id.isNotEmpty && config.isActive) {
-            Logger.debug(
-              '目标地址 $destination 匹配路由规则 ${rule.pattern}，使用代理 ${config.name}',
-            );
-            return config;
-          }
-        }
-      }
-    }
+  RoutingRule({
+    required this.id,
+    required this.pattern,
+    required this.type,
+    required this.proxyId,
+    this.isEnabled = true,
+  });
 
-    // 如果没有匹配的路由规则，默认不使用代理
-    Logger.debug('目标地址 $destination 未匹配任何路由规则，默认不使用代理');
-    return null;
-  }
-
-  // 检查目标地址是否匹配模式
-  bool _matchesPattern(String destination, String pattern) {
-    try {
-      // 完全匹配
-      if (destination == pattern) {
-        return true;
-      }
-
-      // 处理IP地址范围匹配 (例如: 192.168.1.0/24)
-      if (pattern.contains('/')) {
-        return _matchesCIDR(destination, pattern);
-      }
-
-      // 后缀匹配（用于子域名）
-      if (pattern.startsWith('*.')) {
-        final domain = pattern.substring(2);
-        return destination == domain || destination.endsWith('.$domain');
-      }
-
-      // 前缀匹配
-      if (pattern.endsWith('*')) {
-        final prefix = pattern.substring(0, pattern.length - 1);
-        return destination.startsWith(prefix);
-      }
-
-      // 正则表达式匹配
-      if (pattern.startsWith('/') && pattern.endsWith('/')) {
-        final regexPattern = pattern.substring(1, pattern.length - 1);
-        return RegExp(regexPattern).hasMatch(destination);
-      }
-
-      return false;
-    } catch (e) {
-      Logger.error('匹配模式时出错: $e');
-      return false;
-    }
-  }
-
-  // CIDR匹配 (IP地址范围匹配)
-  bool _matchesCIDR(String ip, String cidr) {
-    try {
-      final parts = cidr.split('/');
-      if (parts.length != 2) return false;
-
-      final network = parts[0];
-      final prefixLength = int.parse(parts[1]);
-
-      final ipParts = ip.split('.').map(int.parse).toList();
-      final networkParts = network.split('.').map(int.parse).toList();
-
-      final ipInt =
-          (ipParts[0] << 24) +
-          (ipParts[1] << 16) +
-          (ipParts[2] << 8) +
-          ipParts[3];
-      final networkInt =
-          (networkParts[0] << 24) +
-          (networkParts[1] << 16) +
-          (networkParts[2] << 8) +
-          networkParts[3];
-      final mask = ~((1 << (32 - prefixLength)) - 1);
-
-      return (ipInt & mask) == (networkInt & mask);
-    } catch (e) {
-      Logger.error('CIDR匹配时出错: $e');
-      return false;
-    }
-  }
-
-  // 根据路由类型查找配置
-  VPNConfig _findConfigByType(RouteType routeType) {
-    for (final config in _activeConfigs) {
-      if (!config.isActive) continue;
-
-      switch (routeType) {
-        case RouteType.openVPN:
-          if (config.type == VPNType.openVPN) return config;
-          break;
-        case RouteType.clash:
-          if (config.type == VPNType.clash) return config;
-          break;
-        case RouteType.shadowsocks:
-          if (config.type == VPNType.shadowsocks) return config;
-          break;
-        case RouteType.v2ray:
-          if (config.type == VPNType.v2ray) return config;
-          break;
-        case RouteType.httpProxy:
-          if (config.type == VPNType.httpProxy) return config;
-          break;
-        case RouteType.socks5:
-          if (config.type == VPNType.socks5) return config;
-          break;
-        case RouteType.custom:
-          if (config.type == VPNType.custom) return config;
-          break;
-      }
-    }
-
-    // 如果没有找到匹配的配置，返回空配置
-    return VPNConfig(
-      id: '',
-      name: '未找到配置',
-      type: VPNType.openVPN,
-      configPath: '',
-      settings: {},
+  // 从JSON创建RoutingRule实例
+  factory RoutingRule.fromJson(Map<String, dynamic> json) {
+    return RoutingRule(
+      id: json['id'] as String,
+      pattern: json['pattern'] as String,
+      type: RuleType.values.firstWhere(
+        (e) => e.toString() == json['type'],
+        orElse: () => RuleType.domain,
+      ),
+      proxyId: json['proxyId'] as String,
+      isEnabled: json['isEnabled'] as bool? ?? true,
     );
   }
 
-  // 获取所有活动配置的代理信息
-  List<Map<String, dynamic>> getActiveProxyInfo() {
-    final List<Map<String, dynamic>> proxyInfo = [];
+  // 转换为JSON
+  Map<String, dynamic> toJson() {
+    return {
+      'id': id,
+      'pattern': pattern,
+      'type': type.toString(),
+      'proxyId': proxyId,
+      'isEnabled': isEnabled,
+    };
+  }
+}
 
-    for (final config in _activeConfigs) {
-      if (!config.isActive) continue;
+/// 智能路由引擎
+/// 负责根据路由规则决定网络请求的走向
+class SmartRoutingEngine {
+  Map<String, VPNConfig> _activeProxies = {};
+  List<RoutingRule> _routingRules = [];
+  final RouteDecision _defaultDecision = RouteDecision(
+    shouldProxy: false,
+    reason: '默认直连',
+  );
 
-      proxyInfo.add({
-        'configId': config.id,
-        'configName': config.name,
-        'type': config.type,
-        'settings': config.settings,
-      });
+  /// 更新活动代理配置
+  void updateActiveProxies(Map<String, VPNConfig> proxies) {
+    _activeProxies = Map.from(proxies);
+    Logger.debug('更新活动代理配置，共${_activeProxies.length}个');
+  }
+
+  /// 更新路由规则
+  void updateRoutingRules(List<RoutingRule> rules) {
+    _routingRules = List.from(rules);
+    Logger.debug('更新路由规则，共${_routingRules.length}条');
+  }
+
+  /// 决定路由策略
+  RouteDecision decideRoute(String host) {
+    try {
+      // 遍历路由规则，找到第一个匹配的规则
+      for (final rule in _routingRules) {
+        if (!rule.isEnabled) continue;
+
+        bool isMatch = false;
+        switch (rule.type) {
+          case RuleType.domain:
+            isMatch = _matchDomain(host, rule.pattern);
+            break;
+          case RuleType.domainSuffix:
+            isMatch = _matchDomainSuffix(host, rule.pattern);
+            break;
+          case RuleType.domainKeyword:
+            isMatch = _matchDomainKeyword(host, rule.pattern);
+            break;
+          case RuleType.ip:
+            isMatch = _matchIP(host, rule.pattern);
+            break;
+          case RuleType.cidr:
+            isMatch = _matchCIDR(host, rule.pattern);
+            break;
+          case RuleType.regexp:
+            isMatch = _matchRegExp(host, rule.pattern);
+            break;
+          case RuleType.finalRule:
+            isMatch = true; // 最终规则匹配所有
+            break;
+          default:
+            isMatch = false;
+        }
+
+        if (isMatch) {
+          // 找到匹配的规则，返回对应的代理配置
+          final proxyConfig = _activeProxies[rule.proxyId];
+          if (proxyConfig != null) {
+            return RouteDecision(
+              shouldProxy: true,
+              proxyConfig: proxyConfig,
+              reason: '匹配规则: ${rule.pattern}',
+            );
+          } else {
+            // 规则匹配但对应的代理不可用，继续查找其他规则
+            Logger.warn('规则匹配但代理不可用: ${rule.proxyId}');
+            continue;
+          }
+        }
+      }
+
+      // 没有匹配的规则，使用默认决策
+      return _defaultDecision;
+    } catch (e) {
+      Logger.error('路由决策失败: $e');
+      return _defaultDecision;
     }
+  }
 
-    return proxyInfo;
+  /// 域名完全匹配
+  bool _matchDomain(String host, String pattern) {
+    return host.toLowerCase() == pattern.toLowerCase();
+  }
+
+  /// 域名后缀匹配
+  bool _matchDomainSuffix(String host, String pattern) {
+    final lowerHost = host.toLowerCase();
+    final lowerPattern = pattern.toLowerCase();
+    return lowerHost == lowerPattern ||
+        lowerHost.endsWith('.$lowerPattern') ||
+        lowerHost.endsWith(lowerPattern);
+  }
+
+  /// 域名关键字匹配
+  bool _matchDomainKeyword(String host, String pattern) {
+    return host.toLowerCase().contains(pattern.toLowerCase());
+  }
+
+  /// IP地址匹配
+  bool _matchIP(String host, String pattern) {
+    // 简化实现，实际应该解析host是否为IP地址并进行比较
+    return host == pattern;
+  }
+
+  /// CIDR IP段匹配
+  bool _matchCIDR(String host, String pattern) {
+    // 简化实现，实际应该解析host是否在指定CIDR范围内
+    return false;
+  }
+
+  /// 正则表达式匹配
+  bool _matchRegExp(String host, String pattern) {
+    try {
+      final regExp = RegExp(pattern, caseSensitive: false);
+      return regExp.hasMatch(host);
+    } catch (e) {
+      Logger.error('正则表达式匹配失败: $e');
+      return false;
+    }
   }
 }

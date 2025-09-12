@@ -60,12 +60,9 @@ class ClashService {
         (data) {
           final output = utf8.decode(data);
           Logger.debug('Clash stdout: $output');
-          // 更宽松的连接成功判断条件
-          if (output.contains('HTTP') && output.contains('listening') ||
-              output.contains('RESTful') && output.contains('listening') ||
-              output.contains('Clash') ||
-              output.contains('start') ||
-              output.contains('initial')) {
+          // 更严格的连接成功判断条件
+          if ((output.contains('HTTP') || output.contains('RESTful')) &&
+              output.contains('listening')) {
             _isConnected = true;
             Logger.info('Clash服务已启动');
           }
@@ -79,9 +76,9 @@ class ClashService {
         (data) {
           final output = utf8.decode(data);
           Logger.error('Clash stderr: $output');
-          // 即使stderr有输出，也可能是正常启动信息
-          if (output.contains('HTTP') && output.contains('listening') ||
-              output.contains('RESTful') && output.contains('listening')) {
+          // stderr中的HTTP listening信息也表示启动成功
+          if ((output.contains('HTTP') || output.contains('RESTful')) &&
+              output.contains('listening')) {
             _isConnected = true;
             Logger.info('Clash服务已启动');
           }
@@ -93,6 +90,11 @@ class ClashService {
 
       // 等待一段时间以确定启动是否成功
       await Future.delayed(const Duration(seconds: 5));
+
+      // 如果仍未连接成功，尝试通过API验证连接
+      if (!_isConnected) {
+        _isConnected = await verifyConnection();
+      }
 
       Logger.info('Clash启动${_isConnected ? '成功' : '可能失败'}');
       return _isConnected;

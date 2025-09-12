@@ -426,9 +426,14 @@ class _ProxyListScreenState extends State<ProxyListScreen> {
                                         orElse: () => configs.first,
                                       );
 
-                                      if (currentConfig.type == VPNType.clash &&
-                                          value) {
-                                        if (context.mounted) {
+                                      // 如果是Clash类型的配置，确保代理能正确应用
+                                      if (currentConfig.type == VPNType.clash) {
+                                        // 确保代理能正确应用到已连接的Clash服务
+                                        appState.ensureProxyAppliedForClash(
+                                          currentConfig,
+                                        );
+
+                                        if (value && context.mounted) {
                                           ScaffoldMessenger.of(
                                             context,
                                           ).showSnackBar(

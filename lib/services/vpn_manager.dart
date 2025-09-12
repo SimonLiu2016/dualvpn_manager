@@ -6,7 +6,9 @@ import 'package:dualvpn_manager/services/v2ray_service.dart';
 import 'package:dualvpn_manager/services/http_proxy_service.dart';
 import 'package:dualvpn_manager/services/socks5_proxy_service.dart';
 import 'package:dualvpn_manager/services/routing_service.dart';
+import 'package:dualvpn_manager/services/system_proxy_manager.dart';
 import 'package:dualvpn_manager/utils/logger.dart';
+import 'dart:io' show Platform, Process;
 
 class VPNManager {
   final OpenVPNService _openVPNService = OpenVPNService();
@@ -16,6 +18,7 @@ class VPNManager {
   final HTTPProxyService _httpProxyService = HTTPProxyService();
   final SOCKS5ProxyService _socks5ProxyService = SOCKS5ProxyService();
   final RoutingService _routingService = RoutingService();
+  final SystemProxyManager _systemProxyManager = SystemProxyManager();
 
   bool get isOpenVPNConnected => _openVPNService.isConnected;
   bool get isClashConnected => _clashService.isConnected;
@@ -80,6 +83,14 @@ class VPNManager {
       if (result) {
         await Future.delayed(const Duration(seconds: 1));
         result = await _clashService.verifyConnection();
+
+        // 设置代理模式为global模式以确保代理生效
+        if (result) {
+          await _clashService.setProxyMode('global');
+
+          // 设置系统代理
+          await _systemProxyManager.setSystemProxy('127.0.0.1', 7890, 7891);
+        }
       }
 
       return result;
@@ -92,6 +103,9 @@ class VPNManager {
   // 断开Clash
   Future<void> disconnectClash() async {
     try {
+      // 清除系统代理设置
+      await _systemProxyManager.clearSystemProxy();
+
       await _clashService.stop();
     } catch (e) {
       Logger.error('断开Clash失败: $e');
@@ -124,6 +138,11 @@ class VPNManager {
         result = await _shadowsocksService.startWithConfig(config.configPath);
       }
 
+      // 如果连接成功，设置系统代理
+      if (result) {
+        await _systemProxyManager.setSystemProxy('127.0.0.1', 1080, 1080);
+      }
+
       return result;
     } catch (e) {
       Logger.error('连接Shadowsocks失败: $e');
@@ -134,6 +153,9 @@ class VPNManager {
   // 断开Shadowsocks
   Future<void> disconnectShadowsocks() async {
     try {
+      // 清除系统代理设置
+      await _systemProxyManager.clearSystemProxy();
+
       await _shadowsocksService.stop();
     } catch (e) {
       Logger.error('断开Shadowsocks失败: $e');
@@ -164,6 +186,11 @@ class VPNManager {
         result = await _v2rayService.startWithConfig(config.configPath);
       }
 
+      // 如果连接成功，设置系统代理
+      if (result) {
+        await _systemProxyManager.setSystemProxy('127.0.0.1', 1080, 1080);
+      }
+
       return result;
     } catch (e) {
       Logger.error('连接V2Ray失败: $e');
@@ -174,9 +201,136 @@ class VPNManager {
   // 断开V2Ray
   Future<void> disconnectV2Ray() async {
     try {
+      // 清除系统代理设置
+      await _systemProxyManager.clearSystemProxy();
+
       await _v2rayService.stop();
     } catch (e) {
       Logger.error('断开V2Ray失败: $e');
+      rethrow;
+    }
+  }
+
+  // 连接HTTP代理
+  Future<bool> connectHTTPProxy(VPNConfig config) async {
+    if (config.type != VPNType.httpProxy) {
+      Logger.error('配置类型不匹配');
+      throw Exception('配置类型不匹配');
+    }
+
+    try {
+      // 如果已经连接，则先断开
+      if (_httpProxyService.isConnected) {
+        await _httpProxyService.stop();
+      }
+
+      // 解析服务器地址和端口
+      final parts = config.configPath.split(':');
+      if (parts.length != 2) {
+        throw Exception('HTTP代理配置路径格式错误');
+      }
+
+      final server = parts[0];
+      final port = int.tryParse(parts[1]);
+      if (port == null) {
+        throw Exception('HTTP代理端口格式错误');
+      }
+
+      // 获取用户名和密码（如果有的话）
+      final username = config.settings['username'] as String?;
+      final password = config.settings['password'] as String?;
+
+      // 连接HTTP代理
+      final result = await _httpProxyService.start(
+        server,
+        port,
+        username: username,
+        password: password,
+      );
+
+      // 如果连接成功，设置系统代理
+      if (result) {
+        await _systemProxyManager.setSystemProxy(server, port, port);
+      }
+
+      return result;
+    } catch (e) {
+      Logger.error('连接HTTP代理失败: $e');
+      rethrow;
+    }
+  }
+
+  // 断开HTTP代理
+  Future<void> disconnectHTTPProxy() async {
+    try {
+      // 清除系统代理设置
+      await _systemProxyManager.clearSystemProxy();
+
+      await _httpProxyService.stop();
+    } catch (e) {
+      Logger.error('断开HTTP代理失败: $e');
+      rethrow;
+    }
+  }
+
+  // 连接SOCKS5代理
+  Future<bool> connectSOCKS5Proxy(VPNConfig config) async {
+    if (config.type != VPNType.socks5) {
+      Logger.error('配置类型不匹配');
+      throw Exception('配置类型不匹配');
+    }
+
+    try {
+      // 如果已经连接，则先断开
+      if (_socks5ProxyService.isConnected) {
+        await _socks5ProxyService.stop();
+      }
+
+      // 解析服务器地址和端口
+      final parts = config.configPath.split(':');
+      if (parts.length != 2) {
+        throw Exception('SOCKS5代理配置路径格式错误');
+      }
+
+      final server = parts[0];
+      final port = int.tryParse(parts[1]);
+      if (port == null) {
+        throw Exception('SOCKS5代理端口格式错误');
+      }
+
+      // 获取用户名和密码（如果有的话）
+      final username = config.settings['username'] as String?;
+      final password = config.settings['password'] as String?;
+
+      // 连接SOCKS5代理
+      final result = await _socks5ProxyService.start(
+        server,
+        port,
+        username: username,
+        password: password,
+      );
+
+      // 如果连接成功，设置系统代理
+      if (result) {
+        await _systemProxyManager.setSystemProxy(server, port, port);
+      }
+
+      return result;
+    } catch (e) {
+      Logger.error('连接SOCKS5代理失败: $e');
+      rethrow;
+    }
+  }
+
+  // 断开SOCKS5代理
+  Future<void> disconnectSOCKS5Proxy() async {
+    try {
+      // 清除系统代理设置
+      await _systemProxyManager.clearSystemProxy();
+
+      await _socks5ProxyService.stop();
+    } catch (e) {
+      Logger.error('断开SOCKS5代理失败: $e');
       rethrow;
     }
   }
@@ -246,112 +400,6 @@ class VPNManager {
     }
   }
 
-  // 连接HTTP代理
-  Future<bool> connectHTTPProxy(VPNConfig config) async {
-    if (config.type != VPNType.httpProxy) {
-      Logger.error('配置类型不匹配');
-      throw Exception('配置类型不匹配');
-    }
-
-    try {
-      // 如果已经连接，则先断开
-      if (_httpProxyService.isConnected) {
-        await _httpProxyService.stop();
-      }
-
-      // 解析服务器地址和端口
-      final parts = config.configPath.split(':');
-      if (parts.length != 2) {
-        throw Exception('HTTP代理配置路径格式错误');
-      }
-
-      final server = parts[0];
-      final port = int.tryParse(parts[1]);
-      if (port == null) {
-        throw Exception('HTTP代理端口格式错误');
-      }
-
-      // 获取用户名和密码（如果有的话）
-      final username = config.settings['username'] as String?;
-      final password = config.settings['password'] as String?;
-
-      // 连接HTTP代理
-      final result = await _httpProxyService.start(
-        server,
-        port,
-        username: username,
-        password: password,
-      );
-      return result;
-    } catch (e) {
-      Logger.error('连接HTTP代理失败: $e');
-      rethrow;
-    }
-  }
-
-  // 断开HTTP代理
-  Future<void> disconnectHTTPProxy() async {
-    try {
-      await _httpProxyService.stop();
-    } catch (e) {
-      Logger.error('断开HTTP代理失败: $e');
-      rethrow;
-    }
-  }
-
-  // 连接SOCKS5代理
-  Future<bool> connectSOCKS5Proxy(VPNConfig config) async {
-    if (config.type != VPNType.socks5) {
-      Logger.error('配置类型不匹配');
-      throw Exception('配置类型不匹配');
-    }
-
-    try {
-      // 如果已经连接，则先断开
-      if (_socks5ProxyService.isConnected) {
-        await _socks5ProxyService.stop();
-      }
-
-      // 解析服务器地址和端口
-      final parts = config.configPath.split(':');
-      if (parts.length != 2) {
-        throw Exception('SOCKS5代理配置路径格式错误');
-      }
-
-      final server = parts[0];
-      final port = int.tryParse(parts[1]);
-      if (port == null) {
-        throw Exception('SOCKS5代理端口格式错误');
-      }
-
-      // 获取用户名和密码（如果有的话）
-      final username = config.settings['username'] as String?;
-      final password = config.settings['password'] as String?;
-
-      // 连接SOCKS5代理
-      final result = await _socks5ProxyService.start(
-        server,
-        port,
-        username: username,
-        password: password,
-      );
-      return result;
-    } catch (e) {
-      Logger.error('连接SOCKS5代理失败: $e');
-      rethrow;
-    }
-  }
-
-  // 断开SOCKS5代理
-  Future<void> disconnectSOCKS5Proxy() async {
-    try {
-      await _socks5ProxyService.stop();
-    } catch (e) {
-      Logger.error('断开SOCKS5代理失败: $e');
-      rethrow;
-    }
-  }
-
   // 通用订阅更新方法
   Future<bool> updateSubscription(VPNConfig config) async {
     if (!config.configPath.startsWith('http')) {
@@ -416,6 +464,30 @@ class VPNManager {
       await _routingService.disableRouting();
     } catch (e) {
       Logger.error('禁用路由失败: $e');
+      rethrow;
+    }
+  }
+
+  // 启用智能路由（设置系统代理指向我们的代理服务）
+  Future<void> enableSmartRouting() async {
+    try {
+      // 设置系统代理指向我们的智能代理服务（默认端口1080）
+      await _systemProxyManager.setSystemProxy('127.0.0.1', 1080, 1080);
+      Logger.info('智能路由已启用，系统代理已设置');
+    } catch (e) {
+      Logger.error('启用智能路由失败: $e');
+      rethrow;
+    }
+  }
+
+  // 禔用智能路由（清除系统代理设置）
+  Future<void> disableSmartRouting() async {
+    try {
+      // 清除系统代理设置
+      await _systemProxyManager.clearSystemProxy();
+      Logger.info('智能路由已禁用，系统代理已清除');
+    } catch (e) {
+      Logger.error('禁用智能路由失败: $e');
       rethrow;
     }
   }

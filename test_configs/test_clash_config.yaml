@@ -6,6 +6,15 @@ mode: Rule
 log-level: info
 external-controller: 127.0.0.1:9090
 
+# 启用TUN模式以实现透明代理
+tun:
+  enable: true
+  stack: system
+  dns-hijack:
+    - 0.0.0.0:53
+  auto-route: true
+  auto-detect-interface: true
+
 proxies:
   - name: "测试代理"
     type: http

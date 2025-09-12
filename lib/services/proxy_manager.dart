@@ -1,5 +1,6 @@
-import 'package:dualvpn_manager/models/vpn_config.dart';
-import 'package:dualvpn_manager/services/smart_routing_engine.dart';
+import 'package:dualvpn_manager/models/vpn_config.dart' hide RoutingRule;
+import 'package:dualvpn_manager/services/smart_routing_engine.dart'
+    as smart_routing_engine;
 import 'package:dualvpn_manager/utils/logger.dart';
 import 'dart:io';
 import 'dart:convert';
@@ -7,19 +8,27 @@ import 'dart:convert';
 /// 代理管理器
 /// 负责管理多个代理的协调工作和流量转发
 class ProxyManager {
-  final SmartRoutingEngine _routingEngine = SmartRoutingEngine();
+  final smart_routing_engine.SmartRoutingEngine _routingEngine =
+      smart_routing_engine.SmartRoutingEngine();
   bool _isRunning = false;
   HttpServer? _proxyServer;
   int _proxyPort = 1080; // 默认SOCKS5代理端口
 
   // 设置路由规则
-  void setRoutingRules(List<RoutingRule> rules) {
-    _routingEngine.setRoutingRules(rules);
+  void setRoutingRules(List<smart_routing_engine.RoutingRule> rules) {
+    _routingEngine.updateRoutingRules(rules);
   }
 
   // 设置活动配置
   void setActiveConfigs(List<VPNConfig> configs) {
-    _routingEngine.setActiveConfigs(configs);
+    // 将活动配置转换为Map格式
+    final activeProxies = <String, VPNConfig>{};
+    for (final config in configs) {
+      if (config.isActive) {
+        activeProxies[config.id] = config;
+      }
+    }
+    _routingEngine.updateActiveProxies(activeProxies);
   }
 
   // 启动代理服务
@@ -69,13 +78,11 @@ class ProxyManager {
       Logger.debug('收到代理请求: ${request.uri}');
 
       // 根据目标地址选择代理
-      final targetConfig = _routingEngine.selectProxyForDestination(
-        request.uri.host,
-      );
+      final routeDecision = _routingEngine.decideRoute(request.uri.host);
 
-      if (targetConfig != null) {
+      if (routeDecision.shouldProxy && routeDecision.proxyConfig != null) {
         // 使用选定的代理转发请求
-        await _forwardRequest(request, targetConfig);
+        await _forwardRequest(request, routeDecision.proxyConfig!);
       } else {
         // 没有匹配的代理，直接连接目标
         await _directConnection(request);
@@ -189,32 +196,18 @@ class ProxyManager {
       }
 
       // 转发请求数据
-      request.listen(
-        (data) {
-          proxySocket.add(data);
-        },
-        onDone: () {
-          proxySocket.close();
-        },
-        onError: (error) {
-          Logger.error('转发到HTTP代理时出错: $error');
-          proxySocket.close();
-        },
-      );
+      await request.forEach((data) {
+        proxySocket.add(data);
+      });
 
       // 转发响应数据
-      proxySocket.listen(
-        (data) {
-          request.response.add(data);
-        },
-        onDone: () {
-          request.response.close();
-        },
-        onError: (error) {
-          Logger.error('从HTTP代理接收数据时出错: $error');
-          request.response.close();
-        },
-      );
+      final response = proxySocket.asBroadcastStream();
+      await for (var data in response) {
+        request.response.add(data);
+      }
+
+      await request.response.close();
+      proxySocket.close();
     } catch (e) {
       Logger.error('转发到HTTP代理失败: $e');
       rethrow;
@@ -272,32 +265,18 @@ class ProxyManager {
       }
 
       // 转发请求数据
-      request.listen(
-        (data) {
-          proxySocket.add(data);
-        },
-        onDone: () {
-          proxySocket.close();
-        },
-        onError: (error) {
-          Logger.error('转发到SOCKS5代理时出错: $error');
-          proxySocket.close();
-        },
-      );
+      await request.forEach((data) {
+        proxySocket.add(data);
+      });
 
       // 转发响应数据
-      proxySocket.listen(
-        (data) {
-          request.response.add(data);
-        },
-        onDone: () {
-          request.response.close();
-        },
-        onError: (error) {
-          Logger.error('从SOCKS5代理接收数据时出错: $error');
-          request.response.close();
-        },
-      );
+      final response = proxySocket.asBroadcastStream();
+      await for (var data in response) {
+        request.response.add(data);
+      }
+
+      await request.response.close();
+      proxySocket.close();
     } catch (e) {
       Logger.error('转发到SOCKS5代理失败: $e');
       rethrow;
@@ -325,33 +304,94 @@ class ProxyManager {
         request.uri.port ?? 80,
       );
 
-      // 转发请求数据
-      request.listen(
-        (data) {
-          targetSocket.add(data);
-        },
-        onDone: () {
-          targetSocket.close();
-        },
-        onError: (error) {
-          Logger.error('转发到目标时出错: $error');
-          targetSocket.close();
-        },
-      );
+      // 构建HTTP请求
+      final StringBuffer requestBuffer = StringBuffer();
+      requestBuffer.write('${request.method} ${request.uri.path}');
+      if (request.uri.query.isNotEmpty) {
+        requestBuffer.write('?${request.uri.query}');
+      }
+      requestBuffer.write(' HTTP/${request.protocolVersion}\r\n');
 
-      // 转发响应数据
-      targetSocket.listen(
-        (data) {
-          request.response.add(data);
-        },
-        onDone: () {
-          request.response.close();
-        },
-        onError: (error) {
-          Logger.error('从目标接收数据时出错: $error');
-          request.response.close();
-        },
-      );
+      // 添加请求头
+      request.headers.forEach((name, values) {
+        for (var value in values) {
+          requestBuffer.write('$name: $value\r\n');
+        }
+      });
+      requestBuffer.write('\r\n');
+
+      // 发送请求行和头部
+      targetSocket.write(requestBuffer.toString());
+
+      // 转发请求体
+      await request.forEach((data) {
+        targetSocket.add(data);
+      });
+
+      // 转发响应
+      final response = targetSocket.asBroadcastStream();
+      bool headersSent = false;
+      StringBuffer headerBuffer = StringBuffer();
+
+      await for (var data in response) {
+        if (!headersSent) {
+          // 收集响应头
+          headerBuffer.write(utf8.decode(data, allowMalformed: true));
+          final headerString = headerBuffer.toString();
+          final headerEndIndex = headerString.indexOf('\r\n\r\n');
+
+          if (headerEndIndex != -1) {
+            // 响应头已完整
+            headersSent = true;
+            final headers = headerString.substring(0, headerEndIndex);
+            final bodyStart = headerEndIndex + 4;
+
+            // 解析响应状态行和头部
+            final lines = headers.split('\r\n');
+            if (lines.isNotEmpty) {
+              final statusLine = lines[0];
+              final statusParts = statusLine.split(' ');
+              if (statusParts.length >= 2) {
+                request.response.statusCode =
+                    int.tryParse(statusParts[1]) ?? 200;
+              }
+            }
+
+            // 转发响应头（除了连接相关的头部）
+            for (int i = 1; i < lines.length; i++) {
+              final line = lines[i];
+              if (line.toLowerCase().startsWith('connection:') ||
+                  line.toLowerCase().startsWith('transfer-encoding:')) {
+                continue; // 跳过这些头部
+              }
+              final colonIndex = line.indexOf(':');
+              if (colonIndex != -1) {
+                final name = line.substring(0, colonIndex).trim();
+                final value = line.substring(colonIndex + 1).trim();
+                request.response.headers.set(name, value);
+              }
+            }
+
+            // 发送响应头
+            await request.response.flush();
+
+            // 发送响应体的剩余部分
+            if (bodyStart < headerString.length) {
+              final remainingBody = headerString.substring(bodyStart);
+              request.response.write(remainingBody);
+            }
+
+            // 继续转发后续数据
+            continue;
+          }
+        }
+
+        // 直接转发数据
+        request.response.add(data);
+      }
+
+      await request.response.close();
+      targetSocket.close();
     } catch (e) {
       Logger.error('直接连接目标失败: $e');
       _sendErrorResponse(request, 502, 'Bad Gateway');

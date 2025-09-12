@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:dualvpn_manager/models/app_state.dart';
-import 'package:dualvpn_manager/models/vpn_config.dart';
+import 'package:dualvpn_manager/models/vpn_config.dart' hide RoutingRule;
+import 'package:dualvpn_manager/services/smart_routing_engine.dart'
+    as smart_routing_engine;
 import 'package:dualvpn_manager/utils/config_manager.dart';
 
 class RoutingScreen extends StatefulWidget {
@@ -112,15 +114,19 @@ class _RoutingScreenState extends State<RoutingScreen> {
                                       if (_domainController.text.isNotEmpty &&
                                           _selectedConfig != null) {
                                         // 创建路由规则，包含配置ID
-                                        final rule = RoutingRule(
-                                          pattern: _domainController.text,
-                                          routeType: _getRouteType(
-                                            _selectedConfig!.type,
-                                          ),
-                                          isEnabled: true,
-                                          configId:
-                                              _selectedConfig!.id, // 保存配置ID
-                                        );
+                                        final rule =
+                                            smart_routing_engine.RoutingRule(
+                                              id: DateTime.now()
+                                                  .millisecondsSinceEpoch
+                                                  .toString(),
+                                              pattern: _domainController.text,
+                                              type: _getRuleType(
+                                                _selectedConfig!.type,
+                                              ),
+                                              proxyId:
+                                                  _selectedConfig!.id, // 保存配置ID
+                                              isEnabled: true,
+                                            );
 
                                         // 添加到AppState
                                         appState.addRoutingRule(rule);
@@ -226,28 +232,33 @@ class _RoutingScreenState extends State<RoutingScreen> {
     );
   }
 
-  // 根据VPN类型获取路由类型
-  RouteType _getRouteType(VPNType type) {
+  // 根据VPN类型获取规则类型
+  smart_routing_engine.RuleType _getRuleType(VPNType type) {
     switch (type) {
       case VPNType.openVPN:
-        return RouteType.openVPN;
+        return smart_routing_engine.RuleType.domain;
       case VPNType.clash:
-        return RouteType.clash;
+        return smart_routing_engine.RuleType.domain;
       case VPNType.shadowsocks:
-        return RouteType.shadowsocks;
+        return smart_routing_engine.RuleType.domain;
       case VPNType.v2ray:
-        return RouteType.v2ray;
+        return smart_routing_engine.RuleType.domain;
       case VPNType.httpProxy:
-        return RouteType.httpProxy;
+        return smart_routing_engine.RuleType.domain;
       case VPNType.socks5:
-        return RouteType.socks5;
+        return smart_routing_engine.RuleType.domain;
       case VPNType.custom:
-        return RouteType.custom;
+        return smart_routing_engine.RuleType.domain;
+      default:
+        return smart_routing_engine.RuleType.domain;
     }
   }
 
   // 构建路由规则列表
-  Widget _buildRoutingRulesList(List<RoutingRule> rules, AppState appState) {
+  Widget _buildRoutingRulesList(
+    List<smart_routing_engine.RoutingRule> rules,
+    AppState appState,
+  ) {
     if (rules.isEmpty) {
       return Container(
         height: 200,
@@ -297,9 +308,9 @@ class _RoutingScreenState extends State<RoutingScreen> {
               Color proxyColor = Colors.grey;
               IconData proxyIcon = Icons.help;
 
-              if (rule.configId != null) {
+              if (rule.proxyId.isNotEmpty) {
                 final config = configs.firstWhere(
-                  (c) => c.id == rule.configId,
+                  (c) => c.id == rule.proxyId,
                   orElse: () => VPNConfig(
                     id: '',
                     name: '未找到配置',
@@ -311,109 +322,30 @@ class _RoutingScreenState extends State<RoutingScreen> {
                 proxyName = config.name;
                 proxyColor = _getProxyColor(config.type);
                 proxyIcon = _getProxyIcon(config.type);
-              } else {
-                // 回退到根据路由类型查找
-                for (var config in configs) {
-                  switch (rule.routeType) {
-                    case RouteType.openVPN:
-                      if (config.type == VPNType.openVPN) {
-                        proxyName = config.name;
-                        proxyColor = _getProxyColor(config.type);
-                        proxyIcon = _getProxyIcon(config.type);
-                      }
-                      break;
-                    case RouteType.clash:
-                      if (config.type == VPNType.clash) {
-                        proxyName = config.name;
-                        proxyColor = _getProxyColor(config.type);
-                        proxyIcon = _getProxyIcon(config.type);
-                      }
-                      break;
-                    case RouteType.shadowsocks:
-                      if (config.type == VPNType.shadowsocks) {
-                        proxyName = config.name;
-                        proxyColor = _getProxyColor(config.type);
-                        proxyIcon = _getProxyIcon(config.type);
-                      }
-                      break;
-                    case RouteType.v2ray:
-                      if (config.type == VPNType.v2ray) {
-                        proxyName = config.name;
-                        proxyColor = _getProxyColor(config.type);
-                        proxyIcon = _getProxyIcon(config.type);
-                      }
-                      break;
-                    case RouteType.httpProxy:
-                      if (config.type == VPNType.httpProxy) {
-                        proxyName = config.name;
-                        proxyColor = _getProxyColor(config.type);
-                        proxyIcon = _getProxyIcon(config.type);
-                      }
-                      break;
-                    case RouteType.socks5:
-                      if (config.type == VPNType.socks5) {
-                        proxyName = config.name;
-                        proxyColor = _getProxyColor(config.type);
-                        proxyIcon = _getProxyIcon(config.type);
-                      }
-                      break;
-                    case RouteType.custom:
-                      if (config.type == VPNType.custom) {
-                        proxyName = config.name;
-                        proxyColor = _getProxyColor(config.type);
-                        proxyIcon = _getProxyIcon(config.type);
-                      }
-                      break;
-                  }
-                }
               }
 
               return Card(
-                margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                elevation: 2,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(8),
-                ),
+                margin: const EdgeInsets.symmetric(vertical: 4, horizontal: 8),
                 child: ListTile(
-                  title: Text(
-                    rule.pattern,
-                    style: TextStyle(
-                      fontWeight: rule.isEnabled
-                          ? FontWeight.bold
-                          : FontWeight.normal,
-                    ),
-                  ),
-                  subtitle: Row(
-                    children: [
-                      Icon(proxyIcon, size: 16, color: proxyColor),
-                      const SizedBox(width: 4),
-                      Text('${_getRouteTypeName(rule.routeType)} - $proxyName'),
-                    ],
-                  ),
+                  leading: Icon(proxyIcon, color: proxyColor),
+                  title: Text(rule.pattern),
+                  subtitle: Text(proxyName),
                   trailing: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      // 添加状态指示器
-                      Container(
-                        width: 12,
-                        height: 12,
-                        decoration: BoxDecoration(
-                          color: rule.isEnabled ? Colors.green : Colors.red,
-                          shape: BoxShape.circle,
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      // 修改开关行为：只控制当前路由规则的启用状态，不影响全局路由
                       Switch(
                         value: rule.isEnabled,
                         onChanged: (value) {
-                          // 更新规则状态
-                          final updatedRule = RoutingRule(
+                          // 创建更新后的规则
+                          final updatedRule = smart_routing_engine.RoutingRule(
+                            id: rule.id,
                             pattern: rule.pattern,
-                            routeType: rule.routeType,
+                            type: rule.type,
+                            proxyId: rule.proxyId,
                             isEnabled: value,
-                            configId: rule.configId, // 保留配置ID
                           );
+
+                          // 更新AppState中的规则
                           appState.removeRoutingRule(rule);
                           appState.addRoutingRule(updatedRule);
                         },
@@ -476,22 +408,24 @@ class _RoutingScreenState extends State<RoutingScreen> {
   }
 
   // 获取路由类型名称
-  String _getRouteTypeName(RouteType type) {
+  String _getRuleTypeName(smart_routing_engine.RuleType type) {
     switch (type) {
-      case RouteType.openVPN:
-        return 'OpenVPN';
-      case RouteType.clash:
-        return 'Clash';
-      case RouteType.shadowsocks:
-        return 'Shadowsocks';
-      case RouteType.v2ray:
-        return 'V2Ray';
-      case RouteType.httpProxy:
-        return 'HTTP代理';
-      case RouteType.socks5:
-        return 'SOCKS5代理';
-      case RouteType.custom:
-        return '自定义代理';
+      case smart_routing_engine.RuleType.domain:
+        return '域名匹配';
+      case smart_routing_engine.RuleType.domainSuffix:
+        return '域名后缀';
+      case smart_routing_engine.RuleType.domainKeyword:
+        return '域名关键字';
+      case smart_routing_engine.RuleType.ip:
+        return 'IP地址';
+      case smart_routing_engine.RuleType.cidr:
+        return 'CIDR';
+      case smart_routing_engine.RuleType.regexp:
+        return '正则表达式';
+      case smart_routing_engine.RuleType.finalRule:
+        return '最终规则';
+      case smart_routing_engine.RuleType.geoip:
+        return '地理位置';
     }
   }
 }

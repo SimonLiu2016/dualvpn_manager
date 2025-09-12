@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:dualvpn_manager/services/vpn_manager.dart';
-import 'package:dualvpn_manager/models/vpn_config.dart';
+import 'package:dualvpn_manager/services/proxy_manager.dart';
+import 'package:dualvpn_manager/models/vpn_config.dart' hide RoutingRule;
+import 'package:dualvpn_manager/services/smart_routing_engine.dart'
+    as smart_routing_engine;
 import 'package:dualvpn_manager/utils/logger.dart';
 import 'package:dualvpn_manager/utils/config_manager.dart';
 import 'package:dualvpn_manager/utils/tray_manager.dart';
@@ -11,6 +14,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 class AppState extends ChangeNotifier {
   final VPNManager _vpnManager = VPNManager();
+  final ProxyManager _proxyManager = ProxyManager();
   final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
   final DualVPNTrayManager _trayManager;
 
@@ -97,8 +101,8 @@ class AppState extends ChangeNotifier {
   List<String> get externalDomains => _externalDomains;
 
   // 路由规则列表
-  List<RoutingRule> _routingRules = [];
-  List<RoutingRule> get routingRules => _routingRules;
+  List<smart_routing_engine.RoutingRule> _routingRules = [];
+  List<smart_routing_engine.RoutingRule> get routingRules => _routingRules;
 
   // 加载路由规则
   Future<void> _loadRoutingRules() async {
@@ -109,7 +113,11 @@ class AppState extends ChangeNotifier {
       if (rulesJson != null && rulesJson.isNotEmpty) {
         final List<dynamic> rulesList = jsonDecode(rulesJson);
         _routingRules = rulesList
-            .map((rule) => RoutingRule.fromJson(rule as Map<String, dynamic>))
+            .map(
+              (rule) => smart_routing_engine.RoutingRule.fromJson(
+                rule as Map<String, dynamic>,
+              ),
+            )
             .toList();
         Logger.info('成功加载${_routingRules.length}条路由规则');
       } else {
@@ -380,7 +388,7 @@ class AppState extends ChangeNotifier {
   }
 
   // 设置路由规则列表
-  void setRoutingRules(List<RoutingRule> rules) {
+  void setRoutingRules(List<smart_routing_engine.RoutingRule> rules) {
     _routingRules = rules;
     notifyListeners();
     // 保存到持久化存储
@@ -388,7 +396,7 @@ class AppState extends ChangeNotifier {
   }
 
   // 添加路由规则
-  void addRoutingRule(RoutingRule rule) {
+  void addRoutingRule(smart_routing_engine.RoutingRule rule) {
     _routingRules.add(rule);
     notifyListeners();
     // 保存到持久化存储
@@ -396,7 +404,7 @@ class AppState extends ChangeNotifier {
   }
 
   // 删除路由规则
-  void removeRoutingRule(RoutingRule rule) {
+  void removeRoutingRule(smart_routing_engine.RoutingRule rule) {
     _routingRules.remove(rule);
     notifyListeners();
     // 保存到持久化存储
@@ -567,6 +575,18 @@ class AppState extends ChangeNotifier {
       Logger.error('连接Clash失败: $e');
       // 通知UI显示错误
       return false;
+    }
+  }
+
+  // 确保已选中的代理在Clash连接后能正确应用
+  Future<void> ensureProxyAppliedForClash(VPNConfig config) async {
+    try {
+      // 如果Clash已连接，直接应用选中的代理
+      if (_clashConnected) {
+        await _applySelectedProxyForClash(config);
+      }
+    } catch (e) {
+      Logger.error('确保Clash代理应用时出错: $e');
     }
   }
 
@@ -831,11 +851,23 @@ class AppState extends ChangeNotifier {
     try {
       // 获取所有配置以获取强制路由规则
       final configs = await ConfigManager.loadConfigs();
-      final List<RoutingRule> forcedRules = [];
+      final List<smart_routing_engine.RoutingRule> forcedRules = [];
 
       // 收集所有启用的强制路由规则
       for (var config in configs) {
-        forcedRules.addAll(config.routingRules.where((rule) => rule.isEnabled));
+        // 注意：这里的config.routingRules是来自vpn_config.dart的RoutingRule
+        // 我们需要将其转换为smart_routing_engine.dart中的RoutingRule
+        for (var rule in config.routingRules.where((rule) => rule.isEnabled)) {
+          forcedRules.add(
+            smart_routing_engine.RoutingRule(
+              id: rule.pattern, // 使用pattern作为ID
+              pattern: rule.pattern,
+              type: _convertRouteTypeToRuleType(rule.routeType),
+              proxyId: rule.configId ?? '',
+              isEnabled: rule.isEnabled,
+            ),
+          );
+        }
       }
 
       final result = await _vpnManager.configureRouting(
@@ -855,22 +887,60 @@ class AppState extends ChangeNotifier {
     }
   }
 
+  // 转换RouteType到RuleType
+  smart_routing_engine.RuleType _convertRouteTypeToRuleType(
+    RouteType routeType,
+  ) {
+    switch (routeType) {
+      case RouteType.openVPN:
+        return smart_routing_engine.RuleType.domain;
+      case RouteType.clash:
+        return smart_routing_engine.RuleType.domain;
+      case RouteType.shadowsocks:
+        return smart_routing_engine.RuleType.domain;
+      case RouteType.v2ray:
+        return smart_routing_engine.RuleType.domain;
+      case RouteType.httpProxy:
+        return smart_routing_engine.RuleType.domain;
+      case RouteType.socks5:
+        return smart_routing_engine.RuleType.domain;
+      case RouteType.custom:
+        return smart_routing_engine.RuleType.domain;
+      default:
+        return smart_routing_engine.RuleType.domain;
+    }
+  }
+
   // 启用路由
   Future<void> enableRouting() async {
     try {
-      await _vpnManager.enableRouting();
-      setIsRunning(true);
-      Logger.info('路由已启用');
+      // 更新代理管理器的路由规则和活动配置
+      _proxyManager.setRoutingRules(_routingRules);
+      final configs = await ConfigManager.loadConfigs();
+      _proxyManager.setActiveConfigs(configs);
+
+      // 启动代理服务
+      final result = await _proxyManager.startProxyService();
+      if (result) {
+        // 启用智能路由（设置系统代理指向我们的代理服务）
+        await _vpnManager.enableSmartRouting();
+        setIsRunning(true);
+        Logger.info('路由已启用');
+      } else {
+        Logger.error('启用路由失败');
+      }
     } catch (e) {
       Logger.error('启用路由失败: $e');
       // 通知UI显示错误
     }
   }
 
-  // 禁用路由
+  // 禔用路由
   Future<void> disableRouting() async {
     try {
-      await _vpnManager.disableRouting();
+      // 禔用智能路由（清除系统代理设置）
+      await _vpnManager.disableSmartRouting();
+      await _proxyManager.stopProxyService();
       setIsRunning(false);
       Logger.info('路由已禁用');
     } catch (e) {
@@ -881,14 +951,17 @@ class AppState extends ChangeNotifier {
 
   // 启用所有路由规则
   void enableAllRoutingRules() {
-    final List<RoutingRule> updatedRules = _routingRules.map((rule) {
-      return RoutingRule(
-        pattern: rule.pattern,
-        routeType: rule.routeType,
-        isEnabled: true, // 将所有规则设置为启用
-        configId: rule.configId,
-      );
-    }).toList();
+    final List<smart_routing_engine.RoutingRule> updatedRules = _routingRules
+        .map((rule) {
+          return smart_routing_engine.RoutingRule(
+            id: rule.id,
+            pattern: rule.pattern,
+            type: rule.type,
+            proxyId: rule.proxyId,
+            isEnabled: true, // 将所有规则设置为启用
+          );
+        })
+        .toList();
 
     _routingRules = updatedRules;
     notifyListeners();
@@ -898,14 +971,17 @@ class AppState extends ChangeNotifier {
 
   // 禁用所有路由规则
   void disableAllRoutingRules() {
-    final List<RoutingRule> updatedRules = _routingRules.map((rule) {
-      return RoutingRule(
-        pattern: rule.pattern,
-        routeType: rule.routeType,
-        isEnabled: false, // 将所有规则设置为禁用
-        configId: rule.configId,
-      );
-    }).toList();
+    final List<smart_routing_engine.RoutingRule> updatedRules = _routingRules
+        .map((rule) {
+          return smart_routing_engine.RoutingRule(
+            id: rule.id,
+            pattern: rule.pattern,
+            type: rule.type,
+            proxyId: rule.proxyId,
+            isEnabled: false, // 将所有规则设置为禁用
+          );
+        })
+        .toList();
 
     _routingRules = updatedRules;
     notifyListeners();
