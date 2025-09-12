@@ -291,6 +291,12 @@ class RoutingService {
     // 启用路由功能
     _isRoutingActive = true;
     Logger.info('路由已启用');
+
+    // 应用已配置的路由规则
+    if (_activeRoutes.isNotEmpty) {
+      Logger.info('应用已配置的路由规则');
+      // 路由规则已经在_configureRouting中添加，这里只需设置状态
+    }
   }
 
   // 禁用路由

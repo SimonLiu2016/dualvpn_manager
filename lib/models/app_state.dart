@@ -142,6 +142,10 @@ class AppState extends ChangeNotifier {
   List<Map<String, dynamic>> _proxies = [];
   List<Map<String, dynamic>> get proxies => _proxies;
 
+  // 添加getter方法用于测试访问
+  Map<String, List<Map<String, dynamic>>> get proxiesByConfig =>
+      _proxiesByConfig;
+
   bool _isLoadingProxies = false;
   bool get isLoadingProxies => _isLoadingProxies;
 
@@ -153,22 +157,89 @@ class AppState extends ChangeNotifier {
     // 只获取启用的配置
     final enabledConfigs = configs.where((config) => config.isActive).toList();
 
+    Logger.debug('getSelectedProxies: 找到 ${enabledConfigs.length} 个启用的配置');
+    Logger.debug('getSelectedProxies: _selectedConfig = $_selectedConfig');
+    Logger.debug(
+      'getSelectedProxies: _proxiesByConfig keys = ${_proxiesByConfig.keys}',
+    );
+
     for (var config in enabledConfigs) {
+      Logger.debug(
+        'getSelectedProxies: 处理配置 ${config.name} (ID: ${config.id}, 类型: ${config.type})',
+      );
+
       // 只有Clash、Shadowsocks和V2Ray三种类型支持代理列表
       if (config.type == VPNType.clash ||
           config.type == VPNType.shadowsocks ||
           config.type == VPNType.v2ray) {
         // 对于支持代理列表的类型，获取选中的代理
-        final proxies = _proxiesByConfig[config.id] ?? [];
-        // 使用 where 过滤选中的代理，然后取第一个（如果存在）
+        List<Map<String, dynamic>> proxies = [];
+
+        // 首先尝试从_proxiesByConfig获取
+        if (_proxiesByConfig.containsKey(config.id)) {
+          proxies = _proxiesByConfig[config.id]!;
+          Logger.debug(
+            'getSelectedProxies: 从_proxiesByConfig 获取到 ${proxies.length} 个代理',
+          );
+        } else if (_selectedConfig == config.id) {
+          // 如果当前选中的配置就是这个配置，则使用当前的_proxies
+          proxies = _proxies;
+          Logger.debug(
+            'getSelectedProxies: 从当前_proxies 获取到 ${proxies.length} 个代理',
+          );
+        } else {
+          // 如果缓存中没有且不是当前选中的配置，则尝试加载该配置的代理列表
+          Logger.debug('getSelectedProxies: 配置 ${config.id} 未在缓存中找到，尝试加载');
+
+          try {
+            // 保存当前状态
+            final originalSelectedConfig = _selectedConfig;
+            final originalProxies = List<Map<String, dynamic>>.from(_proxies);
+
+            // 临时切换到目标配置
+            _selectedConfig = config.id;
+            _proxies = []; // 清空当前代理列表
+
+            // 加载代理列表
+            await loadProxies();
+            proxies = List<Map<String, dynamic>>.from(_proxies);
+
+            // 恢复原状态
+            _selectedConfig = originalSelectedConfig;
+            _proxies = originalProxies;
+
+            Logger.debug(
+              'getSelectedProxies: 为配置 ${config.id} 加载到 ${proxies.length} 个代理',
+            );
+          } catch (e) {
+            Logger.error('getSelectedProxies: 加载配置 ${config.id} 的代理列表失败: $e');
+            proxies = [];
+          }
+        }
+
+        // 显示所有代理及其选中状态（用于调试）
+        for (var proxy in proxies) {
+          Logger.debug(
+            'getSelectedProxies: 代理 ${proxy['name']}, isSelected = ${proxy['isSelected']}',
+          );
+        }
+
+        // 查找选中的代理
         final selectedProxyList = proxies
             .where((proxy) => proxy['isSelected'] == true)
             .toList();
+        Logger.debug(
+          'getSelectedProxies: 找到 ${selectedProxyList.length} 个选中的代理',
+        );
+
         if (selectedProxyList.isNotEmpty) {
           selectedProxies.add({
             'config': config,
             'proxy': selectedProxyList.first,
           });
+          Logger.debug(
+            'getSelectedProxies: 添加选中的代理 ${selectedProxyList.first['name']}',
+          );
         }
       } else {
         // 对于不支持代理列表的类型，直接使用配置本身作为代理
@@ -182,8 +253,11 @@ class AppState extends ChangeNotifier {
             'isSelected': true,
           },
         });
+        Logger.debug('getSelectedProxies: 添加非代理列表类型配置 ${config.name}');
       }
     }
+
+    Logger.debug('getSelectedProxies: 返回 ${selectedProxies.length} 个选中的代理');
 
     return selectedProxies;
   }
@@ -387,6 +461,9 @@ class AppState extends ChangeNotifier {
                 ..['isSelected'] = false;
             }
           }
+
+          // 立即应用选中的代理到Clash服务
+          _applySelectedProxy(proxyName);
         }
         break;
       }
@@ -398,6 +475,32 @@ class AppState extends ChangeNotifier {
       );
     }
     notifyListeners();
+  }
+
+  // 应用选中的代理到Clash服务
+  Future<void> _applySelectedProxy(String proxyName) async {
+    try {
+      // 获取当前选中的配置
+      final configs = await ConfigManager.loadConfigs();
+      final currentConfig = configs.firstWhere(
+        (config) => config.id == _selectedConfig,
+        orElse: () => configs.first,
+      );
+
+      // 只对Clash类型的配置应用代理选择
+      if (currentConfig.type == VPNType.clash) {
+        Logger.info('正在应用Clash代理: $proxyName');
+        // 使用'GLOBAL'作为默认的选择器名称，这是Clash的常见配置
+        final result = await _vpnManager.selectClashProxy('GLOBAL', proxyName);
+        if (result) {
+          Logger.info('成功应用Clash代理: $proxyName');
+        } else {
+          Logger.error('应用Clash代理失败: $proxyName');
+        }
+      }
+    } catch (e) {
+      Logger.error('应用选中代理时出错: $e');
+    }
   }
 
   // 更新托盘图标
@@ -453,6 +556,9 @@ class AppState extends ChangeNotifier {
       if (result) {
         setClashConnected(true);
         Logger.info('Clash连接成功');
+
+        // 连接成功后，如果有已选中的代理，则应用该代理
+        await _applySelectedProxyForClash(config);
       } else {
         Logger.error('Clash连接失败');
       }
@@ -461,6 +567,46 @@ class AppState extends ChangeNotifier {
       Logger.error('连接Clash失败: $e');
       // 通知UI显示错误
       return false;
+    }
+  }
+
+  // 为Clash配置应用已选中的代理
+  Future<void> _applySelectedProxyForClash(VPNConfig config) async {
+    try {
+      // 设置当前配置为选中状态
+      setSelectedConfig(config.id);
+
+      // 加载代理列表
+      await loadProxies();
+
+      // 查找已选中的代理
+      Map<String, dynamic>? selectedProxy;
+      try {
+        selectedProxy = _proxies.firstWhere(
+          (proxy) => proxy['isSelected'] == true,
+        );
+      } catch (e) {
+        // 没有找到选中的代理
+        selectedProxy = null;
+      }
+
+      // 如果找到了已选中的代理，则应用它
+      if (selectedProxy != null) {
+        Logger.info('应用已选中的Clash代理: ${selectedProxy['name']}');
+        final result = await _vpnManager.selectClashProxy(
+          'GLOBAL',
+          selectedProxy['name'],
+        );
+        if (result) {
+          Logger.info('成功应用Clash代理: ${selectedProxy['name']}');
+        } else {
+          Logger.error('应用Clash代理失败: ${selectedProxy['name']}');
+        }
+      } else {
+        Logger.info('未找到已选中的Clash代理');
+      }
+    } catch (e) {
+      Logger.error('为Clash配置应用已选中代理时出错: $e');
     }
   }
 

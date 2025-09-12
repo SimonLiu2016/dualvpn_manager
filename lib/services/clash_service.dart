@@ -60,8 +60,12 @@ class ClashService {
         (data) {
           final output = utf8.decode(data);
           Logger.debug('Clash stdout: $output');
-          if (output.contains('HTTP proxy listening') ||
-              output.contains('RESTful API listening')) {
+          // 更宽松的连接成功判断条件
+          if (output.contains('HTTP') && output.contains('listening') ||
+              output.contains('RESTful') && output.contains('listening') ||
+              output.contains('Clash') ||
+              output.contains('start') ||
+              output.contains('initial')) {
             _isConnected = true;
             Logger.info('Clash服务已启动');
           }
@@ -75,6 +79,12 @@ class ClashService {
         (data) {
           final output = utf8.decode(data);
           Logger.error('Clash stderr: $output');
+          // 即使stderr有输出，也可能是正常启动信息
+          if (output.contains('HTTP') && output.contains('listening') ||
+              output.contains('RESTful') && output.contains('listening')) {
+            _isConnected = true;
+            Logger.info('Clash服务已启动');
+          }
         },
         onError: (Object error) {
           Logger.error('Clash stderr监听错误: $error');
@@ -82,7 +92,7 @@ class ClashService {
       );
 
       // 等待一段时间以确定启动是否成功
-      await Future.delayed(const Duration(seconds: 3));
+      await Future.delayed(const Duration(seconds: 5));
 
       Logger.info('Clash启动${_isConnected ? '成功' : '可能失败'}');
       return _isConnected;
@@ -132,13 +142,25 @@ class ClashService {
         throw Exception('下载订阅配置失败: ${response.statusCode}');
       }
 
+      // 尝试解码响应内容（某些订阅可能返回base64编码的数据）
+      String configContent = response.body;
+      try {
+        // 尝试解码base64
+        List<int> decodedBytes = base64Decode(configContent);
+        configContent = utf8.decode(decodedBytes);
+        Logger.debug('成功解码base64订阅内容');
+      } catch (decodeError) {
+        // 如果解码失败，假设内容已经是纯文本YAML格式
+        Logger.debug('订阅内容不是base64编码，使用原始内容');
+      }
+
       // 检查是否有现有的配置文件路径
       if (_configPath == null) {
         Logger.info('没有找到现有的配置文件路径，创建临时配置文件');
         // 创建临时目录和配置文件
         final tempDir = await Directory.systemTemp.createTemp('clash_config');
         final configFile = File(path.join(tempDir.path, 'config.yaml'));
-        await configFile.writeAsString(response.body);
+        await configFile.writeAsString(configContent);
 
         // 保存配置文件路径
         _configPath = configFile.path;
@@ -155,7 +177,7 @@ class ClashService {
 
       // 保存新的配置到现有文件
       final configFile = File(_configPath!);
-      await configFile.writeAsString(response.body);
+      await configFile.writeAsString(configContent);
 
       // 重新加载配置（通过API）
       final reloadUrl = '$_apiUrl/configs?force=true';
@@ -173,9 +195,15 @@ class ClashService {
         }
         return false;
       }
+    } on SocketException catch (e) {
+      Logger.error('网络连接错误: $e');
+      throw Exception('网络连接错误，请检查网络连接或订阅URL是否有效');
+    } on http.ClientException catch (e) {
+      Logger.error('HTTP客户端错误: $e');
+      throw Exception('HTTP客户端错误，请检查订阅URL是否有效');
     } catch (e, stackTrace) {
       Logger.error('更新Clash订阅失败: $e\nStack trace: $stackTrace');
-      rethrow;
+      throw Exception('更新Clash订阅失败: $e');
     }
   }
 
@@ -290,6 +318,24 @@ class ClashService {
     } catch (e, stackTrace) {
       Logger.error('获取代理列表失败: $e\nStack trace: $stackTrace');
       rethrow;
+    }
+  }
+
+  // 确保Clash服务正常运行并可访问
+  Future<bool> verifyConnection() async {
+    try {
+      // 尝试获取状态以验证连接
+      final status = await getStatus();
+      if (status != null) {
+        Logger.info('Clash连接验证成功');
+        return true;
+      } else {
+        Logger.warn('Clash连接验证失败：无法获取状态');
+        return false;
+      }
+    } catch (e) {
+      Logger.error('Clash连接验证失败: $e');
+      return false;
     }
   }
 }

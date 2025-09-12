@@ -406,7 +406,7 @@ class _ProxyListScreenState extends State<ProxyListScreen> {
                                   ),
                                   Switch(
                                     value: isSelected,
-                                    onChanged: (value) {
+                                    onChanged: (value) async {
                                       final appState = Provider.of<AppState>(
                                         context,
                                         listen: false,
@@ -415,6 +415,32 @@ class _ProxyListScreenState extends State<ProxyListScreen> {
                                         proxyName,
                                         value,
                                       );
+
+                                      // 如果是Clash类型的配置，显示提示信息
+                                      final configs =
+                                          await ConfigManager.loadConfigs();
+                                      final currentConfig = configs.firstWhere(
+                                        (config) =>
+                                            config.id ==
+                                            appState.selectedConfig,
+                                        orElse: () => configs.first,
+                                      );
+
+                                      if (currentConfig.type == VPNType.clash &&
+                                          value) {
+                                        if (context.mounted) {
+                                          ScaffoldMessenger.of(
+                                            context,
+                                          ).showSnackBar(
+                                            const SnackBar(
+                                              content: Text(
+                                                '已选择代理，正在应用到Clash...',
+                                              ),
+                                              duration: Duration(seconds: 1),
+                                            ),
+                                          );
+                                        }
+                                      }
                                     },
                                   ),
                                 ],

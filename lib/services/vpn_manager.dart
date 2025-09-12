@@ -76,6 +76,12 @@ class VPNManager {
         result = await _clashService.startWithConfig(config.configPath);
       }
 
+      // 验证连接是否成功
+      if (result) {
+        await Future.delayed(const Duration(seconds: 1));
+        result = await _clashService.verifyConnection();
+      }
+
       return result;
     } catch (e) {
       Logger.error('连接Clash失败: $e');
@@ -487,6 +493,17 @@ class VPNManager {
     } catch (e) {
       Logger.error('从订阅链接获取V2Ray代理列表失败: $e');
       rethrow;
+    }
+  }
+
+  // 选择Clash代理
+  Future<bool> selectClashProxy(String selector, String proxyName) async {
+    try {
+      final result = await _clashService.selectProxy(selector, proxyName);
+      return result;
+    } catch (e) {
+      Logger.error('选择Clash代理失败: $e');
+      return false;
     }
   }
 }
