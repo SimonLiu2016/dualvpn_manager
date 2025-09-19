@@ -1,0 +1,257 @@
+import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+import 'package:dualvpn_manager/models/app_state.dart';
+import 'package:dualvpn_manager/utils/config_manager.dart';
+import 'package:dualvpn_manager/models/vpn_config.dart';
+
+/// 代理列表小部件
+/// 这个小部件只监听与代理列表相关的状态变化
+class ProxyListWidget extends StatelessWidget {
+  final Function(String proxyName) onTestLatency;
+  final Function(String proxyName, bool isSelected) onProxySelected;
+
+  const ProxyListWidget({
+    super.key,
+    required this.onTestLatency,
+    required this.onProxySelected,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Selector<AppState, ProxyListState>(
+      selector: (context, appState) => ProxyListState(
+        proxies: appState.proxies,
+        isLoadingProxies: appState.isLoadingProxies,
+        selectedConfig: appState.selectedConfig,
+      ),
+      builder: (context, proxyListState, child) {
+        return _ProxyListView(
+          proxyListState: proxyListState,
+          onTestLatency: onTestLatency,
+          onProxySelected: onProxySelected,
+        );
+      },
+    );
+  }
+}
+
+/// 代理列表状态数据类
+class ProxyListState {
+  final List<Map<String, dynamic>> proxies;
+  final bool isLoadingProxies;
+  final String selectedConfig;
+
+  ProxyListState({
+    required this.proxies,
+    required this.isLoadingProxies,
+    required this.selectedConfig,
+  });
+
+  @override
+  bool operator ==(Object other) {
+    if (identical(this, other)) return true;
+    return other is ProxyListState &&
+        proxies == other.proxies &&
+        isLoadingProxies == other.isLoadingProxies &&
+        selectedConfig == other.selectedConfig;
+  }
+
+  @override
+  int get hashCode =>
+      proxies.hashCode ^ isLoadingProxies.hashCode ^ selectedConfig.hashCode;
+}
+
+/// 代理列表视图实现
+class _ProxyListView extends StatelessWidget {
+  final ProxyListState proxyListState;
+  final Function(String proxyName) onTestLatency;
+  final Function(String proxyName, bool isSelected) onProxySelected;
+
+  const _ProxyListView({
+    required this.proxyListState,
+    required this.onTestLatency,
+    required this.onProxySelected,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    if (proxyListState.isLoadingProxies) {
+      return const Center(child: CircularProgressIndicator());
+    } else if (proxyListState.proxies.isEmpty) {
+      // 检查当前选中的配置类型是否支持代理列表
+      final configs = ConfigManager.loadConfigsSync();
+      final currentConfig = configs.firstWhere(
+        (config) => config.id == proxyListState.selectedConfig,
+        orElse: () => configs.isNotEmpty
+            ? configs.first
+            : VPNConfig(
+                id: '',
+                name: '',
+                type: VPNType.openVPN,
+                configPath: '',
+                settings: {},
+              ),
+      );
+
+      // 只有Clash、Shadowsocks和V2Ray三种类型支持代理列表
+      bool supportsProxyList =
+          currentConfig.type == VPNType.clash ||
+          currentConfig.type == VPNType.shadowsocks ||
+          currentConfig.type == VPNType.v2ray;
+
+      if (supportsProxyList) {
+        return Center(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(Icons.link_off, size: 48, color: Colors.grey),
+              const SizedBox(height: 10),
+              const Text(
+                '暂无代理信息',
+                style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+              ),
+              const SizedBox(height: 5),
+              const Text(
+                '请确保已连接代理并配置了代理',
+                textAlign: TextAlign.center,
+                style: TextStyle(fontSize: 14, color: Colors.grey),
+              ),
+            ],
+          ),
+        );
+      } else {
+        return Center(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(Icons.info, size: 48, color: Colors.blue),
+              const SizedBox(height: 10),
+              const Text(
+                '该代理类型不支持代理列表',
+                style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+              ),
+              const SizedBox(height: 5),
+              const Text(
+                '此类型代理将直接使用配置进行连接',
+                textAlign: TextAlign.center,
+                style: TextStyle(fontSize: 14, color: Colors.grey),
+              ),
+            ],
+          ),
+        );
+      }
+    } else {
+      // 显示所有代理，不管是否启用
+      final allProxies = proxyListState.proxies;
+
+      return Expanded(
+        child: ListView.builder(
+          itemCount: allProxies.length,
+          itemBuilder: (context, index) {
+            final proxy = allProxies[index];
+            final latency = proxy['latency'];
+            final isSelected = proxy['isSelected'];
+            final proxyName = proxy['name'];
+
+            return AnimatedContainer(
+              duration: const Duration(milliseconds: 300),
+              margin: const EdgeInsets.symmetric(vertical: 4),
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(
+                  color: isSelected ? Colors.blue : Colors.grey,
+                  width: 2,
+                ),
+              ),
+              child: Card(
+                elevation: 2,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: ListTile(
+                  leading: AnimatedSwitcher(
+                    duration: const Duration(milliseconds: 300),
+                    transitionBuilder:
+                        (Widget child, Animation<double> animation) {
+                          return ScaleTransition(
+                            scale: animation,
+                            child: child,
+                          );
+                        },
+                    child: Icon(
+                      latency == -2
+                          ? Icons.link
+                          : latency == -1
+                          ? Icons.hourglass_empty
+                          : Icons.link,
+                      key: ValueKey<int>(latency ?? 0),
+                      color: latency == -2
+                          ? Colors.grey
+                          : latency == -1
+                          ? Colors.orange
+                          : (latency < 0
+                                ? Colors.red
+                                : latency < 300
+                                ? Colors.green
+                                : latency < 1000
+                                ? Colors.deepOrange
+                                : Colors.red),
+                    ),
+                  ),
+                  title: Text(
+                    proxyName,
+                    style: TextStyle(
+                      fontWeight: isSelected
+                          ? FontWeight.bold
+                          : FontWeight.normal,
+                    ),
+                  ),
+                  subtitle: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('类型: ${proxy['type']}'),
+                      if (latency == -2)
+                        const Text('未测试', style: TextStyle(color: Colors.grey))
+                      else if (latency == -1)
+                        const Text(
+                          '测试中...',
+                          style: TextStyle(color: Colors.orange),
+                        )
+                      else if (latency < 0)
+                        const Text('连接失败', style: TextStyle(color: Colors.red))
+                      else
+                        Text(
+                          '延迟: ${latency}ms',
+                          style: TextStyle(
+                            color: latency < 300
+                                ? Colors.green
+                                : latency < 1000
+                                ? Colors.deepOrange
+                                : Colors.red,
+                          ),
+                        ),
+                    ],
+                  ),
+                  trailing: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      IconButton(
+                        icon: const Icon(Icons.speed),
+                        onPressed: () => onTestLatency(proxyName),
+                        tooltip: '测试延迟',
+                      ),
+                      Switch(
+                        value: isSelected,
+                        onChanged: (value) => onProxySelected(proxyName, value),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            );
+          },
+        ),
+      );
+    }
+  }
+}
