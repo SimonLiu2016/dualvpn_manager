@@ -21,12 +21,30 @@ class AppState extends ChangeNotifier {
   // 添加路由规则存储键
   static const String _routingRulesKey = 'routing_rules';
 
+  // 添加代理列表状态存储键
+  static const String _proxyStatesKey = 'proxy_states';
+
+  // 添加路由规则更新队列和锁
+  bool _isUpdatingRules = false;
+  final List<Future<void> Function()> _pendingRuleUpdates = [];
+
   AppState({required DualVPNTrayManager trayManager})
     : _trayManager = trayManager {
+    Logger.info('=== 开始初始化AppState ===');
     // 设置托盘管理器的显示窗口回调函数
     _trayManager.setShowWindowCallback(_showWindow);
     // 初始化时加载路由规则
+    Logger.info('开始加载路由规则...');
     _loadRoutingRules();
+    Logger.info('路由规则加载完成');
+    // 初始化时加载代理列表状态
+    Logger.info('开始加载代理列表状态...');
+    _loadProxyStates();
+    Logger.info('代理列表状态加载完成');
+    // 初始化时启动Go代理核心
+    Logger.info('开始初始化Go代理核心...');
+    _initGoProxyCore();
+    Logger.info('=== AppState初始化完成 ===');
   }
 
   // 显示主窗口
@@ -34,6 +52,205 @@ class AppState extends ChangeNotifier {
     // 使用window_manager显示窗口
     windowManager.show();
     windowManager.focus();
+  }
+
+  // 应用启动后已选中的代理
+  Future<void> _applySelectedProxiesAfterStartup() async {
+    try {
+      Logger.info('=== 开始应用启动后已选中的代理 ===');
+      Logger.info('当前代理缓存数量: ${_proxiesByConfig.length}');
+
+      // 打印所有缓存的代理状态
+      _proxiesByConfig.forEach((configId, proxies) {
+        Logger.info('配置 $configId 有 ${proxies.length} 个代理');
+        for (var i = 0; i < proxies.length; i++) {
+          final proxy = proxies[i];
+          Logger.info(
+            '  代理 $i: name=${proxy['name']}, latency=${proxy['latency']}, isSelected=${proxy['isSelected']}',
+          );
+        }
+      });
+
+      // 检查是否有任何选中的代理
+      bool hasAnySelectedProxy = false;
+      for (var entry in _proxiesByConfig.entries) {
+        for (var proxy in entry.value) {
+          if (proxy['isSelected'] == true) {
+            Logger.info('找到选中的代理: ${proxy['name']} 在配置 ${entry.key} 中');
+            hasAnySelectedProxy = true;
+          }
+        }
+      }
+      if (!hasAnySelectedProxy) {
+        Logger.info('未找到任何选中的代理');
+        Logger.info('=== 启动后已选中代理应用完成（无选中代理） ===');
+        return;
+      }
+
+      // 获取所有配置
+      final configs = await ConfigManager.loadConfigs();
+      Logger.info('加载到 ${configs.length} 个配置');
+
+      // 遍历所有已加载的代理配置
+      for (var entry in _proxiesByConfig.entries) {
+        final configId = entry.key;
+        final proxies = entry.value;
+        Logger.info('处理配置ID: $configId，代理数量: ${proxies.length}');
+
+        // 查找对应的配置
+        VPNConfig? config;
+        try {
+          config = configs.firstWhere((c) => c.id == configId);
+          Logger.info(
+            '找到配置: ${config.name}, 类型: ${config.type}, 是否启用: ${config.isActive}',
+          );
+        } catch (e) {
+          Logger.warn('未找到配置ID为 $configId 的配置');
+          continue;
+        }
+
+        // 检查配置是否启用
+        if (!config.isActive) {
+          Logger.info('配置 ${config.name} 未启用，跳过');
+          continue;
+        }
+
+        // 查找已选中的代理
+        Map<String, dynamic>? selectedProxy;
+        try {
+          selectedProxy = proxies.firstWhere(
+            (proxy) => proxy['isSelected'] == true,
+          );
+          Logger.info('找到选中的代理: ${selectedProxy['name']}');
+        } catch (e) {
+          // 没有找到选中的代理
+          Logger.info('配置 ${config.name} 中没有选中的代理');
+          continue;
+        }
+
+        // 根据配置类型应用选中的代理
+        switch (config.type) {
+          case VPNType.clash:
+            Logger.info(
+              '应用Clash配置 ${config.name} 中选中的代理: ${selectedProxy['name']}',
+            );
+            // 设置当前配置为选中状态
+            setSelectedConfig(configId);
+
+            // 确保当前代理列表正确设置
+            _proxies = List<Map<String, dynamic>>.from(proxies);
+            Logger.info('更新当前代理列表，代理数量: ${_proxies.length}');
+
+            // 连接Clash
+            final connected = await connectClash(config);
+            if (connected) {
+              Logger.info('成功连接Clash配置 ${config.name}');
+
+              // 应用选中的代理
+              final result = await _vpnManager.selectClashProxy(
+                'GLOBAL',
+                selectedProxy['name'],
+              );
+              if (result) {
+                Logger.info('成功应用Clash代理: ${selectedProxy['name']}');
+                // 更新Clash连接状态
+                setClashConnected(true);
+              } else {
+                Logger.error('应用Clash代理失败: ${selectedProxy['name']}');
+              }
+            } else {
+              Logger.error('连接Clash配置 ${config.name} 失败');
+            }
+            break;
+
+          case VPNType.shadowsocks:
+            Logger.info(
+              '应用Shadowsocks配置 ${config.name} 中选中的代理: ${selectedProxy['name']}',
+            );
+            // 设置当前配置为选中状态
+            setSelectedConfig(configId);
+
+            // 确保当前代理列表正确设置
+            _proxies = List<Map<String, dynamic>>.from(proxies);
+            Logger.info('更新当前代理列表，代理数量: ${_proxies.length}');
+
+            // 连接Shadowsocks
+            final connected = await connectShadowsocks(config);
+            if (connected) {
+              Logger.info('成功连接Shadowsocks配置 ${config.name}');
+              // 更新Shadowsocks连接状态
+              setShadowsocksConnected(true);
+            } else {
+              Logger.error('连接Shadowsocks配置 ${config.name} 失败');
+            }
+            break;
+
+          case VPNType.v2ray:
+            Logger.info(
+              '应用V2Ray配置 ${config.name} 中选中的代理: ${selectedProxy['name']}',
+            );
+            // 设置当前配置为选中状态
+            setSelectedConfig(configId);
+
+            // 确保当前代理列表正确设置
+            _proxies = List<Map<String, dynamic>>.from(proxies);
+            Logger.info('更新当前代理列表，代理数量: ${_proxies.length}');
+
+            // 连接V2Ray
+            final connected = await connectV2Ray(config);
+            if (connected) {
+              Logger.info('成功连接V2Ray配置 ${config.name}');
+              // 更新V2Ray连接状态
+              setV2RayConnected(true);
+            } else {
+              Logger.error('连接V2Ray配置 ${config.name} 失败');
+            }
+            break;
+
+          default:
+            Logger.info('配置类型 ${config.type} 不支持代理列表');
+        }
+      }
+
+      // 通知UI更新
+      notifyListeners();
+      Logger.info('=== 启动后已选中代理应用完成 ===');
+    } catch (e, stackTrace) {
+      Logger.error('应用启动后已选中的代理时出错: $e');
+      Logger.error('Stack trace: $stackTrace');
+    }
+  }
+
+  // 初始化Go代理核心
+  void _initGoProxyCore() async {
+    try {
+      Logger.info('初始化Go代理核心...');
+      // 延迟一段时间确保应用完全启动后再启动Go代理核心
+      await Future.delayed(const Duration(seconds: 3));
+      final result = await startGoProxy();
+      if (result) {
+        Logger.info('Go代理核心初始化成功');
+
+        // 确保相关的代理已经连接
+        await _ensureProxiesConnected();
+
+        // 添加延迟确保代理连接完成
+        await Future.delayed(const Duration(seconds: 2));
+
+        // 应用已选中的代理到Clash服务
+        Logger.info('开始应用启动后已选中的代理...');
+        await _applySelectedProxiesAfterStartup();
+        Logger.info('应用启动后已选中的代理完成');
+
+        // 将路由规则发送到Go代理核心
+        _sendRoutingRulesToGoProxy();
+      } else {
+        Logger.error('Go代理核心初始化失败');
+      }
+    } catch (e, stackTrace) {
+      Logger.error('初始化Go代理核心时出错: $e');
+      Logger.error('Stack trace: $stackTrace');
+    }
   }
 
   // OpenVPN连接状态
@@ -87,6 +304,7 @@ class AppState extends ChangeNotifier {
   // 应用运行状态
   bool _isRunning = false;
   bool get isRunning => _isRunning;
+  bool get isGoProxyRunning => _vpnManager.isGoProxyRunning;
 
   // 当前选中的配置ID
   String _selectedConfig = '';
@@ -125,6 +343,12 @@ class AppState extends ChangeNotifier {
         Logger.info('未找到已保存的路由规则');
       }
       notifyListeners();
+
+      // 将路由规则传递给Go代理核心
+      _sendRoutingRulesToGoProxy();
+
+      // 确保相关的代理已经连接
+      await _ensureProxiesConnected();
     } catch (e) {
       Logger.error('加载路由规则失败: $e');
       _routingRules = [];
@@ -142,6 +366,99 @@ class AppState extends ChangeNotifier {
       Logger.info('路由规则已保存，共${_routingRules.length}条');
     } catch (e) {
       Logger.error('保存路由规则失败: $e');
+    }
+  }
+
+  // 加载代理列表状态
+  Future<void> _loadProxyStates() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final String? statesJson = prefs.getString(_proxyStatesKey);
+
+      Logger.info('=== 开始加载代理状态 ===');
+      Logger.info('_proxyStatesKey: $_proxyStatesKey');
+      Logger.info('statesJson: $statesJson');
+
+      if (statesJson != null && statesJson.isNotEmpty) {
+        final Map<String, dynamic> statesMap = jsonDecode(statesJson);
+        _proxiesByConfig.clear();
+
+        statesMap.forEach((configId, proxiesList) {
+          Logger.info('处理配置ID: $configId');
+          if (proxiesList is List) {
+            final List<Map<String, dynamic>> proxies = proxiesList
+                .map((proxy) => proxy as Map<String, dynamic>)
+                .toList();
+            _proxiesByConfig[configId] = proxies;
+            Logger.info('配置 $configId 有 ${proxies.length} 个代理');
+            // 打印每个代理的详细信息
+            for (var i = 0; i < proxies.length; i++) {
+              final proxy = proxies[i];
+              Logger.info(
+                '  代理 $i: name=${proxy['name']}, latency=${proxy['latency']}, isSelected=${proxy['isSelected']}',
+              );
+            }
+          } else {
+            Logger.warn('配置 $configId 的代理列表格式不正确');
+          }
+        });
+
+        Logger.info('成功加载${_proxiesByConfig.length}个配置的代理状态');
+
+        // 添加调试信息：检查是否有选中的代理
+        bool hasSelectedProxy = false;
+        for (var entry in _proxiesByConfig.entries) {
+          for (var proxy in entry.value) {
+            if (proxy['isSelected'] == true) {
+              Logger.info('发现选中的代理: ${proxy['name']} 在配置 ${entry.key} 中');
+              hasSelectedProxy = true;
+            }
+          }
+        }
+        if (!hasSelectedProxy) {
+          Logger.info('未发现任何选中的代理');
+        }
+
+        // 确保相关的代理已经连接
+        await _ensureProxiesConnected();
+
+        // 将路由规则发送到Go代理核心
+        _sendRoutingRulesToGoProxy();
+      } else {
+        Logger.info('未找到已保存的代理状态');
+      }
+      Logger.info('=== 代理状态加载完成 ===');
+    } catch (e, stackTrace) {
+      Logger.error('加载代理状态失败: $e');
+      Logger.error('Stack trace: $stackTrace');
+    }
+  }
+
+  // 保存代理列表状态
+  Future<void> _saveProxyStates() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final Map<String, dynamic> statesJson = {};
+
+      _proxiesByConfig.forEach((configId, proxies) {
+        statesJson[configId] = proxies;
+        Logger.info('准备保存配置 $configId 的代理状态，代理数量: ${proxies.length}');
+        // 打印每个代理的详细信息
+        for (var i = 0; i < proxies.length; i++) {
+          final proxy = proxies[i];
+          Logger.info(
+            '  代理 $i: name=${proxy['name']}, latency=${proxy['latency']}, isSelected=${proxy['isSelected']}',
+          );
+        }
+      });
+
+      final statesJsonString = jsonEncode(statesJson);
+      await prefs.setString(_proxyStatesKey, statesJsonString);
+      Logger.info('代理状态已保存，共${_proxiesByConfig.length}个配置');
+      Logger.info('保存的数据: $statesJsonString');
+    } catch (e, stackTrace) {
+      Logger.error('保存代理状态失败: $e');
+      Logger.error('Stack trace: $stackTrace');
     }
   }
 
@@ -165,11 +482,7 @@ class AppState extends ChangeNotifier {
     // 只获取启用的配置
     final enabledConfigs = configs.where((config) => config.isActive).toList();
 
-    Logger.debug('getSelectedProxies: 找到 ${enabledConfigs.length} 个启用的配置');
-    Logger.debug('getSelectedProxies: _selectedConfig = $_selectedConfig');
-    Logger.debug(
-      'getSelectedProxies: _proxiesByConfig keys = ${_proxiesByConfig.keys}',
-    );
+    Logger.debug('getSelectedProxies: 处理 ${enabledConfigs.length} 个启用的配置');
 
     for (var config in enabledConfigs) {
       Logger.debug(
@@ -354,25 +667,59 @@ class AppState extends ChangeNotifier {
     notifyListeners();
   }
 
+  // 重置路由规则更新状态（用于紧急情况下的状态恢复）
+  void resetRoutingUpdateState() {
+    Logger.info('重置路由规则更新状态');
+    _isUpdatingRules = false;
+    _pendingRuleUpdates.clear();
+  }
+
+  // 获取路由规则更新状态（用于调试）
+  bool get isRoutingUpdating => _isUpdatingRules;
+  int get pendingRoutingUpdates => _pendingRuleUpdates.length;
+
   // 设置当前选中的配置
   void setSelectedConfig(String configId) {
+    Logger.info('=== 设置当前选中配置 ===');
+    Logger.info('新的配置ID: $configId');
+    Logger.info('旧的配置ID: $_selectedConfig');
+
     // 保存当前代理列表
     if (_selectedConfig.isNotEmpty) {
       _proxiesByConfig[_selectedConfig] = List<Map<String, dynamic>>.from(
         _proxies,
       );
+      Logger.info('保存配置 $_selectedConfig 的代理列表，代理数量: ${_proxies.length}');
+      // 打印每个代理的详细信息
+      for (var i = 0; i < _proxies.length; i++) {
+        final proxy = _proxies[i];
+        Logger.info(
+          '  保存的代理 $i: name=${proxy['name']}, latency=${proxy['latency']}, isSelected=${proxy['isSelected']}',
+        );
+      }
     }
 
     _selectedConfig = configId;
+    Logger.info('设置新的选中配置为: $_selectedConfig');
 
     // 恢复选中配置的代理列表
     if (_proxiesByConfig.containsKey(configId)) {
       _proxies = _proxiesByConfig[configId]!;
+      Logger.info('从缓存恢复配置 $configId 的代理列表，代理数量: ${_proxies.length}');
+      // 打印每个代理的详细信息
+      for (var i = 0; i < _proxies.length; i++) {
+        final proxy = _proxies[i];
+        Logger.info(
+          '  恢复的代理 $i: name=${proxy['name']}, latency=${proxy['latency']}, isSelected=${proxy['isSelected']}',
+        );
+      }
     } else {
       _proxies = [];
+      Logger.info('配置 $configId 没有缓存的代理列表，初始化为空列表');
     }
 
     notifyListeners();
+    Logger.info('=== 当前选中配置设置完成 ===');
   }
 
   // 设置内网域名列表
@@ -393,6 +740,8 @@ class AppState extends ChangeNotifier {
     notifyListeners();
     // 保存到持久化存储
     _saveRoutingRules();
+    // 将路由规则传递给Go代理核心
+    _sendRoutingRulesToGoProxy();
   }
 
   // 添加路由规则
@@ -401,6 +750,8 @@ class AppState extends ChangeNotifier {
     notifyListeners();
     // 保存到持久化存储
     _saveRoutingRules();
+    // 将路由规则传递给Go代理核心
+    _sendRoutingRulesToGoProxy();
   }
 
   // 删除路由规则
@@ -409,16 +760,34 @@ class AppState extends ChangeNotifier {
     notifyListeners();
     // 保存到持久化存储
     _saveRoutingRules();
+    // 将路由规则传递给Go代理核心
+    _sendRoutingRulesToGoProxy();
   }
 
   // 设置代理列表
   void setProxies(List<Map<String, dynamic>> proxies) {
+    Logger.info('=== 设置代理列表 ===');
+    Logger.info('新代理列表数量: ${proxies.length}');
+    Logger.info('当前选中配置ID: $_selectedConfig');
+
+    // 打印新代理列表的详细信息
+    for (var i = 0; i < proxies.length; i++) {
+      final proxy = proxies[i];
+      Logger.info(
+        '  新代理 $i: name=${proxy['name']}, latency=${proxy['latency']}, isSelected=${proxy['isSelected']}',
+      );
+    }
+
     _proxies = proxies;
     // 保存当前配置的代理列表
     if (_selectedConfig.isNotEmpty) {
       _proxiesByConfig[_selectedConfig] = proxies;
+      Logger.info('保存配置 $_selectedConfig 的代理列表，代理数量: ${proxies.length}');
+      // 保存到持久化存储
+      _saveProxyStates();
     }
     notifyListeners();
+    Logger.info('=== 代理列表设置完成 ===');
   }
 
   // 清除指定配置的代理列表缓存
@@ -429,6 +798,8 @@ class AppState extends ChangeNotifier {
       _proxies = [];
       notifyListeners();
     }
+    // 保存到持久化存储
+    _saveProxyStates();
   }
 
   // 设置代理列表加载状态
@@ -451,20 +822,32 @@ class AppState extends ChangeNotifier {
       _proxiesByConfig[_selectedConfig] = List<Map<String, dynamic>>.from(
         _proxies,
       );
+      // 保存到持久化存储
+      _saveProxyStates();
     }
     notifyListeners();
   }
 
   // 设置代理选中状态
   void setProxySelected(String proxyName, bool isSelected) {
+    Logger.info('=== 设置代理选中状态 ===');
+    Logger.info('代理名称: $proxyName, 选中状态: $isSelected');
+    Logger.info('当前代理列表数量: ${_proxies.length}');
+
     for (var i = 0; i < _proxies.length; i++) {
       if (_proxies[i]['name'] == proxyName) {
+        Logger.info('找到代理 $proxyName 在索引 $i');
         _proxies[i] = Map<String, dynamic>.from(_proxies[i])
           ..['isSelected'] = isSelected;
+        Logger.info(
+          '更新代理状态: name=${_proxies[i]['name']}, isSelected=${_proxies[i]['isSelected']}',
+        );
+
         // 如果选中了这个代理，取消其他代理的选中状态
         if (isSelected) {
           for (var j = 0; j < _proxies.length; j++) {
             if (j != i && _proxies[j]['isSelected'] == true) {
+              Logger.info('取消代理 ${_proxies[j]['name']} 的选中状态');
               _proxies[j] = Map<String, dynamic>.from(_proxies[j])
                 ..['isSelected'] = false;
             }
@@ -476,13 +859,20 @@ class AppState extends ChangeNotifier {
         break;
       }
     }
+
     // 更新存储的代理列表
     if (_selectedConfig.isNotEmpty) {
       _proxiesByConfig[_selectedConfig] = List<Map<String, dynamic>>.from(
         _proxies,
       );
+      Logger.info(
+        '更新配置 $_selectedConfig 的代理列表缓存，当前代理数量: ${_proxiesByConfig[_selectedConfig]?.length}',
+      );
+      // 保存到持久化存储
+      _saveProxyStates();
     }
     notifyListeners();
+    Logger.info('=== 代理选中状态设置完成 ===');
   }
 
   // 应用选中的代理到Clash服务
@@ -502,6 +892,9 @@ class AppState extends ChangeNotifier {
         final result = await _vpnManager.selectClashProxy('GLOBAL', proxyName);
         if (result) {
           Logger.info('成功应用Clash代理: $proxyName');
+
+          // 将路由规则发送到Go代理核心
+          _sendRoutingRulesToGoProxy();
         } else {
           Logger.error('应用Clash代理失败: $proxyName');
         }
@@ -619,6 +1012,9 @@ class AppState extends ChangeNotifier {
         );
         if (result) {
           Logger.info('成功应用Clash代理: ${selectedProxy['name']}');
+
+          // 将路由规则发送到Go代理核心
+          _sendRoutingRulesToGoProxy();
         } else {
           Logger.error('应用Clash代理失败: ${selectedProxy['name']}');
         }
@@ -649,6 +1045,9 @@ class AppState extends ChangeNotifier {
       if (result) {
         setShadowsocksConnected(true);
         Logger.info('Shadowsocks连接成功');
+
+        // 将路由规则发送到Go代理核心
+        _sendRoutingRulesToGoProxy();
       } else {
         Logger.error('Shadowsocks连接失败');
       }
@@ -679,6 +1078,9 @@ class AppState extends ChangeNotifier {
       if (result) {
         setV2RayConnected(true);
         Logger.info('V2Ray连接成功');
+
+        // 将路由规则发送到Go代理核心
+        _sendRoutingRulesToGoProxy();
       } else {
         Logger.error('V2Ray连接失败');
       }
@@ -709,6 +1111,9 @@ class AppState extends ChangeNotifier {
       if (result) {
         setHTTPProxyConnected(true);
         Logger.info('HTTP代理连接成功');
+
+        // 将路由规则发送到Go代理核心
+        _sendRoutingRulesToGoProxy();
       } else {
         Logger.error('HTTP代理连接失败');
       }
@@ -739,6 +1144,9 @@ class AppState extends ChangeNotifier {
       if (result) {
         setSOCKS5ProxyConnected(true);
         Logger.info('SOCKS5代理连接成功');
+
+        // 将路由规则发送到Go代理核心
+        _sendRoutingRulesToGoProxy();
       } else {
         Logger.error('SOCKS5代理连接失败');
       }
@@ -775,6 +1183,13 @@ class AppState extends ChangeNotifier {
     } catch (e) {
       Logger.error('更新Clash订阅失败: $e');
       // 通知UI显示错误
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (navigatorKey.currentContext != null) {
+          ScaffoldMessenger.of(
+            navigatorKey.currentContext!,
+          ).showSnackBar(SnackBar(content: Text('更新Clash订阅失败: $e')));
+        }
+      });
       return false;
     }
   }
@@ -792,6 +1207,13 @@ class AppState extends ChangeNotifier {
     } catch (e) {
       Logger.error('更新Shadowsocks订阅失败: $e');
       // 通知UI显示错误
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (navigatorKey.currentContext != null) {
+          ScaffoldMessenger.of(
+            navigatorKey.currentContext!,
+          ).showSnackBar(SnackBar(content: Text('更新Shadowsocks订阅失败: $e')));
+        }
+      });
       return false;
     }
   }
@@ -809,6 +1231,13 @@ class AppState extends ChangeNotifier {
     } catch (e) {
       Logger.error('更新V2Ray订阅失败: $e');
       // 通知UI显示错误
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (navigatorKey.currentContext != null) {
+          ScaffoldMessenger.of(
+            navigatorKey.currentContext!,
+          ).showSnackBar(SnackBar(content: Text('更新V2Ray订阅失败: $e')));
+        }
+      });
       return false;
     }
   }
@@ -831,9 +1260,11 @@ class AppState extends ChangeNotifier {
         default:
           Logger.error('不支持的订阅更新类型: ${config.type}');
           WidgetsBinding.instance.addPostFrameCallback((_) {
-            ScaffoldMessenger.of(
-              navigatorKey.currentContext!,
-            ).showSnackBar(const SnackBar(content: Text('该代理类型不支持订阅更新')));
+            if (navigatorKey.currentContext != null) {
+              ScaffoldMessenger.of(
+                navigatorKey.currentContext!,
+              ).showSnackBar(const SnackBar(content: Text('该代理类型不支持订阅更新')));
+            }
           });
           result = false;
       }
@@ -842,6 +1273,13 @@ class AppState extends ChangeNotifier {
     } catch (e) {
       Logger.error('更新${config.type}订阅失败: $e');
       // 通知UI显示错误
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (navigatorKey.currentContext != null) {
+          ScaffoldMessenger.of(
+            navigatorKey.currentContext!,
+          ).showSnackBar(SnackBar(content: Text('更新${config.type}订阅失败: $e')));
+        }
+      });
       return false;
     }
   }
@@ -893,21 +1331,21 @@ class AppState extends ChangeNotifier {
   ) {
     switch (routeType) {
       case RouteType.openVPN:
-        return smart_routing_engine.RuleType.domain;
+        return smart_routing_engine.RuleType.domainSuffix;
       case RouteType.clash:
-        return smart_routing_engine.RuleType.domain;
+        return smart_routing_engine.RuleType.domainSuffix;
       case RouteType.shadowsocks:
-        return smart_routing_engine.RuleType.domain;
+        return smart_routing_engine.RuleType.domainSuffix;
       case RouteType.v2ray:
-        return smart_routing_engine.RuleType.domain;
+        return smart_routing_engine.RuleType.domainSuffix;
       case RouteType.httpProxy:
-        return smart_routing_engine.RuleType.domain;
+        return smart_routing_engine.RuleType.domainSuffix;
       case RouteType.socks5:
-        return smart_routing_engine.RuleType.domain;
+        return smart_routing_engine.RuleType.domainSuffix;
       case RouteType.custom:
-        return smart_routing_engine.RuleType.domain;
+        return smart_routing_engine.RuleType.domainSuffix;
       default:
-        return smart_routing_engine.RuleType.domain;
+        return smart_routing_engine.RuleType.domainSuffix;
     }
   }
 
@@ -926,30 +1364,87 @@ class AppState extends ChangeNotifier {
   // 启用路由
   Future<void> enableRouting() async {
     try {
-      // 更新代理管理器的路由规则
-      _proxyManager.setRoutingRules(_routingRules);
+      Logger.info('开始启用路由...');
 
       // 更新活动配置到代理管理器
       final configs = await ConfigManager.loadConfigs();
+      Logger.info('加载配置完成，共${configs.length}个配置');
       setActiveConfigs(configs);
 
-      // 不再直接启动代理服务，代理服务应该由代理源状态控制
-      // 只有在需要时才启动本地代理服务
-      Logger.info('路由规则已更新，代理服务由代理源状态控制');
+      // 启动本地代理服务
+      Logger.info('尝试启动本地SOCKS5代理服务...');
+      final proxyStarted = await _proxyManager.startProxyService();
+      if (proxyStarted) {
+        Logger.info('本地SOCKS5代理服务启动成功，端口: ${_proxyManager.proxyPort}');
+        // 更新代理管理器的路由规则
+        Logger.info('更新代理管理器的路由规则，共${_routingRules.length}条');
+        _proxyManager.setRoutingRules(_routingRules);
+        // 设置系统代理指向本地SOCKS5代理服务
+        Logger.info(
+          '设置系统代理指向本地SOCKS5代理服务 (127.0.0.1:${_proxyManager.proxyPort})',
+        );
+        // 更新VPNManager中的系统代理设置方法，使用实际端口
+        await _vpnManager.enableSmartRouting(
+          socksPort: _proxyManager.proxyPort,
+        );
+        Logger.info('智能路由已启用，系统代理已设置');
+      } else {
+        Logger.error('启动本地SOCKS5代理服务失败');
+        // 通知UI显示错误
+        if (navigatorKey.currentContext != null) {
+          ScaffoldMessenger.of(
+            navigatorKey.currentContext!,
+          ).showSnackBar(const SnackBar(content: Text('启动本地SOCKS5代理服务失败')));
+        }
+        return;
+      }
+
+      // 确保相关的代理已经连接并添加协议到Go代理核心
+      Logger.info('确保相关代理已连接并添加协议到Go代理核心');
+      await _ensureProxiesConnected();
+
+      // 将路由规则发送到Go代理核心
+      Logger.info('将路由规则发送到Go代理核心');
+      _sendRoutingRulesToGoProxy();
+
       setIsRunning(true);
+      Logger.info('路由启用完成');
+      // 通知UI显示成功信息
+      if (navigatorKey.currentContext != null) {
+        ScaffoldMessenger.of(
+          navigatorKey.currentContext!,
+        ).showSnackBar(const SnackBar(content: Text('路由已启用')));
+      }
     } catch (e) {
-      Logger.error('更新路由规则失败: $e');
+      Logger.error('启用路由失败: $e');
       // 通知UI显示错误
+      if (navigatorKey.currentContext != null) {
+        ScaffoldMessenger.of(
+          navigatorKey.currentContext!,
+        ).showSnackBar(SnackBar(content: Text('启用路由失败: $e')));
+      }
     }
   }
 
-  // 禔用路由
+  // 禁用路由
   Future<void> disableRouting() async {
     try {
+      Logger.info('开始禁用路由...');
+
       // 清空路由规则
+      Logger.info('清空路由规则');
       _proxyManager.setRoutingRules([]);
+
+      // 停止本地代理服务
+      Logger.info('停止本地代理服务');
+      await _proxyManager.stopProxyService();
+
+      // 清除系统代理设置
+      Logger.info('清除系统代理设置');
+      await _vpnManager.disableSmartRouting();
+
       setIsRunning(false);
-      Logger.info('路由规则已清空');
+      Logger.info('路由规则已清空，本地代理服务已停止，系统代理已清除');
     } catch (e) {
       Logger.error('清空路由规则失败: $e');
       // 通知UI显示错误
@@ -974,6 +1469,8 @@ class AppState extends ChangeNotifier {
     notifyListeners();
     // 保存到持久化存储
     _saveRoutingRules();
+    // 将路由规则发送到Go代理核心
+    _sendRoutingRulesToGoProxy();
   }
 
   // 禁用所有路由规则
@@ -994,6 +1491,8 @@ class AppState extends ChangeNotifier {
     notifyListeners();
     // 保存到持久化存储
     _saveRoutingRules();
+    // 将路由规则发送到Go代理核心
+    _sendRoutingRulesToGoProxy();
   }
 
   // 获取指定ID的配置
@@ -1049,28 +1548,34 @@ class AppState extends ChangeNotifier {
             final proxiesData = await getClashProxies();
             if (proxiesData != null && proxiesData.containsKey('proxies')) {
               // 解析Clash代理数据
-              (proxiesData['proxies'] as Map<String, dynamic>).forEach((
-                name,
-                proxy,
-              ) {
-                if (proxy is Map<String, dynamic>) {
-                  // 检查是否已存在该代理的状态
-                  Map<String, dynamic>? existingProxy;
-                  for (var p in _proxies) {
-                    if (p['name'] == name) {
-                      existingProxy = p;
-                      break;
+              final proxiesMap = proxiesData['proxies'];
+              if (proxiesMap is Map) {
+                proxiesMap.forEach((name, proxy) {
+                  if (name is String) {
+                    // 检查是否已存在该代理的状态
+                    Map<String, dynamic>? existingProxy;
+                    for (var p in _proxies) {
+                      if (p['name'] == name) {
+                        existingProxy = p;
+                        break;
+                      }
                     }
-                  }
 
-                  proxies.add({
-                    'name': name,
-                    'type': proxy['type'] ?? 'unknown',
-                    'latency': existingProxy?['latency'] ?? -2, // -2表示未测试
-                    'isSelected': existingProxy?['isSelected'] ?? false,
-                  });
-                }
-              });
+                    // 从proxy对象中提取类型信息
+                    String type = 'unknown';
+                    if (proxy is Map && proxy.containsKey('type')) {
+                      type = proxy['type'].toString();
+                    }
+
+                    proxies.add({
+                      'name': name,
+                      'type': type,
+                      'latency': existingProxy?['latency'] ?? -2, // -2表示未测试
+                      'isSelected': existingProxy?['isSelected'] ?? false,
+                    });
+                  }
+                });
+              }
             }
             break;
 
@@ -1252,5 +1757,484 @@ class AppState extends ChangeNotifier {
       Logger.error('获取V2Ray代理列表失败: $e');
       return [];
     }
+  }
+
+  // 将路由规则发送到Go代理核心
+  Future<void> _sendRoutingRulesToGoProxy() async {
+    // 创建更新任务
+    final updateTask = () async {
+      try {
+        Logger.info('=== 开始发送路由规则到Go代理核心 ===');
+        Logger.info('当前规则数量: ${_routingRules.length}');
+
+        // 打印所有路由规则的详细信息
+        for (var i = 0; i < _routingRules.length; i++) {
+          final rule = _routingRules[i];
+          Logger.info(
+            '路由规则 $i: type=${rule.type}, pattern=${rule.pattern}, proxyId=${rule.proxyId}, isEnabled=${rule.isEnabled}',
+          );
+        }
+
+        // 确保Go代理核心已经完全启动并准备好接收规则
+        // 等待更长时间确保API服务器已启动
+        Logger.info('等待Go代理核心完全启动...');
+        await Future.delayed(const Duration(seconds: 5));
+
+        // 确保相关的代理已经连接
+        Logger.info('开始确保相关代理已连接...');
+        await _ensureProxiesConnected();
+
+        // 添加延迟以确保协议已添加到Go代理核心
+        Logger.info('等待协议添加完成...');
+        await Future.delayed(const Duration(seconds: 2));
+
+        // 验证协议是否已正确添加到Go代理核心
+        try {
+          Logger.info('=== 开始验证Go代理核心协议列表 ===');
+          final protocols = await _vpnManager.getGoProxyProtocols().timeout(
+            const Duration(seconds: 10),
+            onTimeout: () {
+              Logger.error('获取Go代理核心协议列表超时');
+              return null;
+            },
+          );
+          if (protocols != null) {
+            Logger.info('Go代理核心当前协议列表: ${protocols.keys.join(', ')}');
+            // 打印每个协议的详细信息
+            protocols.forEach((key, value) {
+              Logger.info('协议 $key: $value');
+            });
+          } else {
+            Logger.error('无法获取Go代理核心协议列表');
+          }
+          Logger.info('=== Go代理核心协议列表验证完成 ===');
+        } catch (e) {
+          Logger.error('验证Go代理核心协议列表时出错: $e');
+        }
+
+        // 获取选中的代理并打印详细信息
+        Logger.info('=== 开始获取选中的代理信息 ===');
+        try {
+          final selectedProxies = await getSelectedProxies();
+          Logger.info('找到 ${selectedProxies.length} 个选中的代理');
+
+          for (var i = 0; i < selectedProxies.length; i++) {
+            final proxyInfo = selectedProxies[i];
+            final config = proxyInfo['config'] as VPNConfig;
+            final proxy = proxyInfo['proxy'] as Map<String, dynamic>;
+
+            Logger.info('选中的代理 $i:');
+            Logger.info('  - 配置名称: ${config.name}');
+            Logger.info('  - 配置ID: ${config.id}');
+            Logger.info('  - 配置类型: ${config.type}');
+            Logger.info('  - 代理名称: ${proxy['name']}');
+            Logger.info('  - 代理类型: ${proxy['type']}');
+            Logger.info('  - 是否选中: ${proxy['isSelected']}');
+
+            // 测试代理的可用性
+            if (config.type == VPNType.clash) {
+              Logger.info('  - 正在测试Clash代理可用性...');
+              try {
+                final clashProxies = await _vpnManager.getClashProxies();
+                if (clashProxies != null) {
+                  Logger.info('  - Clash代理列表获取成功');
+                  // 检查选中的代理是否在Clash代理列表中
+                  final proxiesData = clashProxies['proxies'] as Map?;
+                  if (proxiesData != null &&
+                      proxiesData.containsKey(proxy['name'])) {
+                    Logger.info('  - 选中的代理 ${proxy['name']} 在Clash代理列表中');
+                  } else {
+                    Logger.warn('  - 选中的代理 ${proxy['name']} 不在Clash代理列表中');
+                  }
+                } else {
+                  Logger.warn('  - 无法获取Clash代理列表');
+                }
+              } catch (e) {
+                Logger.error('  - 测试Clash代理可用性时出错: $e');
+              }
+            }
+          }
+        } catch (e) {
+          Logger.error('获取选中的代理信息时出错: $e');
+        }
+        Logger.info('=== 选中的代理信息获取完成 ===');
+
+        // 将路由规则转换为Go核心可以理解的格式
+        final List<Map<String, dynamic>> goRules = [];
+
+        // 添加默认的MATCH规则作为最后一条规则
+        bool hasMatchRule = false;
+
+        for (var rule in _routingRules) {
+          // 根据proxyId获取配置信息
+          final config = await ConfigManager.getConfig(rule.proxyId);
+          String proxySource = 'DIRECT'; // 默认直连
+
+          if (config != null) {
+            // 根据配置类型确定代理源
+            switch (config.type) {
+              case VPNType.openVPN:
+                proxySource = 'openvpn';
+                break;
+              case VPNType.clash:
+                // 修复：使用与VPN管理器中一致的名称'clash'
+                proxySource = 'clash';
+                break;
+              case VPNType.shadowsocks:
+                proxySource = 'shadowsocks';
+                break;
+              case VPNType.v2ray:
+                proxySource = 'v2ray';
+                break;
+              case VPNType.httpProxy:
+                proxySource = 'http';
+                break;
+              case VPNType.socks5:
+                proxySource = 'socks5';
+                break;
+              default:
+                proxySource = 'DIRECT';
+            }
+          }
+
+          // 检查是否是MATCH规则
+          if (rule.type == smart_routing_engine.RuleType.finalRule) {
+            hasMatchRule = true;
+          }
+
+          goRules.add({
+            'type': _convertRuleTypeToGoType(rule.type),
+            'pattern': rule.pattern,
+            'proxy_source': proxySource,
+            'enabled': rule.isEnabled,
+          });
+        }
+
+        // 如果没有MATCH规则，添加一个默认的MATCH规则
+        if (!hasMatchRule) {
+          goRules.add({
+            'type': 'MATCH',
+            'pattern': '',
+            'proxy_source': 'DIRECT',
+            'enabled': true,
+          });
+        }
+
+        // 添加调试日志
+        Logger.info('准备发送 ${goRules.length} 条路由规则到Go代理核心');
+        for (var i = 0; i < goRules.length; i++) {
+          final rule = goRules[i];
+          Logger.info(
+            '规则 $i: type=${rule['type']}, pattern=${rule['pattern']}, proxy_source=${rule['proxy_source']}, enabled=${rule['enabled']}',
+          );
+        }
+
+        // 发送到Go代理核心，添加超时机制
+        bool result = false;
+        try {
+          Logger.info('开始发送路由规则到Go代理核心...');
+          result = await _vpnManager
+              .updateGoProxyRules(goRules)
+              .timeout(
+                const Duration(seconds: 30),
+                onTimeout: () {
+                  Logger.error('发送路由规则到Go代理核心超时');
+                  return false;
+                },
+              );
+        } catch (e) {
+          Logger.error('发送路由规则到Go代理核心时出错: $e');
+          result = false;
+        }
+
+        if (result) {
+          Logger.info('成功将路由规则发送到Go代理核心');
+
+          // 验证规则是否正确保存
+          try {
+            await Future.delayed(const Duration(milliseconds: 500));
+            final verifyRules = await _vpnManager.getGoProxyRules().timeout(
+              const Duration(seconds: 10),
+              onTimeout: () {
+                Logger.error('获取Go代理核心路由规则超时');
+                return null;
+              },
+            );
+            if (verifyRules != null) {
+              Logger.info('验证路由规则: ${verifyRules.length} 条规则');
+              for (var i = 0; i < verifyRules.length; i++) {
+                final rule = verifyRules[i];
+                Logger.info(
+                  '验证规则 $i: type=${rule['type']}, pattern=${rule['pattern']}, proxy_source=${rule['proxy_source']}, enabled=${rule['enabled']}',
+                );
+              }
+            }
+          } catch (e) {
+            Logger.error('验证路由规则时出错: $e');
+          }
+        } else {
+          Logger.error('将路由规则发送到Go代理核心失败');
+        }
+
+        Logger.info('=== 路由规则发送完成 ===');
+      } catch (e, stackTrace) {
+        Logger.error('发送路由规则到Go代理核心时发生未捕获的异常: $e\nStack trace: $stackTrace');
+      }
+    };
+
+    // 执行更新任务
+    await updateTask();
+  }
+
+  // 确保相关的代理已经连接
+  Future<void> _ensureProxiesConnected() async {
+    try {
+      // 获取所有配置
+      final configs = await ConfigManager.loadConfigs();
+
+      // 创建一个集合来跟踪已经处理过的配置ID
+      final processedConfigIds = <String>{};
+
+      // 遍历所有路由规则，确保相关的代理已经连接
+      for (var rule in _routingRules) {
+        // 跳过已经处理过的配置
+        if (processedConfigIds.contains(rule.proxyId)) {
+          continue;
+        }
+
+        // 标记为已处理
+        processedConfigIds.add(rule.proxyId);
+
+        // 根据proxyId获取配置信息
+        VPNConfig config;
+        try {
+          config = configs.firstWhere((c) => c.id == rule.proxyId);
+        } catch (e) {
+          // 配置不存在
+          continue;
+        }
+
+        // 如果配置不是活动的，跳过
+        if (!config.isActive) {
+          continue;
+        }
+
+        // 根据配置类型连接相应的代理
+        switch (config.type) {
+          case VPNType.clash:
+            Logger.info('正在连接Clash代理: ${config.name}');
+            final result = await _vpnManager.connectClash(config);
+            if (result) {
+              Logger.info('成功连接Clash代理: ${config.name}');
+
+              // 添加协议到Go代理核心（如果尚未添加）
+              await _addProtocolToGoProxy('clash', config);
+            } else {
+              Logger.error('连接Clash代理失败: ${config.name}');
+            }
+            break;
+          case VPNType.shadowsocks:
+            Logger.info('正在连接Shadowsocks代理: ${config.name}');
+            final result = await _vpnManager.connectShadowsocks(config);
+            if (result) {
+              Logger.info('成功连接Shadowsocks代理: ${config.name}');
+
+              // 添加协议到Go代理核心（如果尚未添加）
+              await _addProtocolToGoProxy('shadowsocks', config);
+            } else {
+              Logger.error('连接Shadowsocks代理失败: ${config.name}');
+            }
+            break;
+          case VPNType.v2ray:
+            Logger.info('正在连接V2Ray代理: ${config.name}');
+            final result = await _vpnManager.connectV2Ray(config);
+            if (result) {
+              Logger.info('成功连接V2Ray代理: ${config.name}');
+
+              // 添加协议到Go代理核心（如果尚未添加）
+              await _addProtocolToGoProxy('v2ray', config);
+            } else {
+              Logger.error('连接V2Ray代理失败: ${config.name}');
+            }
+            break;
+          case VPNType.httpProxy:
+            Logger.info('正在连接HTTP代理: ${config.name}');
+            final result = await _vpnManager.connectHTTPProxy(config);
+            if (result) {
+              Logger.info('成功连接HTTP代理: ${config.name}');
+
+              // 添加协议到Go代理核心（如果尚未添加）
+              await _addProtocolToGoProxy('http', config);
+            } else {
+              Logger.error('连接HTTP代理失败: ${config.name}');
+            }
+            break;
+          case VPNType.socks5:
+            Logger.info('正在连接SOCKS5代理: ${config.name}');
+            final result = await _vpnManager.connectSOCKS5Proxy(config);
+            if (result) {
+              Logger.info('成功连接SOCKS5代理: ${config.name}');
+
+              // 添加协议到Go代理核心（如果尚未添加）
+              await _addProtocolToGoProxy('socks5', config);
+            } else {
+              Logger.error('连接SOCKS5代理失败: ${config.name}');
+            }
+            break;
+          default:
+            // 对于DIRECT、OPENVPN等其他类型，不需要特殊处理
+            break;
+        }
+      }
+    } catch (e, stackTrace) {
+      Logger.error('确保代理连接时出错: $e\nStack trace: $stackTrace');
+    }
+  }
+
+  // 添加协议到Go代理核心
+  Future<void> _addProtocolToGoProxy(
+    String protocolType,
+    VPNConfig config,
+  ) async {
+    try {
+      // 检查协议是否已经添加
+      final protocols = await _vpnManager.getGoProxyProtocols();
+      bool protocolExists = false;
+
+      if (protocols != null && protocols.containsKey('protocols')) {
+        final protocolList = protocols['protocols'] as Map?;
+        if (protocolList != null) {
+          protocolExists = protocolList.containsKey(protocolType);
+        }
+      }
+
+      if (!protocolExists) {
+        Logger.info('正在添加$protocolType协议到Go代理核心');
+
+        Map<String, dynamic> protocolConfig;
+        switch (protocolType) {
+          case 'clash':
+            protocolConfig = {
+              'name': 'clash',
+              'type': 'http',
+              'server': '127.0.0.1',
+              'port': 7890, // Clash默认HTTP端口
+            };
+            break;
+          case 'shadowsocks':
+            protocolConfig = {
+              'name': 'shadowsocks',
+              'type': 'socks5',
+              'server': '127.0.0.1',
+              'port': 1080, // Shadowsocks默认端口
+            };
+            break;
+          case 'v2ray':
+            protocolConfig = {
+              'name': 'v2ray',
+              'type': 'socks5',
+              'server': '127.0.0.1',
+              'port': 1080, // V2Ray默认端口
+            };
+            break;
+          case 'http':
+            protocolConfig = {
+              'name': 'http',
+              'type': 'http',
+              'server': '127.0.0.1',
+              'port': 8080, // HTTP代理默认端口
+            };
+            break;
+          case 'socks5':
+            protocolConfig = {
+              'name': 'socks5',
+              'type': 'socks5',
+              'server': '127.0.0.1',
+              'port': 1080, // SOCKS5代理默认端口
+            };
+            break;
+          default:
+            Logger.warn('未知协议类型: $protocolType');
+            return;
+        }
+
+        // 通过VPNManager添加协议
+        final result = await _vpnManager.addProtocolToGoProxy(protocolConfig);
+        if (result) {
+          Logger.info('成功添加$protocolType协议到Go代理核心');
+        } else {
+          Logger.error('添加$protocolType协议到Go代理核心失败');
+        }
+      } else {
+        Logger.info('$protocolType协议已存在于Go代理核心中');
+      }
+    } catch (e) {
+      Logger.error('添加协议到Go代理核心时出错: $e');
+    }
+  }
+
+  // 转换规则类型到Go核心可以理解的类型
+  String _convertRuleTypeToGoType(smart_routing_engine.RuleType ruleType) {
+    switch (ruleType) {
+      case smart_routing_engine.RuleType.domain:
+        return 'DOMAIN';
+      case smart_routing_engine.RuleType.domainSuffix:
+        return 'DOMAIN-SUFFIX';
+      case smart_routing_engine.RuleType.domainKeyword:
+        return 'DOMAIN-KEYWORD';
+      case smart_routing_engine.RuleType.ip:
+        return 'IP';
+      case smart_routing_engine.RuleType.cidr:
+        return 'IP-CIDR';
+      case smart_routing_engine.RuleType.geoip:
+        return 'GEOIP';
+      case smart_routing_engine.RuleType.regexp:
+        return 'REGEXP';
+      case smart_routing_engine.RuleType.finalRule:
+        return 'MATCH';
+      default:
+        return 'MATCH';
+    }
+  }
+
+  // 转换代理ID到Go核心可以理解的代理源
+  String _convertProxyIdToGoProxySource(String proxyId) {
+    // 这个方法现在不再使用，但我们保留它以避免破坏其他代码
+    // 实际的代理源转换在_sendRoutingRulesToGoProxy方法中完成
+    return 'DIRECT';
+  }
+
+  // 启动Go代理核心
+  Future<bool> startGoProxy() async {
+    try {
+      final result = await _vpnManager.startGoProxy();
+      if (result) {
+        _isRunning = true;
+        notifyListeners();
+      }
+      return result;
+    } catch (e) {
+      Logger.error('启动Go代理核心失败: $e');
+      return false;
+    }
+  }
+
+  // 停止Go代理核心
+  Future<void> stopGoProxy() async {
+    try {
+      await _vpnManager.stopGoProxy();
+      _isRunning = false;
+      notifyListeners();
+    } catch (e) {
+      Logger.error('停止Go代理核心失败: $e');
+      rethrow;
+    }
+  }
+
+  // 手动应用启动后已选中的代理（用于调试）
+  Future<void> applySelectedProxiesManually() async {
+    Logger.info('=== 手动应用选中的代理 ===');
+    await _applySelectedProxiesAfterStartup();
+    Logger.info('=== 手动应用选中的代理完成 ===');
   }
 }

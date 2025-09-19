@@ -6,6 +6,24 @@ import 'package:path/path.dart' as path;
 class Logger {
   static const bool _isDebugMode = kDebugMode;
   static File? _logFile;
+  // 添加日志过滤功能
+  static String? _filterHost;
+
+  // 设置日志过滤主机名
+  static void setFilterHost(String? host) {
+    _filterHost = host;
+  }
+
+  // 检查消息是否应该被过滤
+  static bool _shouldLog(String message) {
+    // 如果没有设置过滤器，记录所有消息
+    if (_filterHost == null || _filterHost!.isEmpty) {
+      return true;
+    }
+
+    // 如果设置了过滤器，只记录包含指定主机名的消息
+    return message.contains(_filterHost!);
+  }
 
   static Future<void> _initLogFile() async {
     if (_logFile != null) return;
@@ -30,6 +48,11 @@ class Logger {
   }
 
   static Future<void> _writeToFile(String level, String message) async {
+    // 检查是否应该记录此消息
+    if (!_shouldLog(message)) {
+      return;
+    }
+
     // 在测试环境中不写入文件
     if (!_isDebugMode) return;
 
@@ -53,6 +76,11 @@ class Logger {
   }
 
   static void debug(String message) {
+    // 检查是否应该记录此消息
+    if (!_shouldLog(message)) {
+      return;
+    }
+
     if (_isDebugMode) {
       // 在调试模式下输出日志
       debugPrint('[DEBUG] $message');
@@ -61,18 +89,33 @@ class Logger {
   }
 
   static void info(String message) {
+    // 检查是否应该记录此消息
+    if (!_shouldLog(message)) {
+      return;
+    }
+
     // 信息日志
     debugPrint('[INFO] $message');
     _writeToFile('INFO', message);
   }
 
   static void error(String message) {
+    // 检查是否应该记录此消息
+    if (!_shouldLog(message)) {
+      return;
+    }
+
     // 错误日志
     debugPrint('[ERROR] $message');
     _writeToFile('ERROR', message);
   }
 
   static void warn(String message) {
+    // 检查是否应该记录此消息
+    if (!_shouldLog(message)) {
+      return;
+    }
+
     // 警告日志
     debugPrint('[WARN] $message');
     _writeToFile('WARN', message);

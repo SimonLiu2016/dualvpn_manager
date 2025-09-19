@@ -229,14 +229,33 @@ class _ConfigScreenState extends State<ConfigScreen> {
         } else {
           ScaffoldMessenger.of(
             context,
-          ).showSnackBar(const SnackBar(content: Text('订阅更新失败')));
+          ).showSnackBar(const SnackBar(content: Text('订阅更新失败，请检查网络连接和订阅链接')));
         }
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('订阅更新失败: $e')));
+        String errorMessage = '订阅更新失败';
+        if (e.toString().contains('网络连接错误')) {
+          errorMessage = '网络连接错误，请检查网络连接';
+        } else if (e.toString().contains('TLS/SSL')) {
+          errorMessage = 'SSL证书错误，请检查服务器证书';
+        } else if (e.toString().contains('TLS握手')) {
+          errorMessage = 'TLS握手失败，请检查服务器配置';
+        } else if (e.toString().contains('404')) {
+          errorMessage = '订阅链接不存在，请检查链接是否正确';
+        } else if (e.toString().contains('超时')) {
+          errorMessage = '连接超时，请稍后重试';
+        } else if (e.toString().contains('配置不是有效的YAML格式')) {
+          errorMessage = '配置格式错误，请检查订阅链接内容';
+        } else if (e.toString().contains('配置内容无效')) {
+          errorMessage = '配置内容无效，请检查订阅链接内容';
+        } else if (e.toString().contains('访问被拒绝')) {
+          errorMessage = '访问被拒绝，请检查订阅链接权限';
+        }
+
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('$errorMessage: ${e.toString()}')),
+        );
       }
     }
   }

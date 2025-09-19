@@ -7,6 +7,7 @@ import 'package:dualvpn_manager/utils/config_manager.dart';
 import 'package:dualvpn_manager/ui/screens/config_screen.dart';
 import 'package:dualvpn_manager/ui/screens/routing_screen.dart';
 import 'package:dualvpn_manager/ui/screens/proxy_list_screen.dart';
+import 'package:dualvpn_manager/debug_screen.dart';
 import 'dart:io' show Platform, exit;
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'dart:io' show Platform;
@@ -120,7 +121,7 @@ class _HomeScreenState extends State<HomeScreen> with WindowListener {
             BottomNavigationBarItem(icon: Icon(Icons.list), label: '代理源'),
             BottomNavigationBarItem(icon: Icon(Icons.link), label: '代理列表'),
             BottomNavigationBarItem(icon: Icon(Icons.route), label: '路由'),
-            BottomNavigationBarItem(icon: Icon(Icons.info), label: '关于'),
+            BottomNavigationBarItem(icon: Icon(Icons.bug_report), label: '调试'),
           ],
         ),
       ),
@@ -138,7 +139,7 @@ class _HomeScreenState extends State<HomeScreen> with WindowListener {
       case 3:
         return const RoutingScreen(); // 使用完整的路由配置界面
       case 4:
-        return const AboutContent();
+        return const DebugScreen(); // 添加调试页面
       default:
         return const HomeContent();
     }
@@ -985,266 +986,100 @@ class VPNStatusPanel extends StatelessWidget {
                       );
                     },
                   ),
+                  const SizedBox(height: 16),
+                  // Go代理核心控制
+                  const Text(
+                    'Go代理核心',
+                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                  ),
+                  const SizedBox(height: 8),
+                  Consumer<AppState>(
+                    builder: (context, appState, child) {
+                      return Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: appState.isGoProxyRunning
+                              ? Colors.green.withOpacity(0.1)
+                              : Colors.grey.withOpacity(0.1),
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(
+                            color: appState.isGoProxyRunning
+                                ? Colors.green
+                                : Colors.grey,
+                            width: 1,
+                          ),
+                        ),
+                        child: Row(
+                          children: [
+                            Icon(
+                              appState.isGoProxyRunning
+                                  ? Icons.check_circle
+                                  : Icons.cancel,
+                              color: appState.isGoProxyRunning
+                                  ? Colors.green
+                                  : Colors.grey,
+                            ),
+                            const SizedBox(width: 8),
+                            const Text('Go代理核心'),
+                            const Spacer(),
+                            ElevatedButton(
+                              onPressed: appState.isGoProxyRunning
+                                  ? () async {
+                                      await appState.stopGoProxy();
+                                      if (context.mounted) {
+                                        ScaffoldMessenger.of(
+                                          context,
+                                        ).showSnackBar(
+                                          const SnackBar(
+                                            content: Text('Go代理核心已停止'),
+                                          ),
+                                        );
+                                      }
+                                    }
+                                  : () async {
+                                      final success = await appState
+                                          .startGoProxy();
+                                      if (context.mounted) {
+                                        if (success) {
+                                          ScaffoldMessenger.of(
+                                            context,
+                                          ).showSnackBar(
+                                            const SnackBar(
+                                              content: Text('Go代理核心启动成功'),
+                                            ),
+                                          );
+                                        } else {
+                                          ScaffoldMessenger.of(
+                                            context,
+                                          ).showSnackBar(
+                                            const SnackBar(
+                                              content: Text('Go代理核心启动失败'),
+                                            ),
+                                          );
+                                        }
+                                      }
+                                    },
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: appState.isGoProxyRunning
+                                    ? Colors.red
+                                    : Colors.green,
+                                foregroundColor: Colors.white,
+                              ),
+                              child: Text(
+                                appState.isGoProxyRunning ? '停止' : '启动',
+                              ),
+                            ),
+                          ],
+                        ),
+                      );
+                    },
+                  ),
                 ],
               ),
             ),
           ),
         );
       },
-    );
-  }
-
-  // 连接VPN
-  void _connectVPN(BuildContext context, AppState appState, VPNConfig config) {
-    switch (config.type) {
-      case VPNType.openVPN:
-        appState.connectOpenVPN(config).then((success) {
-          if (context.mounted) {
-            if (success) {
-              ScaffoldMessenger.of(
-                context,
-              ).showSnackBar(SnackBar(content: Text('${config.name}连接成功')));
-            } else {
-              ScaffoldMessenger.of(
-                context,
-              ).showSnackBar(SnackBar(content: Text('${config.name}连接失败')));
-            }
-          }
-        });
-        break;
-      case VPNType.clash:
-        appState.connectClash(config).then((success) {
-          if (context.mounted) {
-            if (success) {
-              ScaffoldMessenger.of(
-                context,
-              ).showSnackBar(SnackBar(content: Text('${config.name}连接成功')));
-            } else {
-              ScaffoldMessenger.of(
-                context,
-              ).showSnackBar(SnackBar(content: Text('${config.name}连接失败')));
-            }
-          }
-        });
-        break;
-      case VPNType.shadowsocks:
-        appState.connectShadowsocks(config).then((success) {
-          if (context.mounted) {
-            if (success) {
-              ScaffoldMessenger.of(
-                context,
-              ).showSnackBar(SnackBar(content: Text('${config.name}连接成功')));
-            } else {
-              ScaffoldMessenger.of(
-                context,
-              ).showSnackBar(SnackBar(content: Text('${config.name}连接失败')));
-            }
-          }
-        });
-        break;
-      case VPNType.v2ray:
-        appState.connectV2Ray(config).then((success) {
-          if (context.mounted) {
-            if (success) {
-              ScaffoldMessenger.of(
-                context,
-              ).showSnackBar(SnackBar(content: Text('${config.name}连接成功')));
-            } else {
-              ScaffoldMessenger.of(
-                context,
-              ).showSnackBar(SnackBar(content: Text('${config.name}连接失败')));
-            }
-          }
-        });
-        break;
-      case VPNType.httpProxy:
-        appState.connectHTTPProxy(config).then((success) {
-          if (context.mounted) {
-            if (success) {
-              ScaffoldMessenger.of(
-                context,
-              ).showSnackBar(SnackBar(content: Text('${config.name}连接成功')));
-            } else {
-              ScaffoldMessenger.of(
-                context,
-              ).showSnackBar(SnackBar(content: Text('${config.name}连接失败')));
-            }
-          }
-        });
-        break;
-      case VPNType.socks5:
-        appState.connectSOCKS5Proxy(config).then((success) {
-          if (context.mounted) {
-            if (success) {
-              ScaffoldMessenger.of(
-                context,
-              ).showSnackBar(SnackBar(content: Text('${config.name}连接成功')));
-            } else {
-              ScaffoldMessenger.of(
-                context,
-              ).showSnackBar(SnackBar(content: Text('${config.name}连接失败')));
-            }
-          }
-        });
-        break;
-      default:
-        if (context.mounted) {
-          ScaffoldMessenger.of(
-            context,
-          ).showSnackBar(SnackBar(content: Text('${config.name}类型暂不支持')));
-        }
-    }
-  }
-
-  // 断开VPN
-  void _disconnectVPN(
-    BuildContext context,
-    AppState appState,
-    VPNConfig config,
-  ) {
-    switch (config.type) {
-      case VPNType.openVPN:
-        appState.disconnectOpenVPN();
-        if (context.mounted) {
-          ScaffoldMessenger.of(
-            context,
-          ).showSnackBar(SnackBar(content: Text('${config.name}已断开连接')));
-        }
-        break;
-      case VPNType.clash:
-        appState.disconnectClash();
-        if (context.mounted) {
-          ScaffoldMessenger.of(
-            context,
-          ).showSnackBar(SnackBar(content: Text('${config.name}已断开连接')));
-        }
-        break;
-      case VPNType.shadowsocks:
-        appState.disconnectShadowsocks();
-        if (context.mounted) {
-          ScaffoldMessenger.of(
-            context,
-          ).showSnackBar(SnackBar(content: Text('${config.name}已断开连接')));
-        }
-        break;
-      case VPNType.v2ray:
-        appState.disconnectV2Ray();
-        if (context.mounted) {
-          ScaffoldMessenger.of(
-            context,
-          ).showSnackBar(SnackBar(content: Text('${config.name}已断开连接')));
-        }
-        break;
-      case VPNType.httpProxy:
-        appState.disconnectHTTPProxy();
-        if (context.mounted) {
-          ScaffoldMessenger.of(
-            context,
-          ).showSnackBar(SnackBar(content: Text('${config.name}已断开连接')));
-        }
-        break;
-      case VPNType.socks5:
-        appState.disconnectSOCKS5Proxy();
-        if (context.mounted) {
-          ScaffoldMessenger.of(
-            context,
-          ).showSnackBar(SnackBar(content: Text('${config.name}已断开连接')));
-        }
-        break;
-      default:
-        break;
-    }
-  }
-
-  // 修改连接状态项，包含速率信息
-  Widget _buildConnectionStatusItem(
-    BuildContext context,
-    String name,
-    bool isConnected,
-    IconData icon,
-    Color color,
-    AppState appState,
-  ) {
-    // 根据不同的代理类型获取对应的速率信息
-    String rateInfo = '';
-    if (isConnected) {
-      switch (name) {
-        case 'OpenVPN':
-          rateInfo = appState.openVPNRateInfo;
-          break;
-        case 'Clash':
-          rateInfo = appState.clashRateInfo;
-          break;
-        case 'Shadowsocks':
-          rateInfo = appState.shadowsocksRateInfo;
-          break;
-        case 'V2Ray':
-          rateInfo = appState.v2rayRateInfo;
-          break;
-        case 'HTTP代理':
-          rateInfo = appState.httpProxyRateInfo;
-          break;
-        case 'SOCKS5代理':
-          rateInfo = appState.socks5ProxyRateInfo;
-          break;
-      }
-    }
-
-    return AnimatedContainer(
-      duration: const Duration(milliseconds: 300),
-      decoration: BoxDecoration(
-        color: isConnected
-            ? color.withOpacity(0.1)
-            : Colors.grey.withOpacity(0.1),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: isConnected ? color : Colors.grey, width: 2),
-      ),
-      child: Row(
-        children: [
-          Padding(
-            padding: const EdgeInsets.all(8.0),
-            child: AnimatedSwitcher(
-              duration: const Duration(milliseconds: 300),
-              transitionBuilder: (Widget child, Animation<double> animation) {
-                return ScaleTransition(scale: animation, child: child);
-              },
-              child: Icon(
-                icon,
-                key: ValueKey<bool>(isConnected),
-                color: isConnected ? color : Colors.grey,
-              ),
-            ),
-          ),
-          const SizedBox(width: 8),
-          Text(name),
-          const Spacer(),
-          if (isConnected) ...[
-            Text(
-              rateInfo,
-              style: const TextStyle(fontSize: 12, color: Colors.grey),
-            ),
-            const SizedBox(width: 8),
-          ],
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-            decoration: BoxDecoration(
-              color: isConnected ? color : Colors.grey,
-              borderRadius: BorderRadius.circular(16),
-            ),
-            child: AnimatedSwitcher(
-              duration: const Duration(milliseconds: 300),
-              transitionBuilder: (Widget child, Animation<double> animation) {
-                return FadeTransition(opacity: animation, child: child);
-              },
-              child: Text(
-                isConnected ? '已连接' : '未连接',
-                key: ValueKey<bool>(isConnected),
-                style: const TextStyle(color: Colors.white, fontSize: 12),
-              ),
-            ),
-          ),
-        ],
-      ),
     );
   }
 }

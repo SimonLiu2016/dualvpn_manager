@@ -49,7 +49,7 @@ class RoutingRule {
       pattern: json['pattern'] as String,
       type: RuleType.values.firstWhere(
         (e) => e.toString() == json['type'],
-        orElse: () => RuleType.domain,
+        orElse: () => RuleType.domainSuffix,
       ),
       proxyId: json['proxyId'] as String,
       isEnabled: json['isEnabled'] as bool? ?? true,
@@ -82,20 +82,41 @@ class SmartRoutingEngine {
   void updateActiveProxies(Map<String, VPNConfig> proxies) {
     _activeProxies = Map.from(proxies);
     Logger.debug('更新活动代理配置，共${_activeProxies.length}个');
+    // 打印所有活动代理详情
+    _activeProxies.forEach((id, config) {
+      Logger.debug('活动代理: ID=$id, 名称=${config.name}, 类型=${config.type}');
+    });
   }
 
   /// 更新路由规则
   void updateRoutingRules(List<RoutingRule> rules) {
     _routingRules = List.from(rules);
     Logger.debug('更新路由规则，共${_routingRules.length}条');
+    // 打印所有路由规则详情
+    for (int i = 0; i < _routingRules.length; i++) {
+      final rule = _routingRules[i];
+      Logger.debug(
+        '路由规则[$i]: 模式=${rule.pattern}, 类型=${rule.type}, 代理ID=${rule.proxyId}, 启用=${rule.isEnabled}',
+      );
+    }
   }
 
   /// 决定路由策略
   RouteDecision decideRoute(String host) {
     try {
+      Logger.debug('路由决策: 处理主机 $host');
+
+      // 如果主机名为空，直接使用默认决策
+      if (host.isEmpty) {
+        Logger.debug('路由决策: 主机名为空，使用默认直连');
+        return _defaultDecision;
+      }
+
       // 遍历路由规则，找到第一个匹配的规则
       for (final rule in _routingRules) {
-        if (!rule.isEnabled) continue;
+        if (!rule.isEnabled) {
+          continue;
+        }
 
         bool isMatch = false;
         switch (rule.type) {
@@ -125,9 +146,13 @@ class SmartRoutingEngine {
         }
 
         if (isMatch) {
+          Logger.debug('路由决策: 匹配规则 ${rule.pattern} (类型: ${rule.type})');
           // 找到匹配的规则，返回对应的代理配置
           final proxyConfig = _activeProxies[rule.proxyId];
           if (proxyConfig != null) {
+            Logger.debug(
+              '路由决策: 使用代理 ${proxyConfig.name} (${proxyConfig.type})',
+            );
             return RouteDecision(
               shouldProxy: true,
               proxyConfig: proxyConfig,
@@ -135,16 +160,17 @@ class SmartRoutingEngine {
             );
           } else {
             // 规则匹配但对应的代理不可用，继续查找其他规则
-            Logger.warn('规则匹配但代理不可用: ${rule.proxyId}');
+            Logger.warn('路由决策: 规则匹配但代理不可用: ${rule.proxyId}');
             continue;
           }
         }
       }
 
       // 没有匹配的规则，使用默认决策
+      Logger.debug('路由决策: 无匹配规则，使用默认直连');
       return _defaultDecision;
-    } catch (e) {
-      Logger.error('路由决策失败: $e');
+    } catch (e, stackTrace) {
+      Logger.error('路由决策失败: $e\nStack trace: $stackTrace');
       return _defaultDecision;
     }
   }
@@ -158,9 +184,18 @@ class SmartRoutingEngine {
   bool _matchDomainSuffix(String host, String pattern) {
     final lowerHost = host.toLowerCase();
     final lowerPattern = pattern.toLowerCase();
-    return lowerHost == lowerPattern ||
-        lowerHost.endsWith('.$lowerPattern') ||
-        lowerHost.endsWith(lowerPattern);
+
+    // 完全匹配
+    if (lowerHost == lowerPattern) {
+      return true;
+    }
+
+    // 子域名匹配 (例如: www.google.com 匹配 google.com)
+    if (lowerHost.endsWith('.$lowerPattern')) {
+      return true;
+    }
+
+    return false;
   }
 
   /// 域名关键字匹配

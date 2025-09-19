@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:dualvpn_manager/models/app_state.dart';
 import 'package:dualvpn_manager/models/vpn_config.dart';
+import 'package:dualvpn_manager/services/smart_routing_engine.dart'
+    as smart_routing_engine;
 import 'package:dualvpn_manager/utils/config_manager.dart';
 
 // 添加扩展方法以支持firstWhereOrNull
@@ -89,6 +91,17 @@ class _RoutingRulesScreenState extends State<RoutingRulesScreen> {
     // 清空输入框
     _patternController.clear();
 
+    // 同时更新AppState中的全局路由规则
+    final appState = Provider.of<AppState>(context, listen: false);
+    final smartRule = smart_routing_engine.RoutingRule(
+      id: DateTime.now().millisecondsSinceEpoch.toString(),
+      pattern: newRule.pattern,
+      type: _convertRouteTypeToRuleType(newRule.routeType),
+      proxyId: newRule.configId ?? '',
+      isEnabled: newRule.isEnabled,
+    );
+    appState.addRoutingRule(smartRule);
+
     if (mounted) {
       ScaffoldMessenger.of(
         context,
@@ -98,7 +111,7 @@ class _RoutingRulesScreenState extends State<RoutingRulesScreen> {
 
   void _deleteRoutingRule(VPNConfig config, int ruleIndex) async {
     final updatedRules = List<RoutingRule>.from(config.routingRules);
-    updatedRules.removeAt(ruleIndex);
+    final removedRule = updatedRules.removeAt(ruleIndex);
 
     final updatedConfig = VPNConfig(
       id: config.id,
@@ -111,6 +124,20 @@ class _RoutingRulesScreenState extends State<RoutingRulesScreen> {
     );
 
     await ConfigManager.updateConfig(updatedConfig);
+
+    // 同时从AppState中的全局路由规则中删除
+    final appState = Provider.of<AppState>(context, listen: false);
+    // 查找并删除对应的全局路由规则
+    final smartRules = appState.routingRules;
+    for (var i = 0; i < smartRules.length; i++) {
+      final rule = smartRules[i];
+      if (rule.pattern == removedRule.pattern &&
+          rule.proxyId == (removedRule.configId ?? '')) {
+        appState.removeRoutingRule(rule);
+        break;
+      }
+    }
+
     _loadConfigs();
 
     if (mounted) {
@@ -142,6 +169,28 @@ class _RoutingRulesScreenState extends State<RoutingRulesScreen> {
     );
 
     await ConfigManager.updateConfig(updatedConfig);
+
+    // 同时更新AppState中的全局路由规则
+    final appState = Provider.of<AppState>(context, listen: false);
+    // 查找并更新对应的全局路由规则
+    final smartRules = appState.routingRules;
+    for (var i = 0; i < smartRules.length; i++) {
+      final smartRule = smartRules[i];
+      if (smartRule.pattern == rule.pattern &&
+          smartRule.proxyId == (rule.configId ?? '')) {
+        final updatedSmartRule = smart_routing_engine.RoutingRule(
+          id: smartRule.id,
+          pattern: smartRule.pattern,
+          type: smartRule.type,
+          proxyId: smartRule.proxyId,
+          isEnabled: !rule.isEnabled,
+        );
+        appState.removeRoutingRule(smartRule);
+        appState.addRoutingRule(updatedSmartRule);
+        break;
+      }
+    }
+
     _loadConfigs();
   }
 
@@ -209,6 +258,30 @@ class _RoutingRulesScreenState extends State<RoutingRulesScreen> {
       }
     }
     return '未找到配置';
+  }
+
+  // 添加转换方法
+  smart_routing_engine.RuleType _convertRouteTypeToRuleType(
+    RouteType routeType,
+  ) {
+    switch (routeType) {
+      case RouteType.openVPN:
+        return smart_routing_engine.RuleType.domainSuffix;
+      case RouteType.clash:
+        return smart_routing_engine.RuleType.domainSuffix;
+      case RouteType.shadowsocks:
+        return smart_routing_engine.RuleType.domainSuffix;
+      case RouteType.v2ray:
+        return smart_routing_engine.RuleType.domainSuffix;
+      case RouteType.httpProxy:
+        return smart_routing_engine.RuleType.domainSuffix;
+      case RouteType.socks5:
+        return smart_routing_engine.RuleType.domainSuffix;
+      case RouteType.custom:
+        return smart_routing_engine.RuleType.domainSuffix;
+      default:
+        return smart_routing_engine.RuleType.domainSuffix;
+    }
   }
 
   @override

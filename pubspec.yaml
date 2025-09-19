@@ -2,6 +2,7 @@ name: dualvpn_manager
 description: "双捷VPN管理器(DualVPN Manager) - 同时管理OpenVPN和ClashX连接的轻量级工具"
 publish_to: "none"
 version: 0.1.0
+homepage: https://github.com/yourusername/dualvpn_manager
 
 environment:
   sdk: ^3.9.0
@@ -43,3 +44,6 @@ flutter:
     - assets/icons/openvpn_connected.png
     - assets/icons/clash_connected.png
     - assets/icons/both_connected.png
+
+executables:
+  test_socks5_server:

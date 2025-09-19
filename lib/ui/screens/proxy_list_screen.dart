@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import 'package:dualvpn_manager/models/app_state.dart';
 import 'package:dualvpn_manager/models/vpn_config.dart';
 import 'package:dualvpn_manager/utils/config_manager.dart';
+import 'package:dualvpn_manager/utils/logger.dart';
 import 'dart:math' as dart_math;
 
 class ProxyListScreen extends StatefulWidget {
@@ -19,7 +20,11 @@ class _ProxyListScreenState extends State<ProxyListScreen> {
   void initState() {
     super.initState();
     // 延迟加载代理列表，确保AppState已初始化
-    WidgetsBinding.instance.addPostFrameCallback((_) {
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      Logger.info('=== ProxyListScreen initState 开始延迟 ===');
+      // 添加额外延迟确保AppState完全初始化
+      await Future.delayed(const Duration(seconds: 2));
+      Logger.info('=== ProxyListScreen initState 延迟结束 ===');
       _loadConfigs();
     });
   }
@@ -38,7 +43,32 @@ class _ProxyListScreenState extends State<ProxyListScreen> {
   // 加载代理列表
   void _loadProxies() {
     final appState = Provider.of<AppState>(context, listen: false);
-    appState.loadProxies();
+    Logger.info('=== 开始加载代理列表 ===');
+    Logger.info('当前选中配置ID: ${appState.selectedConfig}');
+    Logger.info('代理缓存数量: ${appState.proxiesByConfig.length}');
+
+    // 打印代理缓存的详细信息
+    appState.proxiesByConfig.forEach((configId, proxies) {
+      Logger.info('配置 $configId 有 ${proxies.length} 个代理');
+      for (var i = 0; i < proxies.length; i++) {
+        final proxy = proxies[i];
+        Logger.info(
+          '  代理 $i: name=${proxy['name']}, latency=${proxy['latency']}, isSelected=${proxy['isSelected']}',
+        );
+      }
+    });
+
+    // 只有在当前配置没有缓存代理列表时才重新加载
+    if (!appState.proxiesByConfig.containsKey(appState.selectedConfig) ||
+        appState.proxiesByConfig[appState.selectedConfig]!.isEmpty) {
+      Logger.info('当前配置没有缓存的代理列表，正在加载...');
+      appState.loadProxies();
+    } else {
+      Logger.info('使用缓存的代理列表');
+      // 确保AppState中的当前代理列表与缓存一致
+      appState.setProxies(appState.proxiesByConfig[appState.selectedConfig]!);
+    }
+    Logger.info('=== 代理列表加载请求已发送 ===');
   }
 
   // 测试单个代理延迟
@@ -210,6 +240,20 @@ class _ProxyListScreenState extends State<ProxyListScreen> {
             const SizedBox(height: 16),
             Consumer<AppState>(
               builder: (context, appState, child) {
+                Logger.info('=== ProxyListScreen Consumer 构建 ===');
+                Logger.info('当前选中配置ID: ${appState.selectedConfig}');
+                Logger.info('代理列表数量: ${appState.proxies.length}');
+
+                // 打印当前代理列表的状态
+                for (var i = 0; i < appState.proxies.length; i++) {
+                  final proxy = appState.proxies[i];
+                  Logger.info(
+                    '代理 $i: ${proxy['name']}, isSelected=${proxy['isSelected']}',
+                  );
+                }
+
+                Logger.info('=== ProxyListScreen Consumer 构建完成 ===');
+
                 if (appState.isLoadingProxies) {
                   return const Center(child: CircularProgressIndicator());
                 } else if (appState.proxies.isEmpty) {
@@ -297,6 +341,10 @@ class _ProxyListScreenState extends State<ProxyListScreen> {
                         final latency = proxy['latency'];
                         final isSelected = proxy['isSelected'];
                         final proxyName = proxy['name'];
+
+                        Logger.info(
+                          '构建代理项: $proxyName, isSelected=$isSelected',
+                        );
 
                         return AnimatedContainer(
                           duration: const Duration(milliseconds: 300),

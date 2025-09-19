@@ -138,13 +138,27 @@ class ShadowsocksService {
       Logger.info('开始更新Shadowsocks订阅: $subscriptionUrl');
 
       // 下载新的配置文件
-      final response = await http.get(Uri.parse(subscriptionUrl));
+      final response = await http
+          .get(Uri.parse(subscriptionUrl))
+          .timeout(
+            const Duration(seconds: 30),
+            onTimeout: () {
+              Logger.error('下载Shadowsocks订阅配置超时');
+              throw Exception('下载Shadowsocks订阅配置超时，请稍后重试');
+            },
+          );
 
       // 检查HTTP响应状态码
       // 2xx表示成功，3xx表示重定向，4xx和5xx表示错误
       if (response.statusCode >= 300) {
         Logger.error('下载Shadowsocks订阅配置失败: ${response.statusCode}');
-        throw Exception('下载Shadowsocks订阅配置失败: ${response.statusCode}');
+        if (response.statusCode == 404) {
+          throw Exception('订阅链接不存在，请检查链接是否正确');
+        } else if (response.statusCode == 403) {
+          throw Exception('访问被拒绝，请检查订阅链接权限');
+        } else {
+          throw Exception('下载Shadowsocks订阅配置失败: HTTP ${response.statusCode}');
+        }
       }
 
       // 检查响应内容是否为空
@@ -166,8 +180,8 @@ class ShadowsocksService {
 
       // 验证配置内容是否有效
       if (configContent.trim().isEmpty) {
-        Logger.error('Shadowsocks订阅配置内容为空');
-        throw Exception('Shadowsocks订阅配置内容为空');
+        Logger.error('Shadowsocks订阅内容为空');
+        throw Exception('Shadowsocks订阅内容为空');
       }
 
       // 检查配置内容是否看起来像有效的JSON或Shadowsocks配置
@@ -242,8 +256,16 @@ class ShadowsocksService {
 
       Logger.info('Shadowsocks订阅更新成功');
       return true;
+    } on SocketException catch (e) {
+      Logger.error('网络连接错误: $e');
+      throw Exception('网络连接错误，请检查网络连接');
     } catch (e, stackTrace) {
       Logger.error('更新Shadowsocks订阅失败: $e\nStack trace: $stackTrace');
+      if (e.toString().contains('404')) {
+        throw Exception('订阅链接不存在，请检查链接是否正确');
+      } else if (e.toString().contains('timeout')) {
+        throw Exception('连接超时，请稍后重试');
+      }
       rethrow;
     }
   }
@@ -291,8 +313,83 @@ class ShadowsocksService {
   // 获取Shadowsocks代理列表
   Future<List<Map<String, dynamic>>> getProxies() async {
     try {
-      // 返回空列表，Shadowsocks本身不提供API来获取代理列表
-      // 代理列表应该从配置文件中解析
+      // 如果有配置文件路径，从配置文件中解析代理列表
+      if (_configPath != null) {
+        final configFile = File(_configPath!);
+        if (await configFile.exists()) {
+          final configContent = await configFile.readAsString();
+
+          final List<Map<String, dynamic>> proxies = [];
+
+          try {
+            // 尝试解析JSON格式的配置
+            final jsonConfig = json.decode(configContent);
+
+            // 处理不同的Shadowsocks配置格式
+            if (jsonConfig is Map<String, dynamic>) {
+              // 单个配置格式
+              if (jsonConfig.containsKey('server') &&
+                  jsonConfig.containsKey('server_port')) {
+                final name =
+                    jsonConfig['remarks'] ??
+                    '${jsonConfig['server']}:${jsonConfig['server_port']}';
+                proxies.add({
+                  'name': name,
+                  'type': 'shadowsocks',
+                  'latency': -2, // -2表示未测试
+                  'isSelected': false,
+                });
+              }
+              // 多配置格式
+              else if (jsonConfig.containsKey('configs') &&
+                  jsonConfig['configs'] is List) {
+                final configsList = jsonConfig['configs'] as List;
+                for (var i = 0; i < configsList.length; i++) {
+                  final config = configsList[i];
+                  if (config is Map<String, dynamic>) {
+                    final name =
+                        config['remarks'] ??
+                        config['server'] ??
+                        'Shadowsocks Server ${i + 1}';
+                    proxies.add({
+                      'name': name,
+                      'type': 'shadowsocks',
+                      'latency': -2, // -2表示未测试
+                      'isSelected': false,
+                    });
+                  }
+                }
+              }
+              // Clash格式
+              else if (jsonConfig.containsKey('proxies') &&
+                  jsonConfig['proxies'] is List) {
+                final proxiesList = jsonConfig['proxies'] as List;
+                for (var i = 0; i < proxiesList.length; i++) {
+                  final proxy = proxiesList[i];
+                  if (proxy is Map<String, dynamic> &&
+                      (proxy['type'] == 'ss' ||
+                          proxy['type'] == 'shadowsocks')) {
+                    final name = proxy['name'] ?? 'Shadowsocks Proxy ${i + 1}';
+                    proxies.add({
+                      'name': name,
+                      'type': 'shadowsocks',
+                      'latency': -2, // -2表示未测试
+                      'isSelected': false,
+                    });
+                  }
+                }
+              }
+            }
+          } catch (e) {
+            // 如果JSON解析失败，返回空列表
+            Logger.warn('解析Shadowsocks配置文件时出错: $e');
+          }
+
+          return proxies;
+        }
+      }
+
+      // 返回空列表，没有配置文件或解析失败
       return [];
     } catch (e, stackTrace) {
       Logger.error('获取Shadowsocks代理列表时出错: $e\nStack trace: $stackTrace');

@@ -3,6 +3,7 @@ class VPNConfig {
   final String name;
   final VPNType type;
   final String configPath; // 可以是文件路径、订阅链接或服务器地址
+  final String? subscriptionUrl; // 订阅链接（新增字段）
   final Map<String, dynamic> settings;
   final bool isActive;
   // 添加强制路由规则列表
@@ -17,6 +18,7 @@ class VPNConfig {
     required this.name,
     required this.type,
     required this.configPath,
+    this.subscriptionUrl, // 新增字段
     required this.settings,
     this.isActive = false,
     this.routingRules = const [],
@@ -41,6 +43,7 @@ class VPNConfig {
         orElse: () => VPNType.openVPN,
       ),
       configPath: json['configPath'] as String,
+      subscriptionUrl: json['subscriptionUrl'] as String?, // 新增字段
       settings: Map<String, dynamic>.from(json['settings'] as Map),
       isActive: json['isActive'] as bool? ?? false,
       routingRules: rules,
@@ -59,6 +62,7 @@ class VPNConfig {
       'name': name,
       'type': type.toString(),
       'configPath': configPath,
+      'subscriptionUrl': subscriptionUrl, // 新增字段
       'settings': settings,
       'isActive': isActive,
       'routingRules': routingRules.map((rule) => rule.toJson()).toList(),
@@ -73,6 +77,7 @@ class VPNConfig {
     String? name,
     VPNType? type,
     String? configPath,
+    String? subscriptionUrl, // 新增字段
     Map<String, dynamic>? settings,
     bool? isActive,
     List<RoutingRule>? routingRules,
@@ -84,6 +89,7 @@ class VPNConfig {
       name: name ?? this.name,
       type: type ?? this.type,
       configPath: configPath ?? this.configPath,
+      subscriptionUrl: subscriptionUrl ?? this.subscriptionUrl, // 新增字段
       settings: settings ?? this.settings,
       isActive: isActive ?? this.isActive,
       routingRules: routingRules ?? this.routingRules,

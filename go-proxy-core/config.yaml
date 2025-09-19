@@ -1,0 +1,8 @@
+http_port: 6160
+socks5_port: 6161
+api_port: 6162
+# 移除了Clash相关的7890和9090端口
+dns_port: 53
+dns_type: "fakeip"
+doh_server: "https://1.1.1.1/dns-query"
+log_level: "info"

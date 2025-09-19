@@ -53,6 +53,23 @@ flutter build linux
 3. 在"路由"页面配置内外网域名并启用智能路由
 4. 享受同时访问内外网的便利
 
+## Clash 集成说明
+
+当前版本通过调用系统中安装的 Clash 二进制文件来实现 Clash 协议支持。为了使应用程序更加独立，未来的版本将采用以下方式集成 Clash：
+
+### 方案一：将 Clash.Meta 作为库集成（推荐）
+
+1. 将 Clash.Meta 作为 Go 模块直接集成到 Go 代理核心中
+2. 这样就不需要单独的二进制文件，所有功能都在一个可执行文件中
+
+### 方案二：打包 Clash.Meta 二进制文件
+
+1. 下载适用于不同平台的 Clash.Meta 二进制文件
+2. 将它们打包到应用程序中
+3. 修改代码以使用这些打包的二进制文件
+
+详细信息请参阅 [GO_PROXY_CORE_DOCUMENTATION.md](GO_PROXY_CORE_DOCUMENTATION.md) 中的 "Clash 集成说明" 部分。
+
 ## 项目结构
 
 ```
@@ -93,10 +110,8 @@ lib/
 
 ## 许可证
 
-# MIT License
+MIT License
 
 # dualvpn_manager
 
 # 双捷 VPN 管理器 (DualVPN Manager) 一个轻量级的 VPN 管理工具，可以同时管理 OpenVPN 和 Clash 两种 VPN 连接，实现内外网同时访问的功能。
-
-> > > > > > > 5e234acd68b2b790897a2804e1f1829f281ed25f
