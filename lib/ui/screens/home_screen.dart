@@ -8,6 +8,8 @@ import 'package:dualvpn_manager/ui/screens/config_screen.dart';
 import 'package:dualvpn_manager/ui/screens/routing_screen.dart';
 import 'package:dualvpn_manager/ui/screens/proxy_list_screen.dart';
 import 'package:dualvpn_manager/debug_screen.dart';
+import 'package:dualvpn_manager/ui/widgets/go_proxy_stats_widget.dart';
+import 'package:dualvpn_manager/ui/widgets/selected_proxies_widget.dart';
 import 'dart:io' show Platform, exit;
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'dart:io' show Platform;
@@ -414,140 +416,138 @@ class VPNStatusPanel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Consumer<AppState>(
-      builder: (context, appState, child) {
-        return SingleChildScrollView(
-          child: Card(
-            margin: const EdgeInsets.all(16),
-            child: Padding(
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text(
-                    '连接状态',
-                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+    return SingleChildScrollView(
+      child: Card(
+        margin: const EdgeInsets.all(16),
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                '连接状态',
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+              ),
+              const SizedBox(height: 16),
+              // 使用说明
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.blue.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(
+                    color: Colors.blue.withOpacity(0.3),
+                    width: 1,
                   ),
-                  const SizedBox(height: 16),
-                  // 使用说明
-                  Container(
-                    width: double.infinity,
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: Colors.blue.withOpacity(0.1),
-                      borderRadius: BorderRadius.circular(8),
-                      border: Border.all(
-                        color: Colors.blue.withOpacity(0.3),
-                        width: 1,
+                ),
+                child: const Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      '使用说明：',
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.blue,
                       ),
                     ),
-                    child: const Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          '使用说明：',
-                          style: TextStyle(
-                            fontSize: 14,
-                            fontWeight: FontWeight.bold,
-                            color: Colors.blue,
-                          ),
-                        ),
-                        SizedBox(height: 4),
-                        Text(
-                          '1. 在"代理源"页面添加并启用代理配置',
-                          style: TextStyle(fontSize: 12),
-                        ),
-                        Text(
-                          '2. 在"代理列表"页面选择具体的代理服务器',
-                          style: TextStyle(fontSize: 12),
-                        ),
-                        Text(
-                          '3. 在本页面查看已启用的代理源和选中的代理',
-                          style: TextStyle(fontSize: 12),
-                        ),
-                      ],
+                    SizedBox(height: 4),
+                    Text(
+                      '1. 在"代理源"页面添加并启用代理配置',
+                      style: TextStyle(fontSize: 12),
                     ),
-                  ),
-                  const SizedBox(height: 16),
-                  // 显示已启用的代理源（仅作展示，不可交互）
-                  // 代理源的启用/禁用应在"代理源"页面中操作
-                  const Text(
-                    '已启用代理源',
-                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-                  ),
-                  const SizedBox(height: 8),
-                  FutureBuilder<List<VPNConfig>>(
-                    future: ConfigManager.loadConfigs(),
-                    builder: (context, snapshot) {
-                      if (snapshot.connectionState == ConnectionState.waiting) {
-                        return const Center(child: CircularProgressIndicator());
-                      }
+                    Text(
+                      '2. 在"代理列表"页面选择具体的代理服务器',
+                      style: TextStyle(fontSize: 12),
+                    ),
+                    Text(
+                      '3. 在本页面查看已启用的代理源和选中的代理',
+                      style: TextStyle(fontSize: 12),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 16),
+              // 显示已启用的代理源（仅作展示，不可交互）
+              // 代理源的启用/禁用应在"代理源"页面中操作
+              const Text(
+                '已启用代理源',
+                style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+              ),
+              const SizedBox(height: 8),
+              FutureBuilder<List<VPNConfig>>(
+                future: ConfigManager.loadConfigs(),
+                builder: (context, snapshot) {
+                  if (snapshot.connectionState == ConnectionState.waiting) {
+                    return const Center(child: CircularProgressIndicator());
+                  }
 
-                      if (snapshot.hasError) {
-                        return Text('加载配置失败: ${snapshot.error}');
-                      }
+                  if (snapshot.hasError) {
+                    return Text('加载配置失败: ${snapshot.error}');
+                  }
 
-                      // 只显示启用的配置
-                      final configs = (snapshot.data ?? [])
-                          .where((config) => config.isActive)
-                          .toList();
+                  // 只显示启用的配置
+                  final configs = (snapshot.data ?? [])
+                      .where((config) => config.isActive)
+                      .toList();
 
-                      // 按类型分组
-                      final openVPNConfigs = configs
-                          .where((config) => config.type == VPNType.openVPN)
-                          .toList();
-                      final clashConfigs = configs
-                          .where((config) => config.type == VPNType.clash)
-                          .toList();
-                      final shadowsocksConfigs = configs
-                          .where((config) => config.type == VPNType.shadowsocks)
-                          .toList();
-                      final v2rayConfigs = configs
-                          .where((config) => config.type == VPNType.v2ray)
-                          .toList();
-                      final httpProxyConfigs = configs
-                          .where((config) => config.type == VPNType.httpProxy)
-                          .toList();
-                      final socks5ProxyConfigs = configs
-                          .where((config) => config.type == VPNType.socks5)
-                          .toList();
+                  // 按类型分组
+                  final openVPNConfigs = configs
+                      .where((config) => config.type == VPNType.openVPN)
+                      .toList();
+                  final clashConfigs = configs
+                      .where((config) => config.type == VPNType.clash)
+                      .toList();
+                  final shadowsocksConfigs = configs
+                      .where((config) => config.type == VPNType.shadowsocks)
+                      .toList();
+                  final v2rayConfigs = configs
+                      .where((config) => config.type == VPNType.v2ray)
+                      .toList();
+                  final httpProxyConfigs = configs
+                      .where((config) => config.type == VPNType.httpProxy)
+                      .toList();
+                  final socks5ProxyConfigs = configs
+                      .where((config) => config.type == VPNType.socks5)
+                      .toList();
 
-                      // 如果没有启用的配置，显示提示信息
-                      if (configs.isEmpty) {
-                        return Container(
-                          width: double.infinity,
-                          padding: const EdgeInsets.all(16),
-                          decoration: BoxDecoration(
-                            color: Colors.grey.withOpacity(0.1),
-                            borderRadius: BorderRadius.circular(8),
-                            border: Border.all(color: Colors.grey, width: 1),
-                          ),
-                          child: const Text(
-                            '暂无启用的代理源',
-                            style: TextStyle(
-                              color: Colors.grey,
-                              fontStyle: FontStyle.italic,
-                            ),
-                          ),
-                        );
-                      }
+                  // 如果没有启用的配置，显示提示信息
+                  if (configs.isEmpty) {
+                    return Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        color: Colors.grey.withOpacity(0.1),
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: Colors.grey, width: 1),
+                      ),
+                      child: const Text(
+                        '暂无启用的代理源',
+                        style: TextStyle(
+                          color: Colors.grey,
+                          fontStyle: FontStyle.italic,
+                        ),
+                      ),
+                    );
+                  }
 
-                      return Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          // OpenVPN代理源
-                          if (openVPNConfigs.isNotEmpty) ...[
-                            const Text(
-                              'OpenVPN:',
-                              style: TextStyle(fontSize: 14),
-                            ),
-                            const SizedBox(height: 4),
-                            Wrap(
-                              spacing: 8,
-                              runSpacing: 4,
-                              children: openVPNConfigs.map((config) {
-                                final isSelected =
-                                    appState.selectedConfig == config.id;
+                  return Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // OpenVPN代理源
+                      if (openVPNConfigs.isNotEmpty) ...[
+                        const Text('OpenVPN:', style: TextStyle(fontSize: 14)),
+                        const SizedBox(height: 4),
+                        Wrap(
+                          spacing: 8,
+                          runSpacing: 4,
+                          children: openVPNConfigs.map((config) {
+                            return Selector<AppState, String>(
+                              selector: (context, appState) =>
+                                  appState.selectedConfig,
+                              builder: (context, selectedConfig, child) {
+                                final isSelected = selectedConfig == config.id;
                                 return Container(
                                   padding: const EdgeInsets.symmetric(
                                     horizontal: 16,
@@ -578,25 +578,26 @@ class VPNStatusPanel extends StatelessWidget {
                                     child: Text(config.name),
                                   ),
                                 );
-                              }).toList(),
-                            ),
-                          ],
-                          if (openVPNConfigs.isNotEmpty)
-                            const SizedBox(height: 8),
+                              },
+                            );
+                          }).toList(),
+                        ),
+                      ],
+                      if (openVPNConfigs.isNotEmpty) const SizedBox(height: 8),
 
-                          // Clash代理源
-                          if (clashConfigs.isNotEmpty) ...[
-                            const Text(
-                              'Clash:',
-                              style: TextStyle(fontSize: 14),
-                            ),
-                            const SizedBox(height: 4),
-                            Wrap(
-                              spacing: 8,
-                              runSpacing: 4,
-                              children: clashConfigs.map((config) {
-                                final isSelected =
-                                    appState.selectedConfig == config.id;
+                      // Clash代理源
+                      if (clashConfigs.isNotEmpty) ...[
+                        const Text('Clash:', style: TextStyle(fontSize: 14)),
+                        const SizedBox(height: 4),
+                        Wrap(
+                          spacing: 8,
+                          runSpacing: 4,
+                          children: clashConfigs.map((config) {
+                            return Selector<AppState, String>(
+                              selector: (context, appState) =>
+                                  appState.selectedConfig,
+                              builder: (context, selectedConfig, child) {
+                                final isSelected = selectedConfig == config.id;
                                 return Container(
                                   padding: const EdgeInsets.symmetric(
                                     horizontal: 16,
@@ -627,25 +628,29 @@ class VPNStatusPanel extends StatelessWidget {
                                     child: Text(config.name),
                                   ),
                                 );
-                              }).toList(),
-                            ),
-                          ],
-                          if (clashConfigs.isNotEmpty)
-                            const SizedBox(height: 8),
+                              },
+                            );
+                          }).toList(),
+                        ),
+                      ],
+                      if (clashConfigs.isNotEmpty) const SizedBox(height: 8),
 
-                          // Shadowsocks代理源
-                          if (shadowsocksConfigs.isNotEmpty) ...[
-                            const Text(
-                              'Shadowsocks:',
-                              style: TextStyle(fontSize: 14),
-                            ),
-                            const SizedBox(height: 4),
-                            Wrap(
-                              spacing: 8,
-                              runSpacing: 4,
-                              children: shadowsocksConfigs.map((config) {
-                                final isSelected =
-                                    appState.selectedConfig == config.id;
+                      // Shadowsocks代理源
+                      if (shadowsocksConfigs.isNotEmpty) ...[
+                        const Text(
+                          'Shadowsocks:',
+                          style: TextStyle(fontSize: 14),
+                        ),
+                        const SizedBox(height: 4),
+                        Wrap(
+                          spacing: 8,
+                          runSpacing: 4,
+                          children: shadowsocksConfigs.map((config) {
+                            return Selector<AppState, String>(
+                              selector: (context, appState) =>
+                                  appState.selectedConfig,
+                              builder: (context, selectedConfig, child) {
+                                final isSelected = selectedConfig == config.id;
                                 return Container(
                                   padding: const EdgeInsets.symmetric(
                                     horizontal: 16,
@@ -676,25 +681,27 @@ class VPNStatusPanel extends StatelessWidget {
                                     child: Text(config.name),
                                   ),
                                 );
-                              }).toList(),
-                            ),
-                          ],
-                          if (shadowsocksConfigs.isNotEmpty)
-                            const SizedBox(height: 8),
+                              },
+                            );
+                          }).toList(),
+                        ),
+                      ],
+                      if (shadowsocksConfigs.isNotEmpty)
+                        const SizedBox(height: 8),
 
-                          // V2Ray代理源
-                          if (v2rayConfigs.isNotEmpty) ...[
-                            const Text(
-                              'V2Ray:',
-                              style: TextStyle(fontSize: 14),
-                            ),
-                            const SizedBox(height: 4),
-                            Wrap(
-                              spacing: 8,
-                              runSpacing: 4,
-                              children: v2rayConfigs.map((config) {
-                                final isSelected =
-                                    appState.selectedConfig == config.id;
+                      // V2Ray代理源
+                      if (v2rayConfigs.isNotEmpty) ...[
+                        const Text('V2Ray:', style: TextStyle(fontSize: 14)),
+                        const SizedBox(height: 4),
+                        Wrap(
+                          spacing: 8,
+                          runSpacing: 4,
+                          children: v2rayConfigs.map((config) {
+                            return Selector<AppState, String>(
+                              selector: (context, appState) =>
+                                  appState.selectedConfig,
+                              builder: (context, selectedConfig, child) {
+                                final isSelected = selectedConfig == config.id;
                                 return Container(
                                   padding: const EdgeInsets.symmetric(
                                     horizontal: 16,
@@ -725,25 +732,26 @@ class VPNStatusPanel extends StatelessWidget {
                                     child: Text(config.name),
                                   ),
                                 );
-                              }).toList(),
-                            ),
-                          ],
-                          if (v2rayConfigs.isNotEmpty)
-                            const SizedBox(height: 8),
+                              },
+                            );
+                          }).toList(),
+                        ),
+                      ],
+                      if (v2rayConfigs.isNotEmpty) const SizedBox(height: 8),
 
-                          // HTTP代理源
-                          if (httpProxyConfigs.isNotEmpty) ...[
-                            const Text(
-                              'HTTP代理:',
-                              style: TextStyle(fontSize: 14),
-                            ),
-                            const SizedBox(height: 4),
-                            Wrap(
-                              spacing: 8,
-                              runSpacing: 4,
-                              children: httpProxyConfigs.map((config) {
-                                final isSelected =
-                                    appState.selectedConfig == config.id;
+                      // HTTP代理源
+                      if (httpProxyConfigs.isNotEmpty) ...[
+                        const Text('HTTP代理:', style: TextStyle(fontSize: 14)),
+                        const SizedBox(height: 4),
+                        Wrap(
+                          spacing: 8,
+                          runSpacing: 4,
+                          children: httpProxyConfigs.map((config) {
+                            return Selector<AppState, String>(
+                              selector: (context, appState) =>
+                                  appState.selectedConfig,
+                              builder: (context, selectedConfig, child) {
+                                final isSelected = selectedConfig == config.id;
                                 return Container(
                                   padding: const EdgeInsets.symmetric(
                                     horizontal: 16,
@@ -774,25 +782,27 @@ class VPNStatusPanel extends StatelessWidget {
                                     child: Text(config.name),
                                   ),
                                 );
-                              }).toList(),
-                            ),
-                          ],
-                          if (httpProxyConfigs.isNotEmpty)
-                            const SizedBox(height: 8),
+                              },
+                            );
+                          }).toList(),
+                        ),
+                      ],
+                      if (httpProxyConfigs.isNotEmpty)
+                        const SizedBox(height: 8),
 
-                          // SOCKS5代理源
-                          if (socks5ProxyConfigs.isNotEmpty) ...[
-                            const Text(
-                              'SOCKS5代理:',
-                              style: TextStyle(fontSize: 14),
-                            ),
-                            const SizedBox(height: 4),
-                            Wrap(
-                              spacing: 8,
-                              runSpacing: 4,
-                              children: socks5ProxyConfigs.map((config) {
-                                final isSelected =
-                                    appState.selectedConfig == config.id;
+                      // SOCKS5代理源
+                      if (socks5ProxyConfigs.isNotEmpty) ...[
+                        const Text('SOCKS5代理:', style: TextStyle(fontSize: 14)),
+                        const SizedBox(height: 4),
+                        Wrap(
+                          spacing: 8,
+                          runSpacing: 4,
+                          children: socks5ProxyConfigs.map((config) {
+                            return Selector<AppState, String>(
+                              selector: (context, appState) =>
+                                  appState.selectedConfig,
+                              builder: (context, selectedConfig, child) {
+                                final isSelected = selectedConfig == config.id;
                                 return Container(
                                   padding: const EdgeInsets.symmetric(
                                     horizontal: 16,
@@ -823,219 +833,64 @@ class VPNStatusPanel extends StatelessWidget {
                                     child: Text(config.name),
                                   ),
                                 );
-                              }).toList(),
-                            ),
-                          ],
-                        ],
-                      );
-                    },
-                  ),
-                  const SizedBox(height: 16),
-                  // 显示启用的代理源对应的代理列表中被选中的代理
-                  const Text(
-                    '已选中代理',
-                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-                  ),
-                  const SizedBox(height: 8),
-                  Consumer<AppState>(
-                    builder: (context, appState, child) {
-                      return FutureBuilder<List<Map<String, dynamic>>>(
-                        future: appState.getSelectedProxies(),
-                        builder: (context, snapshot) {
-                          if (snapshot.connectionState ==
-                              ConnectionState.waiting) {
-                            return const Center(
-                              child: CircularProgressIndicator(),
+                              },
                             );
-                          }
-
-                          if (snapshot.hasError) {
-                            return Text('加载代理信息失败: ${snapshot.error}');
-                          }
-
-                          final selectedProxies = snapshot.data ?? [];
-
-                          if (selectedProxies.isEmpty) {
-                            return const Text(
-                              '暂无已选中代理',
-                              style: TextStyle(color: Colors.grey),
-                            );
-                          }
-
-                          return Column(
-                            children: selectedProxies.map((selectedProxy) {
-                              final config =
-                                  selectedProxy['config'] as VPNConfig;
-                              final proxy =
-                                  selectedProxy['proxy']
-                                      as Map<String, dynamic>;
-
-                              // 获取代理类型对应的颜色和图标
-                              Color color;
-                              IconData icon;
-                              String typeName;
-                              String rateInfo = '↑ 0 KB/s ↓ 0 KB/s';
-
-                              switch (config.type) {
-                                case VPNType.openVPN:
-                                  color = Colors.blue;
-                                  icon = Icons.vpn_lock;
-                                  typeName = 'OpenVPN';
-                                  rateInfo = appState.openVPNRateInfo;
-                                  break;
-                                case VPNType.clash:
-                                  color = Colors.green;
-                                  icon = Icons.shield;
-                                  typeName = 'Clash';
-                                  rateInfo = appState.clashRateInfo;
-                                  break;
-                                case VPNType.shadowsocks:
-                                  color = Colors.purple;
-                                  icon = Icons.link;
-                                  typeName = 'Shadowsocks';
-                                  rateInfo = appState.shadowsocksRateInfo;
-                                  break;
-                                case VPNType.v2ray:
-                                  color = Colors.orange;
-                                  icon = Icons.link;
-                                  typeName = 'V2Ray';
-                                  rateInfo = appState.v2rayRateInfo;
-                                  break;
-                                case VPNType.httpProxy:
-                                  color = Colors.red;
-                                  icon = Icons.http;
-                                  typeName = 'HTTP代理';
-                                  rateInfo = appState.httpProxyRateInfo;
-                                  break;
-                                case VPNType.socks5:
-                                  color = Colors.teal;
-                                  icon = Icons.http;
-                                  typeName = 'SOCKS5代理';
-                                  rateInfo = appState.socks5ProxyRateInfo;
-                                  break;
-                                default:
-                                  color = Colors.grey;
-                                  icon = Icons.help;
-                                  typeName = '未知';
-                              }
-
-                              return Container(
-                                margin: const EdgeInsets.only(bottom: 8),
-                                padding: const EdgeInsets.all(12),
-                                decoration: BoxDecoration(
-                                  color: color.withOpacity(0.1),
-                                  borderRadius: BorderRadius.circular(8),
-                                  border: Border.all(color: color, width: 1),
-                                ),
-                                child: Row(
-                                  children: [
-                                    Icon(icon, color: color, size: 20),
-                                    const SizedBox(width: 8),
-                                    Expanded(
-                                      child: Column(
-                                        crossAxisAlignment:
-                                            CrossAxisAlignment.start,
-                                        children: [
-                                          Text(
-                                            config.name,
-                                            style: const TextStyle(
-                                              fontWeight: FontWeight.bold,
-                                            ),
-                                          ),
-                                          Text(
-                                            '$typeName - ${proxy['name']}',
-                                            style: const TextStyle(
-                                              fontSize: 12,
-                                              color: Colors.grey,
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                    ),
-                                    Text(
-                                      rateInfo,
-                                      style: const TextStyle(
-                                        fontSize: 12,
-                                        color: Colors.grey,
-                                      ),
-                                    ),
-                                    const SizedBox(width: 8),
-                                    Container(
-                                      padding: const EdgeInsets.symmetric(
-                                        horizontal: 8,
-                                        vertical: 4,
-                                      ),
-                                      decoration: BoxDecoration(
-                                        color: color,
-                                        borderRadius: BorderRadius.circular(12),
-                                      ),
-                                      child: const Text(
-                                        '已连接',
-                                        style: TextStyle(
-                                          color: Colors.white,
-                                          fontSize: 10,
-                                        ),
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              );
-                            }).toList(),
-                          );
-                        },
-                      );
-                    },
-                  ),
-                  const SizedBox(height: 16),
-                  // Go代理核心控制
-                  const Text(
-                    'Go代理核心',
-                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-                  ),
-                  const SizedBox(height: 8),
-                  Consumer<AppState>(
-                    builder: (context, appState, child) {
-                      return Container(
-                        padding: const EdgeInsets.all(12),
-                        decoration: BoxDecoration(
-                          color: appState.isGoProxyRunning
-                              ? Colors.green.withOpacity(0.1)
-                              : Colors.grey.withOpacity(0.1),
-                          borderRadius: BorderRadius.circular(8),
-                          border: Border.all(
-                            color: appState.isGoProxyRunning
-                                ? Colors.green
-                                : Colors.grey,
-                            width: 1,
-                          ),
+                          }).toList(),
                         ),
-                        child: Row(
-                          children: [
-                            Icon(
-                              appState.isGoProxyRunning
-                                  ? Icons.check_circle
-                                  : Icons.cancel,
-                              color: appState.isGoProxyRunning
-                                  ? Colors.green
-                                  : Colors.grey,
-                            ),
-                            const SizedBox(width: 8),
-                            const Text('Go代理核心'),
-                            const Spacer(),
-                            // 显示实时上传下载速率
-                            if (appState.isGoProxyRunning) ...[
-                              Text(
-                                '${appState.goProxyUploadSpeed} ${appState.goProxyDownloadSpeed}',
-                                style: const TextStyle(
-                                  fontSize: 12,
-                                  color: Colors.grey,
-                                ),
-                              ),
-                              const SizedBox(width: 8),
-                            ],
-                            ElevatedButton(
-                              onPressed: appState.isGoProxyRunning
+                      ],
+                    ],
+                  );
+                },
+              ),
+              const SizedBox(height: 16),
+              // 显示启用的代理源对应的代理列表中被选中的代理
+              const Text(
+                '已选中代理',
+                style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+              ),
+              const SizedBox(height: 8),
+              const SelectedProxiesWidget(),
+              const SizedBox(height: 16),
+              // Go代理核心控制
+              const Text(
+                'Go代理核心',
+                style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+              ),
+              const SizedBox(height: 8),
+              Selector<AppState, bool>(
+                selector: (context, appState) => appState.isGoProxyRunning,
+                builder: (context, isGoProxyRunning, child) {
+                  return Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: isGoProxyRunning
+                          ? Colors.green.withOpacity(0.1)
+                          : Colors.grey.withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(
+                        color: isGoProxyRunning ? Colors.green : Colors.grey,
+                        width: 1,
+                      ),
+                    ),
+                    child: Row(
+                      children: [
+                        Icon(
+                          isGoProxyRunning ? Icons.check_circle : Icons.cancel,
+                          color: isGoProxyRunning ? Colors.green : Colors.grey,
+                        ),
+                        const SizedBox(width: 8),
+                        const Text('Go代理核心'),
+                        const Spacer(),
+                        // 显示实时上传下载速率
+                        const GoProxyStatsWidget(),
+                        Selector<AppState, bool>(
+                          selector: (context, appState) =>
+                              appState.isGoProxyRunning,
+                          builder: (context, isRunning, child) {
+                            return ElevatedButton(
+                              onPressed: isRunning
                                   ? () async {
+                                      final appState = context.read<AppState>();
                                       await appState.stopGoProxy();
                                       if (context.mounted) {
                                         ScaffoldMessenger.of(
@@ -1048,6 +903,7 @@ class VPNStatusPanel extends StatelessWidget {
                                       }
                                     }
                                   : () async {
+                                      final appState = context.read<AppState>();
                                       final success = await appState
                                           .startGoProxy();
                                       if (context.mounted) {
@@ -1071,26 +927,24 @@ class VPNStatusPanel extends StatelessWidget {
                                       }
                                     },
                               style: ElevatedButton.styleFrom(
-                                backgroundColor: appState.isGoProxyRunning
+                                backgroundColor: isRunning
                                     ? Colors.red
                                     : Colors.green,
                                 foregroundColor: Colors.white,
                               ),
-                              child: Text(
-                                appState.isGoProxyRunning ? '停止' : '启动',
-                              ),
-                            ),
-                          ],
+                              child: Text(isRunning ? '停止' : '启动'),
+                            );
+                          },
                         ),
-                      );
-                    },
-                  ),
-                ],
+                      ],
+                    ),
+                  );
+                },
               ),
-            ),
+            ],
           ),
-        );
-      },
+        ),
+      ),
     );
   }
 }
