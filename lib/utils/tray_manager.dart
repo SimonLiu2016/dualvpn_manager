@@ -4,10 +4,18 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'dart:io';
 import 'dart:developer' as developer;
+import 'package:provider/provider.dart';
+import 'package:dualvpn_manager/models/app_state.dart';
 
 class DualVPNTrayManager with TrayListener {
   bool _isInitialized = false;
   VoidCallback? _showWindowCallback;
+  AppState? _appState; // 添加AppState引用
+
+  // 设置AppState引用
+  void setAppState(AppState appState) {
+    _appState = appState;
+  }
 
   // 设置显示窗口的回调函数
   void setShowWindowCallback(VoidCallback callback) {
@@ -112,9 +120,24 @@ class DualVPNTrayManager with TrayListener {
         // 断开SOCKS5代理
         break;
       case 'exit_app':
-        // 退出应用
-        exit(0);
+        // 退出应用前关闭Go代理核心服务并清除系统代理设置
+        _exitApp();
         break;
+    }
+  }
+
+  // 退出应用
+  void _exitApp() async {
+    try {
+      if (_appState != null) {
+        // 停止Go代理核心
+        await _appState!.stopGoProxy();
+      }
+    } catch (e) {
+      print('退出应用时清理资源失败: $e');
+    } finally {
+      // 退出应用
+      exit(0);
     }
   }
 
@@ -156,14 +179,29 @@ class DualVPNTrayManager with TrayListener {
     // 根据连接状态更新托盘图标
     String iconPath = 'assets/icons/app_icon.png'; // 默认图标
 
-    if (openVPNConnected && clashConnected) {
-      iconPath = 'assets/icons/both_connected.png';
-    } else if (openVPNConnected) {
-      iconPath = 'assets/icons/openvpn_connected.png';
-    } else if (clashConnected) {
-      iconPath = 'assets/icons/clash_connected.png';
+    // 检查Go代理核心是否运行，如果运行则使用特殊的图标
+    if (_appState != null && _appState!.isGoProxyRunning) {
+      // 如果Go代理核心运行，根据其他连接状态使用不同的图标
+      if (openVPNConnected && clashConnected) {
+        iconPath = 'assets/icons/go_both_connected.png';
+      } else if (openVPNConnected) {
+        iconPath = 'assets/icons/go_openvpn_connected.png';
+      } else if (clashConnected) {
+        iconPath = 'assets/icons/go_clash_connected.png';
+      } else {
+        iconPath = 'assets/icons/go_proxy_running.png';
+      }
     } else {
-      iconPath = 'assets/icons/disconnected.png';
+      // Go代理核心未运行，使用原来的图标逻辑
+      if (openVPNConnected && clashConnected) {
+        iconPath = 'assets/icons/both_connected.png';
+      } else if (openVPNConnected) {
+        iconPath = 'assets/icons/openvpn_connected.png';
+      } else if (clashConnected) {
+        iconPath = 'assets/icons/clash_connected.png';
+      } else {
+        iconPath = 'assets/icons/disconnected.png';
+      }
     }
 
     try {
@@ -176,7 +214,9 @@ class DualVPNTrayManager with TrayListener {
       }
 
       // 添加一个短暂的动画效果
-      if (openVPNConnected || clashConnected) {
+      if (openVPNConnected ||
+          clashConnected ||
+          (_appState != null && _appState!.isGoProxyRunning)) {
         // 模拟连接动画
         for (int i = 0; i < 3; i++) {
           await Future.delayed(const Duration(milliseconds: 200));

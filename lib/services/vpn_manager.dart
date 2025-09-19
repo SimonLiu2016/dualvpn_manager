@@ -702,6 +702,27 @@ class VPNManager {
     }
   }
 
+  /// 检查Go代理核心是否正在运行
+  Future<bool> checkStatus() async {
+    try {
+      return await _goProxyService.checkStatus();
+    } catch (e) {
+      Logger.error('获取Go代理核心状态失败: $e');
+      rethrow;
+    }
+  }
+
+  /// 获取统计信息
+  Future<Map<String, dynamic>?> getGoProxyStats() async {
+    try {
+      final stats = await _goProxyService.getStats();
+      return stats;
+    } catch (e) {
+      Logger.error('获取Go代理核心统计信息失败: $e');
+      return null;
+    }
+  }
+
   // 获取OpenVPN状态
   Future<bool> getOpenVPNStatus() async {
     try {

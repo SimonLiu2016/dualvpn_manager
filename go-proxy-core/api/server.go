@@ -37,6 +37,7 @@ func (as *APIServer) Start() error {
 	mux.HandleFunc("/protocols", as.handleProtocols)
 	mux.HandleFunc("/protocols/", as.handleProtocol)
 	mux.HandleFunc("/test-route", as.handleTestRoute) // 添加测试路由端点
+	mux.HandleFunc("/stats", as.handleStats)          // 添加统计信息端点
 
 	addr := net.JoinHostPort("127.0.0.1", fmt.Sprintf("%d", as.port))
 	as.server = &http.Server{
@@ -191,4 +192,12 @@ func (as *APIServer) handleTestRoute(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(response)
+}
+
+// handleStats 处理统计信息API
+func (as *APIServer) handleStats(w http.ResponseWriter, r *http.Request) {
+	stats := as.proxyCore.GetStats()
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(stats)
 }

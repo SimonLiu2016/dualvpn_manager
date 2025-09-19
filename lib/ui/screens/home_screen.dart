@@ -1022,6 +1022,17 @@ class VPNStatusPanel extends StatelessWidget {
                             const SizedBox(width: 8),
                             const Text('Go代理核心'),
                             const Spacer(),
+                            // 显示实时上传下载速率
+                            if (appState.isGoProxyRunning) ...[
+                              Text(
+                                '${appState.goProxyUploadSpeed} ${appState.goProxyDownloadSpeed}',
+                                style: const TextStyle(
+                                  fontSize: 12,
+                                  color: Colors.grey,
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                            ],
                             ElevatedButton(
                               onPressed: appState.isGoProxyRunning
                                   ? () async {

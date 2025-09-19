@@ -450,28 +450,42 @@ class GoProxyService {
   /// 检查Go代理核心是否正在运行
   Future<bool> checkStatus() async {
     try {
-      // 检查内部状态
-      if (_isRunning && _process != null) {
-        // 检查进程是否仍在运行
-        try {
-          final exitCode = _process!.exitCode;
-          if (await exitCode.timeout(
-                const Duration(milliseconds: 100),
-                onTimeout: () => -1,
-              ) !=
-              -1) {
-            _isRunning = false;
-            _process = null;
-          }
-        } catch (e) {
-          // 进程仍在运行
-        }
-      }
+      final url = Uri.parse('http://127.0.0.1:6162/status');
+      final response = await HttpClient().getUrl(url);
+      final httpResponse = await response.close();
+      final responseBody = await utf8.decodeStream(httpResponse);
 
-      return _isRunning;
+      if (httpResponse.statusCode == 200) {
+        final status = jsonDecode(responseBody) as Map<String, dynamic>;
+        return status['running'] == true;
+      } else {
+        Logger.error('检查状态失败: ${httpResponse.statusCode}, $responseBody');
+        return false;
+      }
     } catch (e, stackTrace) {
-      Logger.error('检查Go代理核心状态时出错: $e\nStack trace: $stackTrace');
+      Logger.error('检查状态时出错: $e\nStack trace: $stackTrace');
       return false;
+    }
+  }
+
+  /// 获取统计信息
+  Future<Map<String, dynamic>?> getStats() async {
+    try {
+      final url = Uri.parse('http://127.0.0.1:6162/stats');
+      final response = await HttpClient().getUrl(url);
+      final httpResponse = await response.close();
+      final responseBody = await utf8.decodeStream(httpResponse);
+
+      if (httpResponse.statusCode == 200) {
+        final stats = jsonDecode(responseBody) as Map<String, dynamic>;
+        return stats;
+      } else {
+        Logger.error('获取统计信息失败: ${httpResponse.statusCode}, $responseBody');
+        return null;
+      }
+    } catch (e, stackTrace) {
+      Logger.error('获取统计信息时出错: $e\nStack trace: $stackTrace');
+      return null;
     }
   }
 }

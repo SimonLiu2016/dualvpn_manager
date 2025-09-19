@@ -5,6 +5,7 @@ import (
 	"io"
 	"log"
 	"net"
+	"sync/atomic"
 
 	"github.com/dualvpn/go-proxy-core/routing"
 )
@@ -16,6 +17,10 @@ type SOCKS5Server struct {
 	protocolManager *ProtocolManager
 	listener        net.Listener
 	running         bool
+	// 统计信息
+	totalUpload   uint64
+	totalDownload uint64
+	connections   int64
 }
 
 // NewSOCKS5Server 创建新的SOCKS5服务器
@@ -63,9 +68,20 @@ func (ss *SOCKS5Server) Stop() {
 	}
 }
 
+// GetStats 获取SOCKS5服务器统计信息
+func (ss *SOCKS5Server) GetStats() (upload, download uint64, connections int64) {
+	return atomic.LoadUint64(&ss.totalUpload),
+		atomic.LoadUint64(&ss.totalDownload),
+		atomic.LoadInt64(&ss.connections)
+}
+
 // handleConnection 处理连接
 func (ss *SOCKS5Server) handleConnection(clientConn net.Conn) {
 	defer clientConn.Close()
+
+	// 增加连接数
+	atomic.AddInt64(&ss.connections, 1)
+	defer atomic.AddInt64(&ss.connections, -1)
 
 	// 读取SOCKS5握手请求
 	buf := make([]byte, 256)
@@ -162,9 +178,13 @@ func (ss *SOCKS5Server) handleDirectConnection(clientConn net.Conn, targetAddr s
 	// 发送连接成功响应
 	clientConn.Write([]byte{0x05, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00})
 
+	// 创建带统计的连接包装器
+	statsClientConn := &StatsConn{Conn: clientConn, collector: &SOCKS5ServerStats{server: ss}}
+	statsTargetConn := &StatsConn{Conn: conn, collector: &SOCKS5ServerStats{server: ss}}
+
 	// 在客户端和目标服务器之间转发数据
-	go io.Copy(conn, clientConn)
-	io.Copy(clientConn, conn)
+	go io.Copy(statsTargetConn, statsClientConn)
+	io.Copy(statsClientConn, statsTargetConn)
 }
 
 // handleProxyConnection 处理通过代理连接
@@ -182,7 +202,11 @@ func (ss *SOCKS5Server) handleProxyConnection(clientConn net.Conn, targetAddr st
 	// 发送连接成功响应
 	clientConn.Write([]byte{0x05, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00})
 
+	// 创建带统计的连接包装器
+	statsClientConn := &StatsConn{Conn: clientConn, collector: &SOCKS5ServerStats{server: ss}}
+	statsTargetConn := &StatsConn{Conn: conn, collector: &SOCKS5ServerStats{server: ss}}
+
 	// 在客户端和目标服务器之间转发数据
-	go io.Copy(conn, clientConn)
-	io.Copy(clientConn, conn)
+	go io.Copy(statsTargetConn, statsClientConn)
+	io.Copy(statsClientConn, statsTargetConn)
 }

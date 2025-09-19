@@ -11,6 +11,7 @@ import 'dart:io';
 import 'dart:convert';
 import 'package:window_manager/window_manager.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'dart:async';
 
 class AppState extends ChangeNotifier {
   final VPNManager _vpnManager = VPNManager();
@@ -44,6 +45,8 @@ class AppState extends ChangeNotifier {
     // 初始化时启动Go代理核心
     Logger.info('开始初始化Go代理核心...');
     _initGoProxyCore();
+    // 启动统计信息更新定时器
+    _startStatsUpdate();
     Logger.info('=== AppState初始化完成 ===');
   }
 
@@ -300,6 +303,12 @@ class AppState extends ChangeNotifier {
   // SOCKS5代理速率信息
   String _socks5ProxyRateInfo = '↑ 0 KB/s ↓ 0 KB/s';
   String get socks5ProxyRateInfo => _socks5ProxyRateInfo;
+
+  // Go代理核心统计信息
+  String _goProxyUploadSpeed = '↑ 0 KB/s';
+  String _goProxyDownloadSpeed = '↓ 0 KB/s';
+  String get goProxyUploadSpeed => _goProxyUploadSpeed;
+  String get goProxyDownloadSpeed => _goProxyDownloadSpeed;
 
   // 应用运行状态
   bool _isRunning = false;
@@ -913,10 +922,10 @@ class AppState extends ChangeNotifier {
         _shadowsocksConnected ||
         _v2rayConnected ||
         _httpProxyConnected ||
-        _socks5ProxyConnected;
+        _socks5ProxyConnected ||
+        _isRunning; // 添加Go代理核心运行状态
 
-    // 目前我们只区分连接和未连接状态
-    // 如果需要更详细的图标状态，可以扩展此逻辑
+    // 更新托盘图标，考虑Go代理核心的运行状态
     _trayManager.updateTrayIcon(_openVPNConnected, _clashConnected);
   }
 
@@ -2204,6 +2213,33 @@ class AppState extends ChangeNotifier {
     return 'DIRECT';
   }
 
+  // 启动统计信息更新定时器
+  void _startStatsUpdate() {
+    // 每秒更新一次统计信息
+    Timer.periodic(const Duration(seconds: 1), (timer) async {
+      if (_isRunning && isGoProxyRunning) {
+        try {
+          final stats = await _vpnManager.getGoProxyStats();
+          if (stats != null) {
+            // 更新Go代理核心的上传下载速率
+            final uploadSpeed = stats['upload_speed'] as String? ?? '↑ 0 KB/s';
+            final downloadSpeed =
+                stats['download_speed'] as String? ?? '↓ 0 KB/s';
+
+            // 更新显示的速率信息
+            _goProxyUploadSpeed = uploadSpeed;
+            _goProxyDownloadSpeed = downloadSpeed;
+
+            // 通知UI更新
+            notifyListeners();
+          }
+        } catch (e) {
+          Logger.error('更新统计信息时出错: $e');
+        }
+      }
+    });
+  }
+
   // 启动Go代理核心
   Future<bool> startGoProxy() async {
     try {
@@ -2211,6 +2247,8 @@ class AppState extends ChangeNotifier {
       if (result) {
         _isRunning = true;
         notifyListeners();
+        // 更新托盘图标
+        _updateTrayIcon();
       }
       return result;
     } catch (e) {
@@ -2225,6 +2263,8 @@ class AppState extends ChangeNotifier {
       await _vpnManager.stopGoProxy();
       _isRunning = false;
       notifyListeners();
+      // 更新托盘图标
+      _updateTrayIcon();
     } catch (e) {
       Logger.error('停止Go代理核心失败: $e');
       rethrow;

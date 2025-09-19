@@ -1,8 +1,10 @@
 package core
 
 import (
+	"fmt"
 	"log"
 	"sync"
+	"time"
 
 	"github.com/dualvpn/go-proxy-core/config"
 	"github.com/dualvpn/go-proxy-core/proxy"
@@ -20,6 +22,24 @@ type ProxyCore struct {
 
 	mu      sync.RWMutex
 	running bool
+
+	// 统计信息
+	statsMu        sync.RWMutex
+	uploadSpeed    string
+	downloadSpeed  string
+	totalUpload    uint64
+	totalDownload  uint64
+	connections    int64
+	lastUpdateTime time.Time
+}
+
+// Stats 统计信息结构
+type Stats struct {
+	UploadSpeed   string `json:"upload_speed"`
+	DownloadSpeed string `json:"download_speed"`
+	TotalUpload   string `json:"total_upload"`
+	TotalDownload string `json:"total_download"`
+	Connections   int64  `json:"connections"`
 }
 
 // NewProxyCore 创建新的代理核心
@@ -67,6 +87,12 @@ func NewProxyCore(cfg *config.Config) *ProxyCore {
 		rulesEngine:     rulesEngine,
 		protocolManager: protocolManager,
 		// tunDevice:    tunDevice,
+		uploadSpeed:    "↑ 0 KB/s",
+		downloadSpeed:  "↓ 0 KB/s",
+		totalUpload:    0,
+		totalDownload:  0,
+		connections:    0,
+		lastUpdateTime: time.Now(),
 	}
 }
 
@@ -96,6 +122,9 @@ func (pc *ProxyCore) Start() error {
 			log.Printf("SOCKS5 server error: %v", err)
 		}
 	}()
+
+	// 启动统计信息更新协程
+	go pc.updateStats()
 
 	// 不再在启动时加载规则，规则将通过API动态配置
 	log.Printf("Proxy core started with default rules")
@@ -161,4 +190,97 @@ func (pc *ProxyCore) GetRulesEngine() *routing.RulesEngine {
 func (pc *ProxyCore) AddProtocol(protocolType proxy.ProtocolType, name string, config map[string]interface{}) error {
 	_, err := pc.protocolManager.CreateProtocol(protocolType, name, config)
 	return err
+}
+
+// GetStats 获取统计信息
+func (pc *ProxyCore) GetStats() *Stats {
+	pc.statsMu.RLock()
+	defer pc.statsMu.RUnlock()
+
+	return &Stats{
+		UploadSpeed:   pc.uploadSpeed,
+		DownloadSpeed: pc.downloadSpeed,
+		TotalUpload:   formatBytes(pc.totalUpload),
+		TotalDownload: formatBytes(pc.totalDownload),
+		Connections:   pc.connections,
+	}
+}
+
+// formatBytes 格式化字节数
+func formatBytes(bytes uint64) string {
+	if bytes < 1024 {
+		return fmt.Sprintf("%d B", bytes)
+	} else if bytes < 1024*1024 {
+		return fmt.Sprintf("%.1f KB", float64(bytes)/1024)
+	} else if bytes < 1024*1024*1024 {
+		return fmt.Sprintf("%.1f MB", float64(bytes)/(1024*1024))
+	} else {
+		return fmt.Sprintf("%.1f GB", float64(bytes)/(1024*1024*1024))
+	}
+}
+
+// updateStats 更新统计信息
+func (pc *ProxyCore) updateStats() {
+	ticker := time.NewTicker(1 * time.Second)
+	defer ticker.Stop()
+
+	// 用于计算速率的临时变量
+	var lastTotalUpload uint64
+	var lastTotalDownload uint64
+	lastTime := time.Now()
+
+	for {
+		pc.mu.RLock()
+		running := pc.running
+		pc.mu.RUnlock()
+
+		if !running {
+			break
+		}
+
+		select {
+		case <-ticker.C:
+			currentTime := time.Now()
+
+			// 获取HTTP和SOCKS5服务器的统计数据
+			var httpUpload, httpDownload uint64
+			var httpConnections int64
+			var socks5Upload, socks5Download uint64
+			var socks5Connections int64
+
+			if pc.httpServer != nil {
+				httpUpload, httpDownload, httpConnections = pc.httpServer.GetStats()
+			}
+
+			if pc.socks5Server != nil {
+				socks5Upload, socks5Download, socks5Connections = pc.socks5Server.GetStats()
+			}
+
+			// 计算总统计数据
+			totalUpload := httpUpload + socks5Upload
+			totalDownload := httpDownload + socks5Download
+			totalConnections := httpConnections + socks5Connections
+
+			// 计算速率 (bytes/second)
+			timeDiff := currentTime.Sub(lastTime).Seconds()
+			if timeDiff > 0 {
+				uploadSpeed := uint64(float64(totalUpload-lastTotalUpload) / timeDiff)
+				downloadSpeed := uint64(float64(totalDownload-lastTotalDownload) / timeDiff)
+
+				pc.statsMu.Lock()
+				pc.uploadSpeed = fmt.Sprintf("↑ %s/s", formatBytes(uploadSpeed))
+				pc.downloadSpeed = fmt.Sprintf("↓ %s/s", formatBytes(downloadSpeed))
+				pc.totalUpload = totalUpload
+				pc.totalDownload = totalDownload
+				pc.connections = totalConnections
+				pc.lastUpdateTime = currentTime
+				pc.statsMu.Unlock()
+
+				// 更新临时变量
+				lastTotalUpload = totalUpload
+				lastTotalDownload = totalDownload
+				lastTime = currentTime
+			}
+		}
+	}
 }
