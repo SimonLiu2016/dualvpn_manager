@@ -467,10 +467,24 @@ class SOCKS5ProxyServer {
     void Function() safeClose,
   ) async {
     try {
+      // 获取Clash代理的实际端口，如果未指定则使用默认端口7890
+      int clashPort = 7890;
+      if (proxyConfig.configPath.contains(':')) {
+        final parts = proxyConfig.configPath.split(':');
+        if (parts.length == 2) {
+          final port = int.tryParse(parts[1]);
+          if (port != null) {
+            clashPort = port;
+          }
+        }
+      }
+
+      Logger.info('尝试连接Clash代理: 127.0.0.1:$clashPort');
+
       // Clash通常使用7890端口作为HTTP代理
       final proxySocket = await Socket.connect(
         '127.0.0.1',
-        7890,
+        clashPort,
         timeout: Duration(seconds: 30),
       );
 
@@ -495,7 +509,13 @@ class SOCKS5ProxyServer {
       _forwardData(clientSocket, proxySocket, safeClose);
     } catch (e) {
       Logger.error('转发到Clash代理失败: $e');
-      rethrow;
+      // 发送连接失败响应给客户端
+      try {
+        _sendConnectionResponse(clientSocket, 0x05, safeClose); // 连接被拒绝
+      } catch (responseError) {
+        Logger.error('发送连接失败响应也失败: $responseError');
+      }
+      safeClose();
     }
   }
 

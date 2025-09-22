@@ -5,7 +5,6 @@ import 'package:dualvpn_manager/utils/config_manager.dart';
 import 'package:dualvpn_manager/models/vpn_config.dart';
 
 /// 代理列表小部件
-/// 这个小部件只监听与代理列表相关的状态变化
 class ProxyListWidget extends StatelessWidget {
   final Function(String proxyName) onTestLatency;
   final Function(String proxyName, bool isSelected) onProxySelected;
@@ -18,15 +17,12 @@ class ProxyListWidget extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Selector<AppState, ProxyListState>(
-      selector: (context, appState) => ProxyListState(
-        proxies: appState.proxies,
-        isLoadingProxies: appState.isLoadingProxies,
-        selectedConfig: appState.selectedConfig,
-      ),
-      builder: (context, proxyListState, child) {
+    return Consumer<AppState>(
+      builder: (context, appState, child) {
         return _ProxyListView(
-          proxyListState: proxyListState,
+          proxies: appState.proxies,
+          isLoadingProxies: appState.isLoadingProxies,
+          selectedConfig: appState.selectedConfig,
           onTestLatency: onTestLatency,
           onProxySelected: onProxySelected,
         );
@@ -35,53 +31,31 @@ class ProxyListWidget extends StatelessWidget {
   }
 }
 
-/// 代理列表状态数据类
-class ProxyListState {
+/// 代理列表视图实现
+class _ProxyListView extends StatelessWidget {
   final List<Map<String, dynamic>> proxies;
   final bool isLoadingProxies;
   final String selectedConfig;
-
-  ProxyListState({
-    required this.proxies,
-    required this.isLoadingProxies,
-    required this.selectedConfig,
-  });
-
-  @override
-  bool operator ==(Object other) {
-    if (identical(this, other)) return true;
-    return other is ProxyListState &&
-        proxies == other.proxies &&
-        isLoadingProxies == other.isLoadingProxies &&
-        selectedConfig == other.selectedConfig;
-  }
-
-  @override
-  int get hashCode =>
-      proxies.hashCode ^ isLoadingProxies.hashCode ^ selectedConfig.hashCode;
-}
-
-/// 代理列表视图实现
-class _ProxyListView extends StatelessWidget {
-  final ProxyListState proxyListState;
   final Function(String proxyName) onTestLatency;
   final Function(String proxyName, bool isSelected) onProxySelected;
 
   const _ProxyListView({
-    required this.proxyListState,
+    required this.proxies,
+    required this.isLoadingProxies,
+    required this.selectedConfig,
     required this.onTestLatency,
     required this.onProxySelected,
   });
 
   @override
   Widget build(BuildContext context) {
-    if (proxyListState.isLoadingProxies) {
+    if (isLoadingProxies) {
       return const Center(child: CircularProgressIndicator());
-    } else if (proxyListState.proxies.isEmpty) {
+    } else if (proxies.isEmpty) {
       // 检查当前选中的配置类型是否支持代理列表
       final configs = ConfigManager.loadConfigsSync();
       final currentConfig = configs.firstWhere(
-        (config) => config.id == proxyListState.selectedConfig,
+        (config) => config.id == selectedConfig,
         orElse: () => configs.isNotEmpty
             ? configs.first
             : VPNConfig(
@@ -142,15 +116,13 @@ class _ProxyListView extends StatelessWidget {
       }
     } else {
       // 显示所有代理，不管是否启用
-      final allProxies = proxyListState.proxies;
-
       return Expanded(
         child: ListView.builder(
-          itemCount: allProxies.length,
+          itemCount: proxies.length,
           itemBuilder: (context, index) {
-            final proxy = allProxies[index];
+            final proxy = proxies[index];
             final latency = proxy['latency'];
-            final isSelected = proxy['isSelected'];
+            final isSelected = proxy['isSelected'] as bool;
             final proxyName = proxy['name'];
 
             return AnimatedContainer(
@@ -242,7 +214,9 @@ class _ProxyListView extends StatelessWidget {
                       ),
                       Switch(
                         value: isSelected,
-                        onChanged: (value) => onProxySelected(proxyName, value),
+                        onChanged: (value) {
+                          onProxySelected(proxyName, value);
+                        },
                       ),
                     ],
                   ),

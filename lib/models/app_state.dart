@@ -29,6 +29,9 @@ class AppState extends ChangeNotifier {
   bool _isUpdatingRules = false;
   final List<Future<void> Function()> _pendingRuleUpdates = [];
 
+  // 添加防抖定时器，用于优化代理状态保存
+  Timer? _proxySaveDebounceTimer;
+
   AppState({required DualVPNTrayManager trayManager})
     : _trayManager = trayManager {
     Logger.info('=== 开始初始化AppState ===');
@@ -443,32 +446,35 @@ class AppState extends ChangeNotifier {
     }
   }
 
-  // 保存代理列表状态
+  // 保存代理列表状态（带防抖处理）
   Future<void> _saveProxyStates() async {
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      final Map<String, dynamic> statesJson = {};
+    // 取消之前的定时器
+    _proxySaveDebounceTimer?.cancel();
 
-      _proxiesByConfig.forEach((configId, proxies) {
-        statesJson[configId] = proxies;
-        Logger.info('准备保存配置 $configId 的代理状态，代理数量: ${proxies.length}');
-        // 打印每个代理的详细信息
-        for (var i = 0; i < proxies.length; i++) {
-          final proxy = proxies[i];
-          Logger.info(
-            '  代理 $i: name=${proxy['name']}, latency=${proxy['latency']}, isSelected=${proxy['isSelected']}',
-          );
+    // 设置新的定时器，延迟500ms执行保存操作
+    _proxySaveDebounceTimer = Timer(
+      const Duration(milliseconds: 500),
+      () async {
+        try {
+          final prefs = await SharedPreferences.getInstance();
+          final Map<String, dynamic> statesJson = {};
+
+          _proxiesByConfig.forEach((configId, proxies) {
+            statesJson[configId] = proxies;
+            // 减少日志输出，只在调试时打印详细信息
+            // Logger.info('准备保存配置 $configId 的代理状态，代理数量: ${proxies.length}');
+          });
+
+          final statesJsonString = jsonEncode(statesJson);
+          await prefs.setString(_proxyStatesKey, statesJsonString);
+          Logger.info('代理状态已保存，共${_proxiesByConfig.length}个配置');
+          // Logger.info('保存的数据: $statesJsonString'); // 注释掉详细数据日志
+        } catch (e, stackTrace) {
+          Logger.error('保存代理状态失败: $e');
+          Logger.error('Stack trace: $stackTrace');
         }
-      });
-
-      final statesJsonString = jsonEncode(statesJson);
-      await prefs.setString(_proxyStatesKey, statesJsonString);
-      Logger.info('代理状态已保存，共${_proxiesByConfig.length}个配置');
-      Logger.info('保存的数据: $statesJsonString');
-    } catch (e, stackTrace) {
-      Logger.error('保存代理状态失败: $e');
-      Logger.error('Stack trace: $stackTrace');
-    }
+      },
+    );
   }
 
   // 代理列表状态 - 按配置ID存储
@@ -843,45 +849,81 @@ class AppState extends ChangeNotifier {
     Logger.info('代理名称: $proxyName, 选中状态: $isSelected');
     Logger.info('当前代理列表数量: ${_proxies.length}');
 
-    for (var i = 0; i < _proxies.length; i++) {
-      if (_proxies[i]['name'] == proxyName) {
-        Logger.info('找到代理 $proxyName 在索引 $i');
-        _proxies[i] = Map<String, dynamic>.from(_proxies[i])
-          ..['isSelected'] = isSelected;
-        Logger.info(
-          '更新代理状态: name=${_proxies[i]['name']}, isSelected=${_proxies[i]['isSelected']}',
-        );
+    // 打印当前所有代理的状态
+    for (int i = 0; i < _proxies.length; i++) {
+      final proxy = _proxies[i];
+      Logger.info(
+        '当前代理 $i: ${proxy['name']}, isSelected: ${proxy['isSelected']}',
+      );
+    }
 
-        // 如果选中了这个代理，取消其他代理的选中状态
+    // 创建全新的代理列表
+    List<Map<String, dynamic>> newProxies = [];
+    bool foundTargetProxy = false;
+
+    // 处理所有代理
+    for (var proxy in _proxies) {
+      if (proxy['name'] == proxyName) {
+        foundTargetProxy = true;
+        Logger.info('找到目标代理: ${proxy['name']}');
+        Logger.info('当前选中状态: ${proxy['isSelected']}');
+        Logger.info('目标选中状态: $isSelected');
+
+        // 创建新的代理对象，确保状态正确更新
+        final updatedProxy = Map<String, dynamic>.from(proxy);
+        updatedProxy['isSelected'] = isSelected;
+        newProxies.add(updatedProxy);
+
+        Logger.info('更新后的代理状态: ${updatedProxy['isSelected']}');
+      } else {
+        // 对于非目标代理，如果需要选中目标代理，则取消它们的选中状态
         if (isSelected) {
-          for (var j = 0; j < _proxies.length; j++) {
-            if (j != i && _proxies[j]['isSelected'] == true) {
-              Logger.info('取消代理 ${_proxies[j]['name']} 的选中状态');
-              _proxies[j] = Map<String, dynamic>.from(_proxies[j])
-                ..['isSelected'] = false;
-            }
-          }
-
-          // 立即应用选中的代理到Clash服务
-          _applySelectedProxy(proxyName);
+          final updatedProxy = Map<String, dynamic>.from(proxy);
+          updatedProxy['isSelected'] = false;
+          newProxies.add(updatedProxy);
+          Logger.info('取消代理 ${proxy['name']} 的选中状态');
+        } else {
+          newProxies.add(proxy);
         }
-        break;
       }
     }
+
+    if (!foundTargetProxy) {
+      Logger.warn('未找到目标代理: $proxyName');
+      Logger.info('=== 代理选中状态设置完成（未找到目标代理） ===');
+      return;
+    }
+
+    // 打印更新后的所有代理状态
+    Logger.info('更新后的代理列表:');
+    for (int i = 0; i < newProxies.length; i++) {
+      final proxy = newProxies[i];
+      Logger.info(
+        '更新后代理 $i: ${proxy['name']}, isSelected: ${proxy['isSelected']}',
+      );
+    }
+
+    // 更新当前代理列表
+    _proxies = newProxies;
 
     // 更新存储的代理列表
     if (_selectedConfig.isNotEmpty) {
       _proxiesByConfig[_selectedConfig] = List<Map<String, dynamic>>.from(
         _proxies,
       );
-      Logger.info(
-        '更新配置 $_selectedConfig 的代理列表缓存，当前代理数量: ${_proxiesByConfig[_selectedConfig]?.length}',
-      );
+      Logger.info('更新配置 $_selectedConfig 的代理列表缓存');
       // 保存到持久化存储
       _saveProxyStates();
     }
+
+    // 通知监听器
     notifyListeners();
     Logger.info('=== 代理选中状态设置完成 ===');
+
+    // 如果选中了代理，则应用它
+    if (isSelected) {
+      _applySelectedProxy(proxyName);
+    }
   }
 
   // 应用选中的代理到Clash服务
@@ -896,20 +938,58 @@ class AppState extends ChangeNotifier {
 
       // 只对Clash类型的配置应用代理选择
       if (currentConfig.type == VPNType.clash) {
-        Logger.info('正在应用Clash代理: $proxyName');
-        // 使用'GLOBAL'作为默认的选择器名称，这是Clash的常见配置
-        final result = await _vpnManager.selectClashProxy('GLOBAL', proxyName);
+        Logger.info('正在应用代理: $proxyName');
+
+        // 清理代理名称中的特殊字符（如emoji），只保留字母、数字、连字符和下划线
+        final cleanedProxyName = proxyName.replaceAll(RegExp(r'[^\w\- ]'), '');
+        Logger.info('清理后的代理名称: $cleanedProxyName');
+
+        // 直接更新Go代理核心的路由规则，而不是连接Clash服务
+        // 创建一条针对此代理的路由规则
+        final List<Map<String, dynamic>> rules = [
+          {
+            'type': 'MATCH',
+            'pattern': '',
+            'proxy_source': cleanedProxyName,
+            'enabled': true,
+          },
+        ];
+
+        // 更新Go代理核心的路由规则
+        final result = await _vpnManager.updateGoProxyRules(rules);
         if (result) {
-          Logger.info('成功应用Clash代理: $proxyName');
+          Logger.info('成功应用代理: $proxyName (清理后: $cleanedProxyName)');
 
           // 将路由规则发送到Go代理核心
           _sendRoutingRulesToGoProxy();
         } else {
-          Logger.error('应用Clash代理失败: $proxyName');
+          Logger.error('应用代理失败: $proxyName');
+          // 通知UI显示错误
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (navigatorKey.currentContext != null) {
+              ScaffoldMessenger.of(navigatorKey.currentContext!).showSnackBar(
+                SnackBar(
+                  content: Text('应用代理失败: $proxyName'),
+                  backgroundColor: Colors.red,
+                ),
+              );
+            }
+          });
         }
       }
     } catch (e) {
       Logger.error('应用选中代理时出错: $e');
+      // 通知UI显示错误
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (navigatorKey.currentContext != null) {
+          ScaffoldMessenger.of(navigatorKey.currentContext!).showSnackBar(
+            SnackBar(
+              content: Text('应用代理时发生错误: $e'),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
+      });
     }
   }
 

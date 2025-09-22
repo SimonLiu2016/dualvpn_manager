@@ -193,8 +193,10 @@ class _ProxyListScreenState extends State<ProxyListScreen> {
             const SizedBox(height: 16),
             ProxyListWidget(
               onTestLatency: _testLatency,
-              onProxySelected: (proxyName, isSelected) {
+              onProxySelected: (proxyName, isSelected) async {
                 final appState = Provider.of<AppState>(context, listen: false);
+                // 当用户点击Switch时，我们应该设置代理的选中状态
+                // Switch的value参数就是用户想要设置的状态
                 appState.setProxySelected(proxyName, isSelected);
               },
             ),

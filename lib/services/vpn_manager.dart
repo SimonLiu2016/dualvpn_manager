@@ -78,7 +78,6 @@ class VPNManager {
       // 检查是否是订阅类型的配置
       if (config.type == VPNType.clash && config.subscriptionUrl != null) {
         Logger.info('通过订阅URL连接: ${config.subscriptionUrl}');
-        final clashService = ClashService();
 
         // 尝试连接并增加重试机制
         bool connected = false;
@@ -88,7 +87,7 @@ class VPNManager {
         while (retryCount < maxRetries && !connected) {
           try {
             Logger.info('尝试连接Clash (第${retryCount + 1}次)');
-            connected = await clashService.startWithSubscription(
+            connected = await _clashService.startWithSubscription(
               config.subscriptionUrl!,
             );
             if (connected) {
@@ -117,16 +116,34 @@ class VPNManager {
         }
       } else {
         Logger.info('使用本地配置连接');
-        // 实现本地配置连接逻辑
-        _isConnected = true;
-        _currentConfig = config;
-        return true;
+        // 对于本地配置，我们需要启动Clash服务
+        if (_currentConfig != null) {
+          final success = await _clashService.startWithConfig(
+            _currentConfig!.configPath,
+          );
+          if (success) {
+            _isConnected = true;
+            _currentConfig = config;
+            Logger.info('Clash本地配置连接成功');
+            return true;
+          } else {
+            Logger.error('Clash本地配置连接失败');
+            _isConnected = false;
+            return false;
+          }
+        } else {
+          Logger.error('没有可用的本地配置文件');
+          _isConnected = false;
+          return false;
+        }
       }
     } on SocketException catch (e) {
       Logger.error('网络连接错误: $e');
+      _isConnected = false;
       throw Exception('网络连接错误，请检查网络连接');
     } catch (e, stackTrace) {
       Logger.error('连接Clash失败: $e\nStack trace: $stackTrace');
+      _isConnected = false;
       rethrow;
     }
   }
@@ -802,10 +819,33 @@ class VPNManager {
   // 选择Clash代理
   Future<bool> selectClashProxy(String selector, String proxyName) async {
     try {
-      final result = await _clashService.selectProxy(selector, proxyName);
+      Logger.info('选择代理: $selector -> $proxyName');
+
+      // 清理代理名称中的特殊字符（如emoji），只保留字母、数字、连字符和下划线
+      final cleanedProxyName = proxyName.replaceAll(RegExp(r'[^\w\- ]'), '');
+      Logger.info('清理后的代理名称: $cleanedProxyName');
+
+      // 直接更新Go代理核心的路由规则，而不是连接Clash服务
+      // 创建一条针对此代理的路由规则
+      final List<Map<String, dynamic>> rules = [
+        {
+          'type': 'MATCH',
+          'pattern': '',
+          'proxy_source': cleanedProxyName,
+          'enabled': true,
+        },
+      ];
+
+      // 更新Go代理核心的路由规则
+      final result = await updateGoProxyRules(rules);
+      if (result) {
+        Logger.info('成功选择代理: $selector -> $proxyName (清理后: $cleanedProxyName)');
+      } else {
+        Logger.error('选择代理失败: $selector -> $proxyName');
+      }
       return result;
     } catch (e) {
-      Logger.error('选择Clash代理失败: $e');
+      Logger.error('选择代理失败: $e');
       return false;
     }
   }

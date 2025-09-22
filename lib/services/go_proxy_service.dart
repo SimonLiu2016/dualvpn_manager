@@ -185,12 +185,16 @@ class GoProxyService {
       final client = HttpClient();
       client.idleTimeout = const Duration(seconds: 10);
 
-      final request = await client.putUrl(url)
-        ..headers.set('Content-Type', 'application/json')
-        ..write(jsonEncode(rules));
+      final request = await client.putUrl(url);
+      request.headers.set('Content-Type', 'application/json; charset=utf-8');
+
+      final jsonBody = jsonEncode(rules);
+      Logger.info('JSON编码请求体: $jsonBody');
+
+      // 使用utf8编码写入请求体
+      request.write(jsonBody);
 
       Logger.info('请求头: Content-Type=${request.headers.value('Content-Type')}');
-      Logger.info('请求体: ${jsonEncode(rules)}');
 
       final response = await request.close();
       final responseBody = await utf8.decodeStream(response);
