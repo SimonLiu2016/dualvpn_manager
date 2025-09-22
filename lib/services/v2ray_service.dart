@@ -129,97 +129,124 @@ class V2RayService {
     }
   }
 
-  // 更新订阅配置
+  // 更新订阅
   Future<bool> updateSubscription(String subscriptionUrl) async {
-    try {
-      Logger.info('开始更新V2Ray订阅: $subscriptionUrl');
+    Logger.info('更新V2Ray订阅: $subscriptionUrl');
 
-      // 下载新的配置文件
-      final response = await http
-          .get(Uri.parse(subscriptionUrl))
-          .timeout(
-            const Duration(seconds: 30),
-            onTimeout: () {
-              Logger.error('下载V2Ray订阅配置超时');
-              throw Exception('下载V2Ray订阅配置超时，请稍后重试');
-            },
-          );
+    // 添加重试机制
+    int retryCount = 0;
+    const maxRetries = 3;
+    const retryDelay = Duration(seconds: 2);
 
-      // 检查HTTP响应状态码
-      // 2xx表示成功，3xx表示重定向，4xx和5xx表示错误
-      if (response.statusCode >= 300) {
-        Logger.error('下载V2Ray订阅配置失败: ${response.statusCode}');
-        if (response.statusCode == 404) {
-          throw Exception('订阅链接不存在，请检查链接是否正确');
-        } else if (response.statusCode == 403) {
-          throw Exception('访问被拒绝，请检查订阅链接权限');
-        } else {
-          throw Exception('下载V2Ray订阅配置失败: HTTP ${response.statusCode}');
-        }
-      }
-
-      // 检查响应内容是否为空
-      if (response.body.isEmpty) {
-        Logger.error('下载V2Ray订阅配置失败: 响应内容为空');
-        throw Exception('下载V2Ray订阅配置失败: 响应内容为空');
-      }
-
-      // 解析订阅内容
-      String configContent;
+    while (retryCount <= maxRetries) {
       try {
-        // 尝试解码base64
-        List<int> decodedBytes = base64Decode(response.body);
-        configContent = utf8.decode(decodedBytes);
-      } catch (e) {
-        // 如果解码失败，直接使用原始内容
-        configContent = response.body;
-      }
+        Logger.info('尝试更新V2Ray订阅 (第${retryCount + 1}次)');
 
-      // 验证配置内容是否有效
-      if (configContent.trim().isEmpty) {
-        Logger.error('V2Ray订阅配置内容为空');
-        throw Exception('V2Ray订阅配置内容为空');
-      }
+        // 下载新的配置文件
+        final response = await http
+            .get(Uri.parse(subscriptionUrl))
+            .timeout(
+              const Duration(seconds: 30),
+              onTimeout: () {
+                Logger.error('下载V2Ray订阅配置超时');
+                throw Exception('下载V2Ray订阅配置超时，请稍后重试');
+              },
+            );
 
-      // 检查配置内容是否看起来像有效的JSON或V2Ray配置
-      bool isValidConfig = false;
-      try {
-        // 尝试解析为JSON来验证是否是有效的配置
-        final jsonConfig = json.decode(configContent);
-        // 检查是否包含V2Ray配置的关键字段
-        if (jsonConfig is Map &&
-            (jsonConfig.containsKey('inbounds') ||
-                jsonConfig.containsKey('outbounds') ||
-                jsonConfig.containsKey('routing'))) {
-          isValidConfig = true;
+        // 检查HTTP响应状态码
+        // 2xx表示成功，3xx表示重定向，4xx和5xx表示错误
+        if (response.statusCode >= 300) {
+          Logger.error('下载V2Ray订阅配置失败: ${response.statusCode}');
+          if (response.statusCode == 404) {
+            throw Exception('订阅链接不存在，请检查链接是否正确');
+          } else if (response.statusCode == 403) {
+            throw Exception('访问被拒绝，请检查订阅链接权限');
+          } else {
+            throw Exception('下载V2Ray订阅配置失败: HTTP ${response.statusCode}');
+          }
         }
-      } catch (e) {
-        // 如果不是JSON，检查是否包含V2Ray URL格式
-        if (configContent.contains('vmess://') ||
-            configContent.contains('vless://') ||
-            configContent.contains('trojan://')) {
-          isValidConfig = true;
+
+        // 检查响应内容是否为空
+        if (response.body.isEmpty) {
+          Logger.error('下载V2Ray订阅配置失败: 响应内容为空');
+          throw Exception('下载V2Ray订阅配置失败: 响应内容为空');
         }
-      }
 
-      // 如果配置无效，抛出异常
-      if (!isValidConfig) {
-        Logger.error('V2Ray订阅配置内容无效');
-        throw Exception('V2Ray订阅配置内容无效');
-      }
+        // 解析订阅内容
+        String configContent;
+        try {
+          // 尝试解码base64
+          List<int> decodedBytes = base64Decode(response.body);
+          configContent = utf8.decode(decodedBytes);
+        } catch (e) {
+          // 如果解码失败，直接使用原始内容
+          configContent = response.body;
+        }
 
-      // 检查是否有现有的配置文件路径
-      if (_configPath == null) {
-        Logger.info('没有找到现有的配置文件路径，创建临时配置文件');
-        // 创建临时目录和配置文件
-        final tempDir = await Directory.systemTemp.createTemp('v2ray_config');
-        final configFile = File(path.join(tempDir.path, 'config.json'));
+        // 验证配置内容是否有效
+        if (configContent.trim().isEmpty) {
+          Logger.error('V2Ray订阅配置内容为空');
+          throw Exception('V2Ray订阅配置内容为空');
+        }
+
+        // 检查配置内容是否看起来像有效的JSON或V2Ray配置
+        bool isValidConfig = false;
+        try {
+          // 尝试解析为JSON来验证是否是有效的配置
+          final jsonConfig = json.decode(configContent);
+          // 检查是否包含V2Ray配置的关键字段
+          if (jsonConfig is Map &&
+              (jsonConfig.containsKey('inbounds') ||
+                  jsonConfig.containsKey('outbounds') ||
+                  jsonConfig.containsKey('routing'))) {
+            isValidConfig = true;
+          }
+        } catch (e) {
+          // 如果不是JSON，检查是否包含V2Ray URL格式
+          if (configContent.contains('vmess://') ||
+              configContent.contains('vless://') ||
+              configContent.contains('trojan://')) {
+            isValidConfig = true;
+          }
+        }
+
+        // 如果配置无效，抛出异常
+        if (!isValidConfig) {
+          Logger.error('V2Ray订阅配置内容无效');
+          throw Exception('V2Ray订阅配置内容无效');
+        }
+
+        // 检查是否有现有的配置文件路径
+        if (_configPath == null) {
+          Logger.info('没有找到现有的配置文件路径，创建临时配置文件');
+          // 创建临时目录和配置文件
+          final tempDir = await Directory.systemTemp.createTemp('v2ray_config');
+          final configFile = File(path.join(tempDir.path, 'config.json'));
+          await configFile.writeAsString(configContent);
+
+          // 保存配置文件路径
+          _configPath = configFile.path;
+
+          // 如果V2Ray正在运行，重新启动它
+          if (_isConnected && _process != null) {
+            await stop();
+            final result = await startWithConfig(_configPath!);
+            if (!result) {
+              Logger.error('V2Ray启动失败');
+              throw Exception('V2Ray启动失败');
+            }
+            return result;
+          }
+
+          Logger.info('V2Ray订阅更新成功（保存到临时文件）');
+          return true;
+        }
+
+        // 保存新的配置到现有文件
+        final configFile = File(_configPath!);
         await configFile.writeAsString(configContent);
 
-        // 保存配置文件路径
-        _configPath = configFile.path;
-
-        // 如果V2Ray正在运行，重新启动它
+        // 重新启动V2Ray以应用新配置
         if (_isConnected && _process != null) {
           await stop();
           final result = await startWithConfig(_configPath!);
@@ -230,39 +257,39 @@ class V2RayService {
           return result;
         }
 
-        Logger.info('V2Ray订阅更新成功（保存到临时文件）');
+        Logger.info('V2Ray订阅更新成功');
         return true;
-      }
+      } on SocketException catch (e) {
+        Logger.error('网络连接错误: $e');
+        retryCount++;
 
-      // 保存新的配置到现有文件
-      final configFile = File(_configPath!);
-      await configFile.writeAsString(configContent);
-
-      // 重新启动V2Ray以应用新配置
-      if (_isConnected && _process != null) {
-        await stop();
-        final result = await startWithConfig(_configPath!);
-        if (!result) {
-          Logger.error('V2Ray启动失败');
-          throw Exception('V2Ray启动失败');
+        if (retryCount <= maxRetries) {
+          Logger.info('等待${retryDelay.inSeconds}秒后重试...');
+          await Future.delayed(retryDelay);
+        } else {
+          throw Exception('网络连接错误，请检查网络连接');
         }
-        return result;
-      }
+      } catch (e, stackTrace) {
+        Logger.error('更新V2Ray订阅失败: $e\nStack trace: $stackTrace');
+        if (e.toString().contains('404')) {
+          throw Exception('订阅链接不存在，请检查链接是否正确');
+        } else if (e.toString().contains('timeout')) {
+          retryCount++;
 
-      Logger.info('V2Ray订阅更新成功');
-      return true;
-    } on SocketException catch (e) {
-      Logger.error('网络连接错误: $e');
-      throw Exception('网络连接错误，请检查网络连接');
-    } catch (e, stackTrace) {
-      Logger.error('更新V2Ray订阅失败: $e\nStack trace: $stackTrace');
-      if (e.toString().contains('404')) {
-        throw Exception('订阅链接不存在，请检查链接是否正确');
-      } else if (e.toString().contains('timeout')) {
-        throw Exception('连接超时，请稍后重试');
+          if (retryCount <= maxRetries) {
+            Logger.info('等待${retryDelay.inSeconds}秒后重试...');
+            await Future.delayed(retryDelay);
+            continue;
+          } else {
+            throw Exception('连接超时，请稍后重试');
+          }
+        }
+        rethrow;
       }
-      rethrow;
     }
+
+    // 如果所有重试都失败了
+    throw Exception('更新V2Ray订阅失败，已重试$maxRetries次');
   }
 
   // 停止V2Ray

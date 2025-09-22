@@ -96,114 +96,161 @@ class ClashService {
   // 更新订阅
   Future<bool> updateSubscription(String subscriptionUrl) async {
     Logger.info('更新Clash订阅: $subscriptionUrl');
-    try {
-      // 下载新的配置文件
-      final response = await http
-          .get(Uri.parse(subscriptionUrl))
-          .timeout(
-            const Duration(seconds: 30),
-            onTimeout: () {
-              Logger.error('下载Clash订阅配置超时');
-              throw Exception('下载Clash订阅配置超时，请稍后重试');
-            },
-          );
 
-      // 检查HTTP响应状态码
-      if (response.statusCode >= 300) {
-        Logger.error('下载Clash订阅配置失败: ${response.statusCode}');
-        if (response.statusCode == 404) {
-          throw Exception('订阅链接不存在，请检查链接是否正确');
-        } else if (response.statusCode == 403) {
-          throw Exception('访问被拒绝，请检查订阅链接权限');
-        } else {
-          throw Exception('下载Clash订阅配置失败: HTTP ${response.statusCode}');
-        }
-      }
+    // 添加重试机制
+    int retryCount = 0;
+    const maxRetries = 3;
+    const retryDelay = Duration(seconds: 2);
 
-      // 检查响应内容是否为空
-      if (response.body.isEmpty) {
-        Logger.error('下载Clash订阅配置失败: 响应内容为空');
-        throw Exception('下载Clash订阅配置失败: 响应内容为空');
-      }
+    while (retryCount <= maxRetries) {
+      try {
+        Logger.info('尝试更新Clash订阅 (第${retryCount + 1}次)');
 
-      // 解析配置
-      Logger.info('解析Clash订阅配置');
-      String config = response.body;
+        // 下载新的配置文件
+        final response = await http
+            .get(Uri.parse(subscriptionUrl))
+            .timeout(
+              const Duration(seconds: 30),
+              onTimeout: () {
+                Logger.error('下载Clash订阅配置超时');
+                throw Exception('下载Clash订阅配置超时，请稍后重试');
+              },
+            );
 
-      // 检查配置内容类型
-      if (_isProxyLinkList(config)) {
-        // 如果是代理链接列表，转换为Clash配置格式
-        Logger.info('检测到代理链接列表，正在转换为Clash配置格式');
-        config = _convertProxyLinksToClashConfig(config);
-      } else {
-        // 验证配置是否为有效的YAML格式
-        if (!_isValidYaml(config)) {
-          Logger.error('配置不是有效的YAML格式');
-          // 尝试Base64解码
-          try {
-            Logger.info('尝试Base64解码配置');
-            final decoded = utf8.decode(base64Decode(config));
-            // 检查解码后的内容是否为代理链接列表
-            if (_isProxyLinkList(decoded)) {
-              Logger.info('解码后检测到代理链接列表，正在转换为Clash配置格式');
-              config = _convertProxyLinksToClashConfig(decoded);
-            } else if (_isValidYaml(decoded)) {
-              Logger.info('配置是Base64编码的YAML，已解码');
-              config = decoded;
-            } else {
-              Logger.error('解码后的配置仍不是有效的YAML格式');
-              throw Exception('配置不是有效的YAML格式');
-            }
-          } catch (decodeError) {
-            Logger.error('配置解码失败: $decodeError');
-            throw Exception('配置不是有效的YAML格式且无法解码: $decodeError');
+        // 检查HTTP响应状态码
+        if (response.statusCode >= 300) {
+          Logger.error('下载Clash订阅配置失败: ${response.statusCode}');
+          if (response.statusCode == 404) {
+            throw Exception('订阅链接不存在，请检查链接是否正确');
+          } else if (response.statusCode == 403) {
+            throw Exception('访问被拒绝，请检查订阅链接权限');
+          } else {
+            throw Exception('下载Clash订阅配置失败: HTTP ${response.statusCode}');
           }
         }
-      }
 
-      // 保存配置到现有配置文件或创建新文件
-      if (_configPath != null) {
-        // 保存到现有配置文件
-        final configFile = File(_configPath!);
-        await configFile.writeAsString(config);
-        Logger.info('Clash配置已更新到: ${_configPath!}');
-      } else {
-        // 创建临时配置文件
-        final tempDir = await Directory.systemTemp.createTemp('clash_config');
-        final configFile = File(path.join(tempDir.path, 'config.yaml'));
-        await configFile.writeAsString(config);
-        _configPath = configFile.path;
-        Logger.info('Clash配置已保存到临时文件: ${_configPath!}');
-      }
-
-      // 如果Clash正在运行，重新启动它以应用新配置
-      if (_isConnected && _process != null) {
-        Logger.info('Clash正在运行，重新启动以应用新配置');
-        await stop();
-        final result = await startWithConfig(_configPath!);
-        if (!result) {
-          Logger.error('Clash重新启动失败');
-          throw Exception('Clash重新启动失败');
+        // 检查响应内容是否为空
+        if (response.body.isEmpty) {
+          Logger.error('下载Clash订阅配置失败: 响应内容为空');
+          throw Exception('下载Clash订阅配置失败: 响应内容为空');
         }
-        return result;
-      }
 
-      Logger.info('Clash订阅更新成功');
-      return true;
-    } on SocketException catch (e) {
-      Logger.error('网络连接错误: $e');
-      throw Exception('网络连接错误，请检查网络连接');
-    } on TlsException catch (e) {
-      Logger.error('TLS/SSL错误: $e');
-      throw Exception('TLS/SSL连接错误，请检查服务器证书');
-    } on HandshakeException catch (e) {
-      Logger.error('TLS握手错误: $e');
-      throw Exception('TLS握手失败，请检查服务器配置');
-    } catch (e, stackTrace) {
-      Logger.error('更新Clash订阅失败: $e\nStack trace: $stackTrace');
-      // 修复：确保返回false而不是重新抛出异常，以避免UI层处理复杂化
-      return false;
+        // 解析配置
+        Logger.info('解析Clash订阅配置');
+        String config = response.body;
+
+        // 检查配置内容类型
+        if (_isProxyLinkList(config)) {
+          // 如果是代理链接列表，转换为Clash配置格式
+          Logger.info('检测到代理链接列表，正在转换为Clash配置格式');
+          config = _convertProxyLinksToClashConfig(config);
+        } else {
+          // 验证配置是否为有效的YAML格式
+          if (!_isValidYaml(config)) {
+            Logger.error('配置不是有效的YAML格式');
+            // 尝试Base64解码
+            try {
+              Logger.info('尝试Base64解码配置');
+              final decoded = utf8.decode(base64Decode(config));
+              // 检查解码后的内容是否为代理链接列表
+              if (_isProxyLinkList(decoded)) {
+                Logger.info('解码后检测到代理链接列表，正在转换为Clash配置格式');
+                config = _convertProxyLinksToClashConfig(decoded);
+              } else if (_isValidYaml(decoded)) {
+                Logger.info('配置是Base64编码的YAML，已解码');
+                config = decoded;
+              } else {
+                Logger.error('解码后的配置仍不是有效的YAML格式');
+                throw Exception('配置不是有效的YAML格式');
+              }
+            } catch (decodeError) {
+              Logger.error('配置解码失败: $decodeError');
+              throw Exception('配置不是有效的YAML格式且无法解码: $decodeError');
+            }
+          }
+        }
+
+        // 保存配置到现有配置文件或创建新文件
+        if (_configPath != null) {
+          // 保存到现有配置文件
+          final configFile = File(_configPath!);
+          await configFile.writeAsString(config);
+          Logger.info('Clash配置已更新到: ${_configPath!}');
+        } else {
+          // 创建临时配置文件
+          final tempDir = await Directory.systemTemp.createTemp('clash_config');
+          final configFile = File(path.join(tempDir.path, 'config.yaml'));
+          await configFile.writeAsString(config);
+          _configPath = configFile.path;
+          Logger.info('Clash配置已保存到临时文件: ${_configPath!}');
+        }
+
+        // 如果Clash正在运行，重新启动它以应用新配置
+        if (_isConnected && _process != null) {
+          Logger.info('Clash正在运行，重新启动以应用新配置');
+          await stop();
+          final result = await startWithConfig(_configPath!);
+          if (!result) {
+            Logger.error('Clash重新启动失败');
+            throw Exception('Clash重新启动失败');
+          }
+          return result;
+        }
+
+        Logger.info('Clash订阅更新成功');
+        return true;
+      } on SocketException catch (e) {
+        Logger.error('网络连接错误: $e');
+        retryCount++;
+
+        if (retryCount <= maxRetries) {
+          Logger.info('等待${retryDelay.inSeconds}秒后重试...');
+          await Future.delayed(retryDelay);
+        } else {
+          throw Exception('网络连接错误，请检查网络连接');
+        }
+      } on TlsException catch (e) {
+        Logger.error('TLS/SSL错误: $e');
+        retryCount++;
+
+        if (retryCount <= maxRetries) {
+          Logger.info('等待${retryDelay.inSeconds}秒后重试...');
+          await Future.delayed(retryDelay);
+        } else {
+          throw Exception('TLS/SSL连接错误，请检查服务器证书');
+        }
+      } on HandshakeException catch (e) {
+        Logger.error('TLS握手错误: $e');
+        retryCount++;
+
+        if (retryCount <= maxRetries) {
+          Logger.info('等待${retryDelay.inSeconds}秒后重试...');
+          await Future.delayed(retryDelay);
+        } else {
+          throw Exception('TLS握手失败，请检查服务器配置');
+        }
+      } catch (e, stackTrace) {
+        Logger.error('更新Clash订阅失败: $e\nStack trace: $stackTrace');
+        // 修复：确保返回false而不是重新抛出异常，以避免UI层处理复杂化
+        if (e.toString().contains('404')) {
+          throw Exception('订阅链接不存在，请检查链接是否正确');
+        } else if (e.toString().contains('timeout')) {
+          retryCount++;
+
+          if (retryCount <= maxRetries) {
+            Logger.info('等待${retryDelay.inSeconds}秒后重试...');
+            await Future.delayed(retryDelay);
+            continue;
+          } else {
+            throw Exception('连接超时，请稍后重试');
+          }
+        }
+        return false;
+      }
     }
+
+    // 如果所有重试都失败了
+    throw Exception('更新Clash订阅失败，已重试$maxRetries次');
   }
 
   // 检查是否为代理链接列表
