@@ -1,0 +1,9 @@
+proxies:
+  - {
+      name: "test-proxy",
+      type: ss,
+      server: "cncm.hushitanke.top",
+      port: 50016,
+      cipher: "chacha20-ietf-poly1305",
+      password: "ef18df75-d207-38ca-90ea-97884c4a9397",
+    }

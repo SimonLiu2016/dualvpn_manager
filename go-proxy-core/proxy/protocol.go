@@ -2,6 +2,7 @@ package proxy
 
 import (
 	"fmt"
+	"log"
 	"net"
 )
 
@@ -25,6 +26,7 @@ const (
 	ProtocolHTTPS        ProtocolType = "https"
 	ProtocolSOCKS5       ProtocolType = "socks5"
 	ProtocolDIRECT       ProtocolType = "direct"
+	ProtocolVLESS        ProtocolType = "vless" // 添加VLESS协议类型
 )
 
 // ProxyProtocol 代理协议接口
@@ -87,6 +89,7 @@ type ProtocolManager struct {
 
 // NewProtocolManager 创建新的协议管理器
 func NewProtocolManager() *ProtocolManager {
+	log.Printf("创建新的协议管理器")
 	return &ProtocolManager{
 		protocols: make(map[string]ProxyProtocol),
 		factories: make(map[ProtocolType]ProtocolFactory),
@@ -95,48 +98,73 @@ func NewProtocolManager() *ProtocolManager {
 
 // RegisterFactory 注册协议工厂
 func (pm *ProtocolManager) RegisterFactory(protocolType ProtocolType, factory ProtocolFactory) {
+	log.Printf("注册协议工厂: type=%s", protocolType)
 	pm.factories[protocolType] = factory
 }
 
 // CreateProtocol 创建协议实例
 func (pm *ProtocolManager) CreateProtocol(protocolType ProtocolType, name string, config map[string]interface{}) (ProxyProtocol, error) {
+	log.Printf("尝试创建协议: type=%s, name=%s", protocolType, name)
+
 	factory, exists := pm.factories[protocolType]
 	if !exists {
+		log.Printf("不支持的协议类型: %s", protocolType)
 		return nil, fmt.Errorf("unsupported protocol type: %s", protocolType)
 	}
 
 	protocol, err := factory.CreateProtocol(config)
 	if err != nil {
+		log.Printf("创建协议 %s 失败: %v", protocolType, err)
 		return nil, fmt.Errorf("failed to create protocol %s: %v", protocolType, err)
 	}
 
 	// 将协议添加到管理器中
 	pm.protocols[name] = protocol
 
+	// 添加日志以调试协议创建过程
+	log.Printf("成功创建并注册协议: name=%s, type=%s", name, protocolType)
+
 	return protocol, nil
 }
 
 // GetProtocol 获取协议实例
 func (pm *ProtocolManager) GetProtocol(name string) ProxyProtocol {
+	log.Printf("获取协议: name=%s", name)
 	return pm.protocols[name]
 }
 
 // RemoveProtocol 移除协议实例
 func (pm *ProtocolManager) RemoveProtocol(name string) {
+	log.Printf("移除协议: name=%s", name)
 	delete(pm.protocols, name)
 }
 
 // GetAllProtocols 获取所有协议实例
 func (pm *ProtocolManager) GetAllProtocols() map[string]ProxyProtocol {
+	log.Printf("获取所有协议，数量: %d", len(pm.protocols))
 	return pm.protocols
 }
 
 // Connect 通过指定协议连接到目标地址
 func (pm *ProtocolManager) Connect(protocolName, targetAddr string) (net.Conn, error) {
+	log.Printf("协议管理器尝试通过协议 %s 连接到目标 %s", protocolName, targetAddr)
+
 	protocol, exists := pm.protocols[protocolName]
 	if !exists {
+		// 尝试查找相似名称的协议
+		log.Printf("协议 %s 未找到，尝试查找相似名称的协议", protocolName)
+		for name, p := range pm.protocols {
+			log.Printf("可用协议: %s (%s)", name, p.Type())
+		}
 		return nil, fmt.Errorf("protocol %s not found", protocolName)
 	}
 
-	return protocol.Connect(targetAddr)
+	conn, err := protocol.Connect(targetAddr)
+	if err != nil {
+		log.Printf("协议 %s 连接到目标 %s 失败: %v", protocolName, targetAddr, err)
+		return nil, err
+	}
+
+	log.Printf("协议 %s 成功连接到目标 %s", protocolName, targetAddr)
+	return conn, nil
 }

@@ -1,19 +1,20 @@
 package proxy
 
 import (
+	"bufio"
 	"fmt"
+	"log"
 	"net"
-	"strings"
+	"net/http"
+	"net/url"
 	"time"
 )
 
 // HTTPProtocol HTTP协议实现
 type HTTPProtocol struct {
 	BaseProtocol
-	server   string
-	port     int
-	username string
-	password string
+	server string
+	port   int
 }
 
 // HTTPProtocolFactory HTTP协议工厂
@@ -26,21 +27,12 @@ func (f *HTTPProtocolFactory) CreateProtocol(config map[string]interface{}) (Pro
 		return nil, fmt.Errorf("missing server in config")
 	}
 
-	// 修复：正确处理端口配置
-	var port int
-	switch v := config["port"].(type) {
-	case int:
-		port = v
-	case float64:
-		port = int(v)
-	default:
-		return nil, fmt.Errorf("missing or invalid port in config")
+	port, ok := config["port"].(int)
+	if !ok {
+		return nil, fmt.Errorf("missing port in config")
 	}
 
-	username, _ := config["username"].(string)
-	password, _ := config["password"].(string)
 	name, _ := config["name"].(string)
-
 	if name == "" {
 		name = fmt.Sprintf("http-%s:%d", server, port)
 	}
@@ -50,66 +42,69 @@ func (f *HTTPProtocolFactory) CreateProtocol(config map[string]interface{}) (Pro
 			name:         name,
 			protocolType: ProtocolHTTP,
 		},
-		server:   server,
-		port:     port,
-		username: username,
-		password: password,
+		server: server,
+		port:   port,
 	}
+
+	// 添加日志以调试HTTP协议创建
+	log.Printf("创建HTTP协议: server=%s, port=%d", server, port)
 
 	return protocol, nil
 }
 
 // Connect 连接到目标地址（通过HTTP代理）
 func (hp *HTTPProtocol) Connect(targetAddr string) (net.Conn, error) {
+	// 添加详细的连接日志
+	log.Printf("HTTP协议开始连接: targetAddr=%s, server=%s, port=%d",
+		targetAddr, hp.server, hp.port)
+
 	// 连接到HTTP代理服务器
 	proxyAddr := fmt.Sprintf("%s:%d", hp.server, hp.port)
+	log.Printf("连接到HTTP代理服务器地址: %s", proxyAddr)
+
 	conn, err := net.DialTimeout("tcp", proxyAddr, 5*time.Second)
 	if err != nil {
-		return nil, fmt.Errorf("failed to connect to HTTP proxy %s: %v", proxyAddr, err)
+		log.Printf("连接HTTP代理服务器失败: %v", err)
+		return nil, fmt.Errorf("failed to connect to HTTP proxy server %s: %v", proxyAddr, err)
 	}
 
-	// 实现HTTP代理协议握手逻辑
 	// 发送CONNECT请求
-	connectReq := fmt.Sprintf("CONNECT %s HTTP/1.1\r\nHost: %s\r\n\r\n", targetAddr, targetAddr)
-	_, err = conn.Write([]byte(connectReq))
-	if err != nil {
+	connectReq := &http.Request{
+		Method: "CONNECT",
+		URL:    &url.URL{Opaque: targetAddr},
+		Host:   targetAddr,
+		Header: make(http.Header),
+	}
+	connectReq.Header.Set("User-Agent", "DualVPN-Proxy/1.0")
+
+	// 发送请求
+	log.Printf("发送CONNECT请求到HTTP代理服务器")
+	if err := connectReq.Write(conn); err != nil {
 		conn.Close()
+		log.Printf("发送CONNECT请求失败: %v", err)
 		return nil, fmt.Errorf("failed to send CONNECT request: %v", err)
 	}
 
 	// 读取响应
-	buf := make([]byte, 1024)
-	response := ""
-
-	// 循环读取直到找到响应头结束标记
-	for {
-		n, err := conn.Read(buf)
-		if err != nil {
-			conn.Close()
-			return nil, fmt.Errorf("failed to read CONNECT response: %v", err)
-		}
-
-		response += string(buf[:n])
-
-		// 检查是否收到完整的响应头
-		if strings.Contains(response, "\r\n\r\n") {
-			break
-		}
-
-		// 防止无限循环
-		if len(response) > 8192 {
-			conn.Close()
-			return nil, fmt.Errorf("response too large or malformed")
-		}
-	}
-
-	// 检查响应状态码
-	if !strings.HasPrefix(response, "HTTP/1.1 200") && !strings.HasPrefix(response, "HTTP/1.0 200") {
+	log.Printf("读取HTTP代理服务器响应")
+	resp, err := http.ReadResponse(bufio.NewReader(conn), connectReq)
+	if err != nil {
 		conn.Close()
-		return nil, fmt.Errorf("CONNECT request failed: %s", response)
+		log.Printf("读取HTTP代理服务器响应失败: %v", err)
+		return nil, fmt.Errorf("failed to read CONNECT response: %v", err)
+	}
+	defer resp.Body.Close()
+
+	// 检查响应状态
+	if resp.StatusCode != http.StatusOK {
+		conn.Close()
+		log.Printf("HTTP代理服务器CONNECT请求失败，状态码: %d", resp.StatusCode)
+		return nil, fmt.Errorf("CONNECT request failed with status %d", resp.StatusCode)
 	}
 
-	// 连接已建立，返回连接
+	// 添加日志以调试HTTP连接过程
+	log.Printf("HTTP协议成功连接到目标: %s 通过代理: %s:%d", targetAddr, hp.server, hp.port)
+
 	return conn, nil
 }
 

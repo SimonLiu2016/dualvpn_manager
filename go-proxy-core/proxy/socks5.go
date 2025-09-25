@@ -35,8 +35,10 @@ func NewSOCKS5Server(port int, rulesEngine *routing.RulesEngine, protocolManager
 // Start 启动SOCKS5服务器
 func (ss *SOCKS5Server) Start() error {
 	addr := net.JoinHostPort("127.0.0.1", fmt.Sprintf("%d", ss.port))
+	log.Printf("尝试启动SOCKS5服务器在地址: %s", addr)
 	listener, err := net.Listen("tcp", addr)
 	if err != nil {
+		log.Printf("启动SOCKS5服务器失败: %v", err)
 		return err
 	}
 
@@ -44,6 +46,7 @@ func (ss *SOCKS5Server) Start() error {
 	ss.running = true
 
 	log.Printf("SOCKS5 proxy server listening on %s", addr)
+	log.Printf("SOCKS5服务器配置: port=%d", ss.port)
 
 	for ss.running {
 		conn, err := listener.Accept()
@@ -154,6 +157,9 @@ func (ss *SOCKS5Server) handleConnection(clientConn net.Conn) {
 	proxySource := ss.rulesEngine.Match(targetAddr)
 	log.Printf("SOCKS5 request to %s, matched proxy source: %s", targetAddr, proxySource)
 
+	// 添加更详细的日志以调试路由匹配
+	log.Printf("路由匹配详情: 目标地址=%s, 匹配到的代理源=%s", targetAddr, proxySource)
+
 	if proxySource == "DIRECT" {
 		// 直接连接目标
 		ss.handleDirectConnection(clientConn, targetAddr)
@@ -163,32 +169,10 @@ func (ss *SOCKS5Server) handleConnection(clientConn net.Conn) {
 	}
 }
 
-// handleDirectConnection 处理直接连接
-func (ss *SOCKS5Server) handleDirectConnection(clientConn net.Conn, targetAddr string) {
-	// 使用协议管理器进行直连
-	conn, err := ss.protocolManager.Connect("direct", targetAddr)
-	if err != nil {
-		log.Printf("Error connecting to target: %v", err)
-		// 发送连接失败响应
-		clientConn.Write([]byte{0x05, 0x05, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00})
-		return
-	}
-	defer conn.Close()
-
-	// 发送连接成功响应
-	clientConn.Write([]byte{0x05, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00})
-
-	// 创建带统计的连接包装器
-	statsClientConn := &StatsConn{Conn: clientConn, collector: &SOCKS5ServerStats{server: ss}}
-	statsTargetConn := &StatsConn{Conn: conn, collector: &SOCKS5ServerStats{server: ss}}
-
-	// 在客户端和目标服务器之间转发数据
-	go io.Copy(statsTargetConn, statsClientConn)
-	io.Copy(statsClientConn, statsTargetConn)
-}
-
 // handleProxyConnection 处理通过代理连接
 func (ss *SOCKS5Server) handleProxyConnection(clientConn net.Conn, targetAddr string, proxySource string) {
+	log.Printf("SOCKS5服务器通过代理源 %s 连接到目标 %s", proxySource, targetAddr)
+
 	// 使用协议管理器通过指定代理连接
 	conn, err := ss.protocolManager.Connect(proxySource, targetAddr)
 	if err != nil {
@@ -207,6 +191,52 @@ func (ss *SOCKS5Server) handleProxyConnection(clientConn net.Conn, targetAddr st
 	statsTargetConn := &StatsConn{Conn: conn, collector: &SOCKS5ServerStats{server: ss}}
 
 	// 在客户端和目标服务器之间转发数据
-	go io.Copy(statsTargetConn, statsClientConn)
-	io.Copy(statsClientConn, statsTargetConn)
+	go func() {
+		_, err := io.Copy(statsTargetConn, statsClientConn)
+		if err != nil {
+			log.Printf("数据转发错误 (客户端到目标): %v", err)
+		}
+		statsTargetConn.Close()
+	}()
+	_, err = io.Copy(statsClientConn, statsTargetConn)
+	if err != nil {
+		log.Printf("数据转发错误 (目标到客户端): %v", err)
+	}
+	statsClientConn.Close()
+}
+
+// handleDirectConnection 处理直接连接
+func (ss *SOCKS5Server) handleDirectConnection(clientConn net.Conn, targetAddr string) {
+	log.Printf("SOCKS5服务器直接连接到目标 %s", targetAddr)
+
+	// 使用协议管理器进行直连
+	conn, err := ss.protocolManager.Connect("direct", targetAddr)
+	if err != nil {
+		log.Printf("Error connecting to target: %v", err)
+		// 发送连接失败响应
+		clientConn.Write([]byte{0x05, 0x05, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00})
+		return
+	}
+	defer conn.Close()
+
+	// 发送连接成功响应
+	clientConn.Write([]byte{0x05, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00})
+
+	// 创建带统计的连接包装器
+	statsClientConn := &StatsConn{Conn: clientConn, collector: &SOCKS5ServerStats{server: ss}}
+	statsTargetConn := &StatsConn{Conn: conn, collector: &SOCKS5ServerStats{server: ss}}
+
+	// 在客户端和目标服务器之间转发数据
+	go func() {
+		_, err := io.Copy(statsTargetConn, statsClientConn)
+		if err != nil {
+			log.Printf("数据转发错误 (客户端到目标): %v", err)
+		}
+		statsTargetConn.Close()
+	}()
+	_, err = io.Copy(statsClientConn, statsTargetConn)
+	if err != nil {
+		log.Printf("数据转发错误 (目标到客户端): %v", err)
+	}
+	statsClientConn.Close()
 }

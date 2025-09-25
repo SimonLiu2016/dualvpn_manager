@@ -60,13 +60,21 @@ func (re *RulesEngine) Match(destination string) string {
 
 	log.Printf("提取主机名: %s", host)
 
-	for _, rule := range re.rules {
+	// 添加更详细的规则匹配日志
+	log.Printf("当前规则数量: %d", len(re.rules))
+	for i, rule := range re.rules {
+		log.Printf("规则 %d: Type=%s, Pattern=%s, ProxySource=%s, Enabled=%t",
+			i, rule.Type, rule.Pattern, rule.ProxySource, rule.Enabled)
+	}
+
+	for i, rule := range re.rules {
 		if !rule.Enabled {
+			log.Printf("跳过禁用规则 %d", i)
 			continue
 		}
 
-		log.Printf("检查规则: Type=%s, Pattern=%s, ProxySource=%s, Enabled=%t",
-			rule.Type, rule.Pattern, rule.ProxySource, rule.Enabled)
+		log.Printf("检查规则 %d: Type=%s, Pattern=%s, ProxySource=%s, Enabled=%t",
+			i, rule.Type, rule.Pattern, rule.ProxySource, rule.Enabled)
 
 		switch rule.Type {
 		case "DOMAIN":
@@ -81,6 +89,7 @@ func (re *RulesEngine) Match(destination string) string {
 				return rule.ProxySource
 			}
 		case "IP-CIDR":
+			log.Printf("检查IP-CIDR匹配: destination=%s, pattern=%s", destination, rule.Pattern)
 			if re.matchCIDR(destination, rule.Pattern) {
 				log.Printf("IP-CIDR规则匹配成功: %s -> %s", destination, rule.ProxySource)
 				return rule.ProxySource
@@ -89,6 +98,8 @@ func (re *RulesEngine) Match(destination string) string {
 			// MATCH规则匹配所有流量
 			log.Printf("MATCH规则匹配: %s -> %s", destination, rule.ProxySource)
 			return rule.ProxySource
+		default:
+			log.Printf("未知规则类型: %s", rule.Type)
 		}
 	}
 

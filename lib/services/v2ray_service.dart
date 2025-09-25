@@ -448,13 +448,25 @@ class V2RayService {
                     outbound['name'] ??
                     'V2Ray Outbound ${i + 1}';
                 final protocol = outbound['protocol'] ?? 'unknown';
-                proxies.add({
+                
+                // 构建代理信息
+                final proxyInfo = {
                   'name': name,
                   'type': 'v2ray',
                   'protocol': protocol,
                   'latency': -2, // -2表示未测试
                   'isSelected': false,
-                });
+                };
+                
+                // 添加协议特定的配置信息
+                if (outbound.containsKey('settings')) {
+                  proxyInfo['settings'] = outbound['settings'];
+                }
+                if (outbound.containsKey('streamSettings')) {
+                  proxyInfo['streamSettings'] = outbound['streamSettings'];
+                }
+                
+                proxies.add(proxyInfo);
               }
             }
           }
@@ -478,12 +490,50 @@ class V2RayService {
                       : null) ??
                   uri.queryParameters['remarks'] ??
                   'V2Ray Server ${i + 1}';
-              proxies.add({
-                'name': name,
-                'type': 'v2ray',
-                'latency': -2, // -2表示未测试
-                'isSelected': false,
-              });
+              
+              // 解析Vmess链接
+              if (line.startsWith('vmess://')) {
+                try {
+                  // 解码base64部分
+                  final base64Part = line.substring(8); // 移除 "vmess://" 前缀
+                  String paddedBase64 = base64Part;
+                  final padding = 4 - (base64Part.length % 4);
+                  if (padding != 4) {
+                    paddedBase64 += '=' * padding;
+                  }
+                  final jsonStr = utf8.decode(base64Decode(paddedBase64));
+                  final data = json.decode(jsonStr) as Map<String, dynamic>;
+                  
+                  proxies.add({
+                    'name': name,
+                    'type': 'v2ray',
+                    'protocol': 'vmess',
+                    'server': data['add'],
+                    'port': data['port'],
+                    'uuid': data['id'],
+                    'alterId': data['aid'] ?? 0,
+                    'security': data['scy'] ?? 'auto',
+                    'network': data['net'] ?? 'tcp',
+                    'tls': data['tls'] == 'tls',
+                    'latency': -2, // -2表示未测试
+                    'isSelected': false,
+                  });
+                } catch (decodeError) {
+                  proxies.add({
+                    'name': name,
+                    'type': 'v2ray',
+                    'latency': -2, // -2表示未测试
+                    'isSelected': false,
+                  });
+                }
+              } else {
+                proxies.add({
+                  'name': name,
+                  'type': 'v2ray',
+                  'latency': -2, // -2表示未测试
+                  'isSelected': false,
+                });
+              }
             } catch (uriError) {
               // URL解析失败，使用默认名称
               proxies.add({
@@ -502,6 +552,55 @@ class V2RayService {
     } catch (e, stackTrace) {
       Logger.error('从订阅链接解析V2Ray代理列表失败: $e\nStack trace: $stackTrace');
       rethrow;
+    }
+  }
+  
+  // 获取指定代理的详细配置信息
+  Future<Map<String, dynamic>?> getProxyDetails(String proxyName) async {
+    try {
+      Logger.info('获取V2Ray代理详细配置信息: $proxyName');
+      
+      // 获取代理列表
+      final proxies = await getProxies();
+      
+      // 查找指定代理
+      for (var proxy in proxies) {
+        if (proxy['name'] == proxyName) {
+          // 构建协议配置
+          final protocolConfig = {
+            'name': proxyName,
+            'type': 'socks5', // V2Ray通过SOCKS5协议连接
+            'server': proxy['server'] ?? '127.0.0.1',
+            'port': proxy['port'] ?? 1080,
+          };
+          
+          // 添加V2Ray特有的配置
+          if (proxy.containsKey('uuid')) {
+            protocolConfig['user_id'] = proxy['uuid'];
+          }
+          if (proxy.containsKey('alterId')) {
+            protocolConfig['alter_id'] = proxy['alterId'];
+          }
+          if (proxy.containsKey('security')) {
+            protocolConfig['security'] = proxy['security'];
+          }
+          if (proxy.containsKey('network')) {
+            protocolConfig['network'] = proxy['network'];
+          }
+          if (proxy.containsKey('tls')) {
+            protocolConfig['tls'] = proxy['tls'];
+          }
+          
+          Logger.info('构建的协议配置: $protocolConfig');
+          return protocolConfig;
+        }
+      }
+      
+      Logger.warn('未找到代理的详细配置信息: $proxyName');
+      return null;
+    } catch (e) {
+      Logger.error('获取V2Ray代理详细配置信息时出错: $e');
+      return null;
     }
   }
 }

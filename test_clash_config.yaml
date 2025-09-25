@@ -1,0 +1,36 @@
+# 测试Clash配置文件
+proxies:
+  - name: "🇭🇰香港-C-Relay-2X"
+    type: ss
+    server: cncm.hushitanke.top
+    port: 50032
+    cipher: chacha20-ietf-poly1305
+    password: "ef18df75-d207-38ca-90ea-97884c4a9397"
+    udp: true
+
+  - name: "🇺🇸美国-B-Relay-1X"
+    type: vmess
+    server: us-west.example.com
+    port: 443
+    uuid: 12345678-1234-1234-1234-123456789012
+    alterId: 0
+    cipher: auto
+    tls: true
+
+  - name: "🇯🇵日本-A-Relay-3X"
+    type: trojan
+    server: jp.example.com
+    port: 443
+    password: "my_trojan_password"
+    sni: jp.example.com
+
+proxy-groups:
+  - name: "Proxy"
+    type: select
+    proxies:
+      - "🇭🇰香港-C-Relay-2X"
+      - "🇺🇸美国-B-Relay-1X"
+      - "🇯🇵日本-A-Relay-3X"
+
+rules:
+  - MATCH,Proxy

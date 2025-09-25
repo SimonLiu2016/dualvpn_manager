@@ -1,0 +1,125 @@
+#!/bin/bash
+
+# Go代理核心服务启动脚本
+# 在启动前检查端口占用情况，如果服务已运行则先停止再启动
+
+echo "Go代理核心服务启动脚本"
+echo "======================"
+
+# 检查端口占用情况
+echo "检查端口占用情况..."
+PORTS_USED=false
+
+if lsof -Pi :6160 -sTCP:LISTEN -t >/dev/null ; then
+    echo "  发现端口 6160 (HTTP代理) 被占用"
+    PORTS_USED=true
+fi
+
+if lsof -Pi :6161 -sTCP:LISTEN -t >/dev/null ; then
+    echo "  发现端口 6161 (SOCKS5代理) 被占用"
+    PORTS_USED=true
+fi
+
+if lsof -Pi :6162 -sTCP:LISTEN -t >/dev/null ; then
+    echo "  发现端口 6162 (API服务) 被占用"
+    PORTS_USED=true
+fi
+
+# 如果端口被占用，先停止现有服务
+if [ "$PORTS_USED" = true ]; then
+    echo ""
+    echo "检测到端口被占用，正在停止现有服务..."
+    /Users/simon/Workspace/vsProject/dualvpn_manager/scripts/stop_go_proxy.sh
+    sleep 2
+else
+    echo "  所有端口均未被占用"
+fi
+
+# 再次检查端口是否已释放
+echo ""
+echo "再次检查端口状态..."
+PORTS_STILL_USED=false
+
+if lsof -Pi :6160 -sTCP:LISTEN -t >/dev/null ; then
+    echo "  端口 6160 (HTTP代理) 仍然被占用，无法启动服务"
+    PORTS_STILL_USED=true
+fi
+
+if lsof -Pi :6161 -sTCP:LISTEN -t >/dev/null ; then
+    echo "  端口 6161 (SOCKS5代理) 仍然被占用，无法启动服务"
+    PORTS_STILL_USED=true
+fi
+
+if lsof -Pi :6162 -sTCP:LISTEN -t >/dev/null ; then
+    echo "  端口 6162 (API服务) 仍然被占用，无法启动服务"
+    PORTS_STILL_USED=true
+fi
+
+if [ "$PORTS_STILL_USED" = true ]; then
+    echo ""
+    echo "错误：端口仍然被占用，无法启动服务"
+    exit 1
+fi
+
+echo "端口检查通过，准备启动服务..."
+
+# 启动Go代理核心服务
+echo ""
+echo "启动Go代理核心服务..."
+cd /Users/simon/Workspace/vsProject/dualvpn_manager/go-proxy-core
+
+# 检查dualvpn-proxy可执行文件是否存在
+if [ -f "./dualvpn-proxy" ]; then
+    echo "使用已编译的可执行文件启动服务..."
+    nohup ./dualvpn-proxy > /tmp/go-proxy-core.log 2>&1 &
+    echo "服务启动命令已执行，PID: $!"
+else
+    echo "未找到可执行文件，使用go run启动服务..."
+    nohup go run cmd/main.go > /tmp/go-proxy-core.log 2>&1 &
+    echo "服务启动命令已执行，PID: $!"
+fi
+
+# 等待几秒钟让服务启动
+echo "等待服务启动..."
+sleep 3
+
+# 检查服务是否成功启动
+echo ""
+echo "检查服务启动状态..."
+SERVICE_STARTED=false
+
+if lsof -Pi :6160 -sTCP:LISTEN -t >/dev/null ; then
+    echo "  HTTP代理服务已启动 (端口 6160)"
+    SERVICE_STARTED=true
+else
+    echo "  HTTP代理服务启动失败 (端口 6160)"
+fi
+
+if lsof -Pi :6161 -sTCP:LISTEN -t >/dev/null ; then
+    echo "  SOCKS5代理服务已启动 (端口 6161)"
+    SERVICE_STARTED=true
+else
+    echo "  SOCKS5代理服务启动失败 (端口 6161)"
+fi
+
+if lsof -Pi :6162 -sTCP:LISTEN -t >/dev/null ; then
+    echo "  API服务已启动 (端口 6162)"
+    SERVICE_STARTED=true
+else
+    echo "  API服务启动失败 (端口 6162)"
+fi
+
+if [ "$SERVICE_STARTED" = true ]; then
+    echo ""
+    echo "Go代理核心服务启动完成！"
+    echo "日志文件位置: /tmp/go-proxy-core.log"
+    echo ""
+    echo "服务端口信息:"
+    echo "  HTTP代理端口: 6160"
+    echo "  SOCKS5代理端口: 6161"
+    echo "  API端口: 6162"
+else
+    echo ""
+    echo "错误：服务启动失败，请检查日志文件 /tmp/go-proxy-core.log"
+    exit 1
+fi

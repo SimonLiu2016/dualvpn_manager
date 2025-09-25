@@ -88,7 +88,7 @@ class GoProxyService {
       _process!.stderr.listen(
         (data) {
           final output = utf8.decode(data);
-          Logger.info('Go代理核心 stderr: $output');
+          // Logger.info('Go代理核心 stderr: $output');
 
           // 检查是否启动成功
           if (output.contains('Proxy core started') ||
@@ -267,10 +267,21 @@ class GoProxyService {
       final request = await client.postUrl(url);
       Logger.info('创建POST请求');
 
-      request.headers.set('Content-Type', 'application/json');
-      Logger.info('设置请求头: Content-Type=application/json');
+      request.headers.set('Content-Type', 'application/json; charset=utf-8');
+      Logger.info('设置请求头: Content-Type=application/json; charset=utf-8');
 
-      final jsonBody = jsonEncode(protocolConfig);
+      // 确保协议名称不包含特殊字符，创建一个清理后的版本
+      final cleanedProtocolConfig = Map<String, dynamic>.from(protocolConfig);
+      if (cleanedProtocolConfig.containsKey('name') &&
+          cleanedProtocolConfig['name'] is String) {
+        // 清理协议名称中的特殊字符（如emoji），只保留字母、数字、连字符和下划线
+        final originalName = cleanedProtocolConfig['name'] as String;
+        final cleanedName = originalName.replaceAll(RegExp(r'[^\w\- ]'), '');
+        cleanedProtocolConfig['name'] = cleanedName;
+        Logger.info('清理协议名称: $originalName -> $cleanedName');
+      }
+
+      final jsonBody = jsonEncode(cleanedProtocolConfig);
       Logger.info('JSON编码请求体: $jsonBody');
 
       request.write(jsonBody);
@@ -300,7 +311,7 @@ class GoProxyService {
           final protocols = await getProtocols();
           if (protocols != null) {
             Logger.info('获取到协议列表: ${protocols.keys.join(', ')}');
-            final protocolName = protocolConfig['name'] as String?;
+            final protocolName = cleanedProtocolConfig['name'] as String?;
             if (protocolName != null && protocols.containsKey('protocols')) {
               final protocolList = protocols['protocols'] as Map?;
               if (protocolList != null &&
@@ -372,11 +383,13 @@ class GoProxyService {
         } catch (e) {
           // 连接失败通常意味着端口未被占用
           // 继续检查下一个端口
+          Logger.info('端口 $port 未被占用');
         }
       }
       return true;
     } catch (e) {
       // 出现异常也认为端口可用
+      Logger.info('检查端口可用性时出现异常: $e');
       return true;
     }
   }
@@ -395,6 +408,7 @@ class GoProxyService {
       for (final p in possiblePaths) {
         final file = File(p);
         if (await file.exists()) {
+          Logger.info('找到代理核心可执行文件: $p');
           return p;
         }
       }
@@ -402,7 +416,9 @@ class GoProxyService {
       // 尝试在系统PATH中查找
       final result = await Process.run('which', ['dualvpn-proxy']);
       if (result.exitCode == 0) {
-        return result.stdout.toString().trim();
+        final path = result.stdout.toString().trim();
+        Logger.info('在系统PATH中找到代理核心可执行文件: $path');
+        return path;
       }
 
       // 尝试查找go-proxy-core目录并构建
@@ -420,6 +436,7 @@ class GoProxyService {
           final executablePath = path.join(goProxyDir.path, 'dualvpn-proxy');
           final file = File(executablePath);
           if (await file.exists()) {
+            Logger.info('成功构建代理核心可执行文件: $executablePath');
             return executablePath;
           }
         } else {
@@ -427,6 +444,7 @@ class GoProxyService {
         }
       }
 
+      Logger.error('未找到代理核心可执行文件');
       return null;
     } catch (e) {
       Logger.error('获取代理核心可执行文件路径失败: $e');
@@ -455,12 +473,14 @@ class GoProxyService {
   Future<bool> checkStatus() async {
     try {
       final url = Uri.parse('http://127.0.0.1:6162/status');
+      Logger.info('检查Go代理核心状态: $url');
       final response = await HttpClient().getUrl(url);
       final httpResponse = await response.close();
       final responseBody = await utf8.decodeStream(httpResponse);
 
       if (httpResponse.statusCode == 200) {
         final status = jsonDecode(responseBody) as Map<String, dynamic>;
+        Logger.info('Go代理核心状态检查成功: running=${status['running']}');
         return status['running'] == true;
       } else {
         Logger.error('检查状态失败: ${httpResponse.statusCode}, $responseBody');
@@ -476,12 +496,14 @@ class GoProxyService {
   Future<Map<String, dynamic>?> getStats() async {
     try {
       final url = Uri.parse('http://127.0.0.1:6162/stats');
+      Logger.info('获取Go代理核心统计信息: $url');
       final response = await HttpClient().getUrl(url);
       final httpResponse = await response.close();
       final responseBody = await utf8.decodeStream(httpResponse);
 
       if (httpResponse.statusCode == 200) {
         final stats = jsonDecode(responseBody) as Map<String, dynamic>;
+        Logger.info('获取统计信息成功');
         return stats;
       } else {
         Logger.error('获取统计信息失败: ${httpResponse.statusCode}, $responseBody');
@@ -490,6 +512,108 @@ class GoProxyService {
     } catch (e, stackTrace) {
       Logger.error('获取统计信息时出错: $e\nStack trace: $stackTrace');
       return null;
+    }
+  }
+
+  /// 设置代理源的当前代理
+  Future<bool> setCurrentProxy(
+    String sourceId,
+    Map<String, dynamic> proxyInfo,
+  ) async {
+    try {
+      final url = Uri.parse(
+        'http://127.0.0.1:6162/proxy-sources/$sourceId/current-proxy',
+      );
+      Logger.info('设置代理源 $sourceId 的当前代理: $proxyInfo');
+
+      // 添加更详细的日志以调试代理信息
+      if (proxyInfo.containsKey('config')) {
+        final config = proxyInfo['config'];
+        Logger.info('代理配置详情:');
+        config.forEach((key, value) {
+          Logger.info('  $key: $value');
+        });
+      }
+
+      final client = HttpClient();
+      client.idleTimeout = const Duration(seconds: 10);
+
+      final request = await client.putUrl(url);
+      request.headers.set('Content-Type', 'application/json; charset=utf-8');
+
+      final jsonBody = jsonEncode(proxyInfo);
+      Logger.info('JSON编码请求体: $jsonBody');
+
+      request.write(jsonBody);
+
+      final response = await request.close();
+      final responseBody = await utf8.decodeStream(response);
+
+      Logger.info('收到响应，状态码: ${response.statusCode}');
+      Logger.info('响应体: $responseBody');
+
+      if (response.statusCode == 200) {
+        Logger.info('设置代理源当前代理成功: $responseBody');
+        client.close();
+        return true;
+      } else {
+        Logger.error('设置代理源当前代理失败: ${response.statusCode}, $responseBody');
+        client.close();
+        return false;
+      }
+    } catch (e, stackTrace) {
+      Logger.error('设置代理源当前代理时出错: $e\nStack trace: $stackTrace');
+      return false;
+    }
+  }
+
+  /// 添加代理源
+  Future<bool> addProxySource(
+    String sourceId,
+    String sourceName,
+    String sourceType,
+    Map<String, dynamic> sourceConfig,
+  ) async {
+    try {
+      final url = Uri.parse('http://127.0.0.1:6162/proxy-sources');
+      Logger.info('添加代理源: id=$sourceId, name=$sourceName, type=$sourceType');
+
+      final client = HttpClient();
+      client.idleTimeout = const Duration(seconds: 10);
+
+      final request = await client.postUrl(url);
+      request.headers.set('Content-Type', 'application/json; charset=utf-8');
+
+      final proxySourceData = {
+        'id': sourceId,
+        'name': sourceName,
+        'type': sourceType,
+        'config': sourceConfig,
+      };
+
+      final jsonBody = jsonEncode(proxySourceData);
+      Logger.info('JSON编码请求体: $jsonBody');
+
+      request.write(jsonBody);
+
+      final response = await request.close();
+      final responseBody = await utf8.decodeStream(response);
+
+      Logger.info('收到响应，状态码: ${response.statusCode}');
+      Logger.info('响应体: $responseBody');
+
+      if (response.statusCode == 201) {
+        Logger.info('添加代理源成功: $responseBody');
+        client.close();
+        return true;
+      } else {
+        Logger.error('添加代理源失败: ${response.statusCode}, $responseBody');
+        client.close();
+        return false;
+      }
+    } catch (e, stackTrace) {
+      Logger.error('添加代理源时出错: $e\nStack trace: $stackTrace');
+      return false;
     }
   }
 }

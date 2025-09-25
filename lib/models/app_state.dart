@@ -152,6 +152,9 @@ class AppState extends ChangeNotifier {
             if (connected) {
               Logger.info('成功连接Clash配置 ${config.name}');
 
+              // 应用选中的代理到Go代理核心
+              _applySelectedProxyToGoProxy(selectedProxy['name']);
+
               // 应用选中的代理
               final result = await _vpnManager.selectClashProxy(
                 'GLOBAL',
@@ -184,6 +187,8 @@ class AppState extends ChangeNotifier {
             final connected = await connectShadowsocks(config);
             if (connected) {
               Logger.info('成功连接Shadowsocks配置 ${config.name}');
+              // 应用选中的代理到Go代理核心
+              _applySelectedProxyToGoProxy(selectedProxy['name']);
               // 更新Shadowsocks连接状态
               setShadowsocksConnected(true);
             } else {
@@ -206,6 +211,8 @@ class AppState extends ChangeNotifier {
             final connected = await connectV2Ray(config);
             if (connected) {
               Logger.info('成功连接V2Ray配置 ${config.name}');
+              // 应用选中的代理到Go代理核心
+              _applySelectedProxyToGoProxy(selectedProxy['name']);
               // 更新V2Ray连接状态
               setV2RayConnected(true);
             } else {
@@ -237,13 +244,16 @@ class AppState extends ChangeNotifier {
       if (result) {
         Logger.info('Go代理核心初始化成功');
 
+        // 初始化所有必要的代理源
+        await _initProxySources();
+
         // 确保相关的代理已经连接
         await _ensureProxiesConnected();
 
         // 添加延迟确保代理连接完成
         await Future.delayed(const Duration(seconds: 2));
 
-        // 应用已选中的代理到Clash服务
+        // 应用已选中的代理go代理核心
         Logger.info('开始应用启动后已选中的代理...');
         await _applySelectedProxiesAfterStartup();
         Logger.info('应用启动后已选中的代理完成');
@@ -254,8 +264,41 @@ class AppState extends ChangeNotifier {
         Logger.error('Go代理核心初始化失败');
       }
     } catch (e, stackTrace) {
-      Logger.error('初始化Go代理核心时出错: $e');
-      Logger.error('Stack trace: $stackTrace');
+      Logger.error('初始化Go代理核心时出错: $e，Stack trace: $stackTrace');
+    }
+  }
+
+  // 初始化代理源
+  Future<void> _initProxySources() async {
+    try {
+      Logger.info('初始化代理源...');
+
+      // 初始化常用的代理源
+      final proxySources = [
+        {'id': 'clash', 'name': 'Clash', 'type': 'clash'},
+        {'id': 'shadowsocks', 'name': 'Shadowsocks', 'type': 'shadowsocks'},
+        {'id': 'v2ray', 'name': 'V2Ray', 'type': 'v2ray'},
+        {'id': 'http', 'name': 'HTTP Proxy', 'type': 'http'},
+        {'id': 'socks5', 'name': 'SOCKS5 Proxy', 'type': 'socks5'},
+      ];
+
+      for (final source in proxySources) {
+        final result = await _vpnManager.addProxySource(
+          source['id']!,
+          source['name']!,
+          source['type']!,
+          {},
+        );
+        if (result) {
+          Logger.info('成功初始化代理源: ${source['id']}');
+        } else {
+          Logger.warn('初始化代理源失败: ${source['id']}');
+        }
+      }
+
+      Logger.info('代理源初始化完成');
+    } catch (e, stackTrace) {
+      Logger.error('初始化代理源时出错: $e，Stack trace: $stackTrace');
     }
   }
 
@@ -789,7 +832,7 @@ class AppState extends ChangeNotifier {
     for (var i = 0; i < proxies.length; i++) {
       final proxy = proxies[i];
       Logger.info(
-        '  新代理 $i: name=${proxy['name']}, latency=${proxy['latency']}, isSelected=${proxy['isSelected']}',
+        '  新代理 $i: name=${proxy['name']}, type=${proxy['type']}, server=${proxy['server']}, port=${proxy['port']}, method=${proxy['method']}, cipher=${proxy['cipher']}, password=${proxy['password']}, latency=${proxy['latency']}, isSelected=${proxy['isSelected']}',
       );
     }
 
@@ -920,15 +963,26 @@ class AppState extends ChangeNotifier {
     notifyListeners();
     Logger.info('=== 代理选中状态设置完成 ===');
 
-    // 如果选中了代理，则应用它
+    // 如果选中了代理，则应用它到Go代理核心
     if (isSelected) {
-      _applySelectedProxy(proxyName);
+      _applySelectedProxyToGoProxy(proxyName);
     }
   }
 
-  // 应用选中的代理到Clash服务
-  Future<void> _applySelectedProxy(String proxyName) async {
+  // 应用选中的代理到Go代理核心
+  Future<void> _applySelectedProxyToGoProxy(String proxyName) async {
     try {
+      Logger.info('正在将选中的代理应用到Go代理核心: $proxyName');
+      Logger.info('当前代理列表数量: ${_proxies.length}');
+
+      // 打印当前所有代理的信息用于调试
+      for (var i = 0; i < _proxies.length; i++) {
+        final proxy = _proxies[i];
+        Logger.info(
+          '  当前代理 $i: name=${proxy['name']}, type=${proxy['type']}, server=${proxy['server']}, port=${proxy['port']}, method=${proxy['method']}, cipher=${proxy['cipher']}, password=${proxy['password']}, isSelected=${proxy['isSelected']}',
+        );
+      }
+
       // 获取当前选中的配置
       final configs = await ConfigManager.loadConfigs();
       final currentConfig = configs.firstWhere(
@@ -936,60 +990,183 @@ class AppState extends ChangeNotifier {
         orElse: () => configs.first,
       );
 
-      // 只对Clash类型的配置应用代理选择
-      if (currentConfig.type == VPNType.clash) {
-        Logger.info('正在应用代理: $proxyName');
+      // 根据配置类型确定代理源ID和类型
+      String sourceId;
+      String sourceType;
+      String sourceName;
 
-        // 清理代理名称中的特殊字符（如emoji），只保留字母、数字、连字符和下划线
-        final cleanedProxyName = proxyName.replaceAll(RegExp(r'[^\w\- ]'), '');
-        Logger.info('清理后的代理名称: $cleanedProxyName');
+      switch (currentConfig.type) {
+        case VPNType.clash:
+          sourceId = 'clash';
+          sourceType = 'clash';
+          sourceName = 'Clash';
+          break;
+        case VPNType.shadowsocks:
+          sourceId = 'shadowsocks';
+          sourceType = 'shadowsocks';
+          sourceName = 'Shadowsocks';
+          break;
+        case VPNType.v2ray:
+          sourceId = 'v2ray';
+          sourceType = 'v2ray';
+          sourceName = 'V2Ray';
+          break;
+        case VPNType.httpProxy:
+          sourceId = 'http';
+          sourceType = 'http';
+          sourceName = 'HTTP Proxy';
+          break;
+        case VPNType.socks5:
+          sourceId = 'socks5';
+          sourceType = 'socks5';
+          sourceName = 'SOCKS5 Proxy';
+          break;
+        default:
+          sourceId = 'direct';
+          sourceType = 'direct';
+          sourceName = 'Direct';
+      }
 
-        // 直接更新Go代理核心的路由规则，而不是连接Clash服务
-        // 创建一条针对此代理的路由规则
-        final List<Map<String, dynamic>> rules = [
-          {
-            'type': 'MATCH',
-            'pattern': '',
-            'proxy_source': cleanedProxyName,
-            'enabled': true,
-          },
-        ];
+      Logger.info('确定代理源信息: id=$sourceId, type=$sourceType, name=$sourceName');
 
-        // 更新Go代理核心的路由规则
-        final result = await _vpnManager.updateGoProxyRules(rules);
-        if (result) {
-          Logger.info('成功应用代理: $proxyName (清理后: $cleanedProxyName)');
-
-          // 将路由规则发送到Go代理核心
-          _sendRoutingRulesToGoProxy();
-        } else {
-          Logger.error('应用代理失败: $proxyName');
-          // 通知UI显示错误
-          WidgetsBinding.instance.addPostFrameCallback((_) {
-            if (navigatorKey.currentContext != null) {
-              ScaffoldMessenger.of(navigatorKey.currentContext!).showSnackBar(
-                SnackBar(
-                  content: Text('应用代理失败: $proxyName'),
-                  backgroundColor: Colors.red,
-                ),
-              );
-            }
-          });
+      // 查找选中的代理信息
+      Map<String, dynamic>? selectedProxy;
+      for (var proxy in _proxies) {
+        if (proxy['name'] == proxyName && proxy['isSelected'] == true) {
+          selectedProxy = proxy;
+          break;
         }
       }
-    } catch (e) {
-      Logger.error('应用选中代理时出错: $e');
-      // 通知UI显示错误
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (navigatorKey.currentContext != null) {
-          ScaffoldMessenger.of(navigatorKey.currentContext!).showSnackBar(
-            SnackBar(
-              content: Text('应用代理时发生错误: $e'),
-              backgroundColor: Colors.red,
-            ),
-          );
+
+      if (selectedProxy == null) {
+        Logger.error('未找到选中的代理: $proxyName');
+        // 如果没找到选中的代理，尝试查找任何匹配名称的代理
+        for (var proxy in _proxies) {
+          if (proxy['name'] == proxyName) {
+            selectedProxy = proxy;
+            Logger.info('找到未选中的代理: $proxyName');
+            break;
+          }
+        }
+
+        if (selectedProxy == null) {
+          Logger.error('完全未找到代理: $proxyName');
+          return;
+        }
+      }
+
+      Logger.info('找到选中的代理信息: $selectedProxy');
+
+      // 构造完整的代理信息，包含cipher和password等配置
+      final proxyInfo = {
+        'id': selectedProxy['name'], // 使用代理名称作为ID
+        'name': selectedProxy['name'],
+        'type': selectedProxy['type'] ?? 'unknown',
+        'server': selectedProxy['server'] ?? '127.0.0.1',
+        'port': selectedProxy['port'] ?? 1080,
+        'config': <String, dynamic>{},
+      };
+
+      // 添加Shadowsocks特定配置
+      if (selectedProxy.containsKey('method') &&
+          selectedProxy['method'] != null) {
+        proxyInfo['config']['method'] = selectedProxy['method'];
+      }
+      if (selectedProxy.containsKey('password') &&
+          selectedProxy['password'] != null) {
+        proxyInfo['config']['password'] = selectedProxy['password'];
+      }
+      if (selectedProxy.containsKey('cipher') &&
+          selectedProxy['cipher'] != null) {
+        proxyInfo['config']['cipher'] = selectedProxy['cipher'];
+      }
+      if (selectedProxy.containsKey('uuid') && selectedProxy['uuid'] != null) {
+        proxyInfo['config']['uuid'] = selectedProxy['uuid'];
+      }
+      if (selectedProxy.containsKey('network') &&
+          selectedProxy['network'] != null) {
+        proxyInfo['config']['network'] = selectedProxy['network'];
+      }
+      if (selectedProxy.containsKey('tls') && selectedProxy['tls'] != null) {
+        proxyInfo['config']['tls'] = selectedProxy['tls'];
+      }
+
+      // 根据配置类型设置正确的端口和服务器
+      switch (currentConfig.type) {
+        case VPNType.clash:
+          // 对于Clash，使用实际的服务器地址和端口，而不是默认的127.0.0.1:7890
+          proxyInfo['port'] = selectedProxy['port'] ?? 7890;
+          proxyInfo['server'] = selectedProxy['server'] ?? '127.0.0.1';
+          // 确保Clash代理使用正确的配置
+          if (selectedProxy.containsKey('server') &&
+              selectedProxy['server'] != null) {
+            proxyInfo['server'] = selectedProxy['server'].toString();
+          }
+          if (selectedProxy.containsKey('port') &&
+              selectedProxy['port'] != null) {
+            proxyInfo['port'] = selectedProxy['port'] as int;
+          }
+          break;
+        case VPNType.shadowsocks:
+          proxyInfo['port'] = selectedProxy['port'] ?? 1080;
+          proxyInfo['server'] = selectedProxy['server'] ?? '127.0.0.1';
+          break;
+        case VPNType.v2ray:
+          proxyInfo['port'] = selectedProxy['port'] ?? 1080;
+          proxyInfo['server'] = selectedProxy['server'] ?? '127.0.0.1';
+          break;
+        case VPNType.httpProxy:
+          // 从配置路径中解析端口
+          final parts = currentConfig.configPath.split(':');
+          if (parts.length == 2) {
+            proxyInfo['server'] = parts[0];
+            proxyInfo['port'] = int.tryParse(parts[1]) ?? 8080;
+          }
+          break;
+        case VPNType.socks5:
+          // 从配置路径中解析端口
+          final parts = currentConfig.configPath.split(':');
+          if (parts.length == 2) {
+            proxyInfo['server'] = parts[0];
+            proxyInfo['port'] = int.tryParse(parts[1]) ?? 1080;
+          }
+          break;
+        default:
+          proxyInfo['port'] = selectedProxy['port'] ?? 1080;
+          proxyInfo['server'] = selectedProxy['server'] ?? '127.0.0.1';
+      }
+
+      Logger.info('准备设置代理源 $sourceId 的当前代理: $proxyInfo');
+
+      // 添加额外的调试日志
+      Logger.info('代理信息详情:');
+      proxyInfo.forEach((key, value) {
+        if (key == 'config') {
+          Logger.info('  config:');
+          (value as Map).forEach((k, v) {
+            Logger.info('    $k: $v');
+          });
+        } else {
+          Logger.info('  $key: $value');
         }
       });
+
+      // 设置代理源的当前代理
+      final result = await _vpnManager.setProxySourceCurrentProxy(
+        sourceId,
+        proxyInfo,
+      );
+      if (result) {
+        Logger.info('成功将代理 $proxyName 应用到Go代理核心的代理源 $sourceId');
+
+        // 更新路由规则以使用新的代理
+        _sendRoutingRulesToGoProxy();
+      } else {
+        Logger.error('将代理 $proxyName 应用到Go代理核心失败');
+      }
+    } catch (e, stackTrace) {
+      Logger.error('应用选中代理到Go代理核心时出错: $e');
+      Logger.error('Stack trace: $stackTrace');
     }
   }
 
@@ -1650,18 +1827,99 @@ class AppState extends ChangeNotifier {
                       }
                     }
 
-                    // 从proxy对象中提取类型信息
+                    // 从proxy对象中提取类型信息和其他配置
                     String type = 'unknown';
-                    if (proxy is Map && proxy.containsKey('type')) {
-                      type = proxy['type'].toString();
+                    String server = '127.0.0.1';
+                    int port = 7890;
+                    String method = '';
+                    String password = '';
+                    String cipher = '';
+                    String uuid = '';
+                    String network = '';
+                    bool tls = false;
+
+                    if (proxy is Map) {
+                      if (proxy.containsKey('type')) {
+                        type = proxy['type'].toString();
+                      }
+                      if (proxy.containsKey('server')) {
+                        server = proxy['server'].toString();
+                      }
+                      if (proxy.containsKey('port')) {
+                        port = proxy['port'] is int
+                            ? proxy['port']
+                            : int.tryParse(proxy['port'].toString()) ?? 7890;
+                      }
+                      if (proxy.containsKey('method')) {
+                        method = proxy['method'].toString();
+                      }
+                      if (proxy.containsKey('password')) {
+                        password = proxy['password'].toString();
+                      }
+                      if (proxy.containsKey('cipher')) {
+                        cipher = proxy['cipher'].toString();
+                      }
+                      if (proxy.containsKey('uuid')) {
+                        uuid = proxy['uuid'].toString();
+                      }
+                      if (proxy.containsKey('network')) {
+                        network = proxy['network'].toString();
+                      }
+                      if (proxy.containsKey('tls')) {
+                        tls = proxy['tls'] is bool
+                            ? proxy['tls']
+                            : proxy['tls'].toString() == 'true';
+                      }
                     }
 
-                    proxies.add({
+                    final proxyInfo = {
                       'name': name,
                       'type': type,
+                      'server': server,
+                      'port': port,
+                      'method': method,
+                      'password': password,
+                      'cipher': cipher,
+                      'uuid': uuid,
+                      'network': network,
+                      'tls': tls,
                       'latency': existingProxy?['latency'] ?? -2, // -2表示未测试
                       'isSelected': existingProxy?['isSelected'] ?? false,
-                    });
+                    };
+
+                    // 如果存在现有代理状态，确保包含所有配置信息
+                    if (existingProxy != null) {
+                      // 只有当新解析的值为空而旧值不为空时才使用旧值
+                      if (proxyInfo['method'].isEmpty &&
+                          existingProxy.containsKey('method')) {
+                        proxyInfo['method'] = existingProxy['method']
+                            .toString();
+                      }
+                      if (proxyInfo['password'].isEmpty &&
+                          existingProxy.containsKey('password')) {
+                        proxyInfo['password'] = existingProxy['password']
+                            .toString();
+                      }
+                      if (proxyInfo['cipher'].isEmpty &&
+                          existingProxy.containsKey('cipher')) {
+                        proxyInfo['cipher'] = existingProxy['cipher']
+                            .toString();
+                      }
+                      if (proxyInfo['uuid'].isEmpty &&
+                          existingProxy.containsKey('uuid')) {
+                        proxyInfo['uuid'] = existingProxy['uuid'].toString();
+                      }
+                      if (proxyInfo['network'].isEmpty &&
+                          existingProxy.containsKey('network')) {
+                        proxyInfo['network'] = existingProxy['network']
+                            .toString();
+                      }
+                      // 保留状态信息
+                      proxyInfo['latency'] = existingProxy['latency'];
+                      proxyInfo['isSelected'] = existingProxy['isSelected'];
+                    }
+
+                    proxies.add(proxyInfo);
                   }
                 });
               }
@@ -1669,7 +1927,6 @@ class AppState extends ChangeNotifier {
             break;
 
           case VPNType.shadowsocks:
-            // 获取Shadowsocks代理列表
             final shadowsocksProxies = await getShadowsocksProxies();
             // 保留原有代理的状态
             for (var proxy in shadowsocksProxies) {
@@ -1682,18 +1939,49 @@ class AppState extends ChangeNotifier {
                 }
               }
 
-              proxies.add({
+              // 构建代理信息，确保包含所有必要的配置
+              final proxyInfo = {
                 'name': proxy['name'],
                 'type': proxy['type'] ?? 'shadowsocks',
-                'latency':
-                    existingProxy?['latency'] ??
-                    proxy['latency'] ??
-                    -2, // -2表示未测试
-                'isSelected':
-                    existingProxy?['isSelected'] ??
-                    proxy['isSelected'] ??
-                    false,
-              });
+                'server': proxy['server'] ?? '127.0.0.1',
+                'port': proxy['port'] ?? 1080,
+                'method': proxy['method'] ?? '',
+                'password': proxy['password'] ?? '',
+                'cipher': proxy['cipher'] ?? '',
+                'latency': proxy['latency'] ?? -2, // -2表示未测试
+                'isSelected': proxy['isSelected'] ?? false,
+              };
+
+              // 如果存在现有代理状态，确保包含所有配置信息
+              if (existingProxy != null) {
+                if (existingProxy.containsKey('method') &&
+                    proxyInfo['method'].isEmpty) {
+                  proxyInfo['method'] = existingProxy['method'].toString();
+                }
+                if (existingProxy.containsKey('password') &&
+                    proxyInfo['password'].isEmpty) {
+                  proxyInfo['password'] = existingProxy['password'].toString();
+                }
+                if (existingProxy.containsKey('cipher') &&
+                    proxyInfo['cipher'].isEmpty) {
+                  proxyInfo['cipher'] = existingProxy['cipher'].toString();
+                }
+                if (existingProxy.containsKey('server') &&
+                    proxyInfo['server'] == '127.0.0.1' &&
+                    existingProxy['server'] != '127.0.0.1') {
+                  proxyInfo['server'] = existingProxy['server'].toString();
+                }
+                if (existingProxy.containsKey('port') &&
+                    proxyInfo['port'] == 1080 &&
+                    existingProxy['port'] != 1080) {
+                  proxyInfo['port'] = existingProxy['port'] as int;
+                }
+                // 保留状态信息
+                proxyInfo['latency'] = existingProxy['latency'];
+                proxyInfo['isSelected'] = existingProxy['isSelected'];
+              }
+
+              proxies.add(proxyInfo);
             }
             break;
 
@@ -1711,18 +1999,34 @@ class AppState extends ChangeNotifier {
                 }
               }
 
-              proxies.add({
+              // 构建代理信息，确保包含所有必要的配置
+              final proxyInfo = {
                 'name': proxy['name'],
                 'type': proxy['type'] ?? 'v2ray',
-                'latency':
-                    existingProxy?['latency'] ??
-                    proxy['latency'] ??
-                    -2, // -2表示未测试
-                'isSelected':
-                    existingProxy?['isSelected'] ??
-                    proxy['isSelected'] ??
-                    false,
-              });
+                'server': proxy['server'] ?? '127.0.0.1',
+                'port': proxy['port'] ?? 1080,
+                'latency': proxy['latency'] ?? -2, // -2表示未测试
+                'isSelected': proxy['isSelected'] ?? false,
+              };
+
+              // 如果存在现有代理状态，确保包含所有配置信息
+              if (existingProxy != null) {
+                if (existingProxy.containsKey('server') &&
+                    proxyInfo['server'] == '127.0.0.1' &&
+                    existingProxy['server'] != '127.0.0.1') {
+                  proxyInfo['server'] = existingProxy['server'].toString();
+                }
+                if (existingProxy.containsKey('port') &&
+                    proxyInfo['port'] == 1080 &&
+                    existingProxy['port'] != 1080) {
+                  proxyInfo['port'] = existingProxy['port'] as int;
+                }
+                // 保留状态信息
+                proxyInfo['latency'] = existingProxy['latency'];
+                proxyInfo['isSelected'] = existingProxy['isSelected'];
+              }
+
+              proxies.add(proxyInfo);
             }
             break;
 
@@ -1783,9 +2087,41 @@ class AppState extends ChangeNotifier {
         }
 
         if (existingProxy != null) {
-          proxies[i] = Map<String, dynamic>.from(proxies[i])
-            ..['latency'] = existingProxy['latency']
-            ..['isSelected'] = existingProxy['isSelected'];
+          // 保留现有状态，但确保包含所有必要的配置信息
+          final updatedProxy = Map<String, dynamic>.from(proxies[i]);
+
+          // 保留状态信息
+          updatedProxy['latency'] = existingProxy['latency'];
+          updatedProxy['isSelected'] = existingProxy['isSelected'];
+
+          // 确保包含所有必要的配置信息
+          if (existingProxy.containsKey('method') &&
+              (!updatedProxy.containsKey('method') ||
+                  (updatedProxy['method'] as String?)?.isEmpty == true)) {
+            updatedProxy['method'] = existingProxy['method'].toString();
+          }
+          if (existingProxy.containsKey('password') &&
+              (!updatedProxy.containsKey('password') ||
+                  (updatedProxy['password'] as String?)?.isEmpty == true)) {
+            updatedProxy['password'] = existingProxy['password'].toString();
+          }
+          if (existingProxy.containsKey('cipher') &&
+              (!updatedProxy.containsKey('cipher') ||
+                  (updatedProxy['cipher'] as String?)?.isEmpty == true)) {
+            updatedProxy['cipher'] = existingProxy['cipher'].toString();
+          }
+          if (existingProxy.containsKey('server') &&
+              (!updatedProxy.containsKey('server') ||
+                  updatedProxy['server'] == '127.0.0.1')) {
+            updatedProxy['server'] = existingProxy['server'].toString();
+          }
+          if (existingProxy.containsKey('port') &&
+              (!updatedProxy.containsKey('port') ||
+                  updatedProxy['port'] == 1080)) {
+            updatedProxy['port'] = existingProxy['port'] as int;
+          }
+
+          proxies[i] = updatedProxy;
         }
       }
 
@@ -1835,9 +2171,26 @@ class AppState extends ChangeNotifier {
         }
 
         if (existingProxy != null) {
-          proxies[i] = Map<String, dynamic>.from(proxies[i])
-            ..['latency'] = existingProxy['latency']
-            ..['isSelected'] = existingProxy['isSelected'];
+          // 保留现有状态，但确保包含所有必要的配置信息
+          final updatedProxy = Map<String, dynamic>.from(proxies[i]);
+
+          // 保留状态信息
+          updatedProxy['latency'] = existingProxy['latency'];
+          updatedProxy['isSelected'] = existingProxy['isSelected'];
+
+          // 确保包含所有必要的配置信息
+          if (existingProxy.containsKey('server') &&
+              (!updatedProxy.containsKey('server') ||
+                  updatedProxy['server'] == '127.0.0.1')) {
+            updatedProxy['server'] = existingProxy['server'].toString();
+          }
+          if (existingProxy.containsKey('port') &&
+              (!updatedProxy.containsKey('port') ||
+                  updatedProxy['port'] == 1080)) {
+            updatedProxy['port'] = existingProxy['port'] as int;
+          }
+
+          proxies[i] = updatedProxy;
         }
       }
 
@@ -1984,6 +2337,12 @@ class AppState extends ChangeNotifier {
               default:
                 proxySource = 'DIRECT';
             }
+
+            Logger.info(
+              '路由规则映射: 配置ID=${rule.proxyId}, 配置类型=${config.type}, 代理源=$proxySource',
+            );
+          } else {
+            Logger.warn('未找到配置ID为${rule.proxyId}的配置，使用默认直连');
           }
 
           // 检查是否是MATCH规则
@@ -1991,22 +2350,29 @@ class AppState extends ChangeNotifier {
             hasMatchRule = true;
           }
 
-          goRules.add({
+          final goRule = {
             'type': _convertRuleTypeToGoType(rule.type),
             'pattern': rule.pattern,
             'proxy_source': proxySource,
             'enabled': rule.isEnabled,
-          });
+          };
+
+          Logger.info(
+            '转换路由规则: ${goRule['type']}, ${goRule['pattern']}, ${goRule['proxy_source']}, ${goRule['enabled']}',
+          );
+          goRules.add(goRule);
         }
 
         // 如果没有MATCH规则，添加一个默认的MATCH规则
         if (!hasMatchRule) {
-          goRules.add({
+          final defaultRule = {
             'type': 'MATCH',
             'pattern': '',
             'proxy_source': 'DIRECT',
             'enabled': true,
-          });
+          };
+          Logger.info('添加默认MATCH规则: $defaultRule');
+          goRules.add(defaultRule);
         }
 
         // 添加调试日志
@@ -2116,8 +2482,7 @@ class AppState extends ChangeNotifier {
             if (result) {
               Logger.info('成功连接Clash代理: ${config.name}');
 
-              // 添加协议到Go代理核心（如果尚未添加）
-              await _addProtocolToGoProxy('clash', config);
+              // 协议应该在Go代理核心启动时自动初始化，无需手动添加
             } else {
               Logger.error('连接Clash代理失败: ${config.name}');
             }
@@ -2128,8 +2493,7 @@ class AppState extends ChangeNotifier {
             if (result) {
               Logger.info('成功连接Shadowsocks代理: ${config.name}');
 
-              // 添加协议到Go代理核心（如果尚未添加）
-              await _addProtocolToGoProxy('shadowsocks', config);
+              // 协议应该在Go代理核心启动时自动初始化，无需手动添加
             } else {
               Logger.error('连接Shadowsocks代理失败: ${config.name}');
             }
@@ -2140,8 +2504,7 @@ class AppState extends ChangeNotifier {
             if (result) {
               Logger.info('成功连接V2Ray代理: ${config.name}');
 
-              // 添加协议到Go代理核心（如果尚未添加）
-              await _addProtocolToGoProxy('v2ray', config);
+              // 协议应该在Go代理核心启动时自动初始化，无需手动添加
             } else {
               Logger.error('连接V2Ray代理失败: ${config.name}');
             }
@@ -2152,8 +2515,7 @@ class AppState extends ChangeNotifier {
             if (result) {
               Logger.info('成功连接HTTP代理: ${config.name}');
 
-              // 添加协议到Go代理核心（如果尚未添加）
-              await _addProtocolToGoProxy('http', config);
+              // 协议应该在Go代理核心启动时自动初始化，无需手动添加
             } else {
               Logger.error('连接HTTP代理失败: ${config.name}');
             }
@@ -2164,8 +2526,7 @@ class AppState extends ChangeNotifier {
             if (result) {
               Logger.info('成功连接SOCKS5代理: ${config.name}');
 
-              // 添加协议到Go代理核心（如果尚未添加）
-              await _addProtocolToGoProxy('socks5', config);
+              // 协议应该在Go代理核心启动时自动初始化，无需手动添加
             } else {
               Logger.error('连接SOCKS5代理失败: ${config.name}');
             }
@@ -2177,88 +2538,6 @@ class AppState extends ChangeNotifier {
       }
     } catch (e, stackTrace) {
       Logger.error('确保代理连接时出错: $e\nStack trace: $stackTrace');
-    }
-  }
-
-  // 添加协议到Go代理核心
-  Future<void> _addProtocolToGoProxy(
-    String protocolType,
-    VPNConfig config,
-  ) async {
-    try {
-      // 检查协议是否已经添加
-      final protocols = await _vpnManager.getGoProxyProtocols();
-      bool protocolExists = false;
-
-      if (protocols != null && protocols.containsKey('protocols')) {
-        final protocolList = protocols['protocols'] as Map?;
-        if (protocolList != null) {
-          protocolExists = protocolList.containsKey(protocolType);
-        }
-      }
-
-      if (!protocolExists) {
-        Logger.info('正在添加$protocolType协议到Go代理核心');
-
-        Map<String, dynamic> protocolConfig;
-        switch (protocolType) {
-          case 'clash':
-            protocolConfig = {
-              'name': 'clash',
-              'type': 'http',
-              'server': '127.0.0.1',
-              'port': 7890, // Clash默认HTTP端口
-            };
-            break;
-          case 'shadowsocks':
-            protocolConfig = {
-              'name': 'shadowsocks',
-              'type': 'socks5',
-              'server': '127.0.0.1',
-              'port': 1080, // Shadowsocks默认端口
-            };
-            break;
-          case 'v2ray':
-            protocolConfig = {
-              'name': 'v2ray',
-              'type': 'socks5',
-              'server': '127.0.0.1',
-              'port': 1080, // V2Ray默认端口
-            };
-            break;
-          case 'http':
-            protocolConfig = {
-              'name': 'http',
-              'type': 'http',
-              'server': '127.0.0.1',
-              'port': 8080, // HTTP代理默认端口
-            };
-            break;
-          case 'socks5':
-            protocolConfig = {
-              'name': 'socks5',
-              'type': 'socks5',
-              'server': '127.0.0.1',
-              'port': 1080, // SOCKS5代理默认端口
-            };
-            break;
-          default:
-            Logger.warn('未知协议类型: $protocolType');
-            return;
-        }
-
-        // 通过VPNManager添加协议
-        final result = await _vpnManager.addProtocolToGoProxy(protocolConfig);
-        if (result) {
-          Logger.info('成功添加$protocolType协议到Go代理核心');
-        } else {
-          Logger.error('添加$protocolType协议到Go代理核心失败');
-        }
-      } else {
-        Logger.info('$protocolType协议已存在于Go代理核心中');
-      }
-    } catch (e) {
-      Logger.error('添加协议到Go代理核心时出错: $e');
     }
   }
 

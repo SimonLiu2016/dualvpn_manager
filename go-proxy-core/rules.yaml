@@ -1,13 +1,13 @@
 rules:
   - type: "DOMAIN-SUFFIX"
     pattern: "google.com"
-    proxy_source: "clash"
+    proxy_source: "direct"
     enabled: true
   - type: "IP-CIDR"
     pattern: "192.168.1.0/24"
-    proxy_source: "openvpn"
+    proxy_source: "direct"
     enabled: true
   - type: "MATCH"
     pattern: ""
-    proxy_source: "DIRECT"
+    proxy_source: "direct"
     enabled: true

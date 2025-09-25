@@ -13,8 +13,16 @@ Go代理服务 (VPNManager)
     ↓ (启动/停止)
 Go代理核心 (独立进程)
     ↓ (流量分发)
-├── Clash核心 (Shadowsocks/V2Ray)
-├── OpenVPN进程
+├── Shadowsocks
+├── V2Ray
+├── HTTP
+├── SOCKS5
+├── PPTP
+├── L2TP
+├── IKEv2
+├── SoftEther
+├── WireGuard
+├── OpenVPN
 └── 直连流量
 ```
 
@@ -40,9 +48,6 @@ Go 代理核心使用以下端口：
 - HTTP 代理: 6160
 - SOCKS5 代理: 6161
 - API 服务: 6162
-- Clash HTTP: 7890
-- Clash SOCKS5: 7891
-- Clash API: 9090
 - OpenVPN 代理: 1080
 - DNS 服务: 53
 
@@ -80,8 +85,6 @@ PUT http://127.0.0.1:6162/rules
 http_port: 6160 # HTTP代理端口
 socks5_port: 6161 # SOCKS5代理端口
 api_port: 6162 # API服务端口
-clash_port: 7890 # Clash HTTP端口
-clash_api_port: 9090 # Clash API端口
 openvpn_port: 1080 # OpenVPN代理端口
 dns_port: 53 # DNS服务器端口
 dns_type: "fakeip" # DNS类型 (fakeip 或 doh)
@@ -136,7 +139,6 @@ rules:
 ### Go 代理核心无法启动
 
 1. 检查端口是否被占用：`lsof -i :6160`
-2. 确保 Clash 和 OpenVPN 已正确安装
 3. 检查配置文件是否正确
 
 ### 路由规则不生效

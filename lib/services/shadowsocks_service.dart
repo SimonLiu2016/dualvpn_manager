@@ -480,6 +480,10 @@ class ShadowsocksService {
             proxies.add({
               'name': name,
               'type': 'shadowsocks',
+              'server': jsonConfig['server'],
+              'port': jsonConfig['server_port'],
+              'password': jsonConfig['password'],
+              'method': jsonConfig['method'],
               'latency': -2, // -2表示未测试
               'isSelected': false,
             });
@@ -498,6 +502,10 @@ class ShadowsocksService {
                 proxies.add({
                   'name': name,
                   'type': 'shadowsocks',
+                  'server': config['server'],
+                  'port': config['server_port'],
+                  'password': config['password'],
+                  'method': config['method'],
                   'latency': -2, // -2表示未测试
                   'isSelected': false,
                 });
@@ -516,6 +524,10 @@ class ShadowsocksService {
                 proxies.add({
                   'name': name,
                   'type': 'shadowsocks',
+                  'server': proxy['server'],
+                  'port': proxy['port'],
+                  'password': proxy['password'],
+                  'method': proxy['cipher'],
                   'latency': -2, // -2表示未测试
                   'isSelected': false,
                 });
@@ -541,9 +553,41 @@ class ShadowsocksService {
                   (uri.host.isNotEmpty
                       ? '${uri.host}:${uri.port}'
                       : 'Shadowsocks Server ${i + 1}');
+              
+              // 解析用户信息
+              String method = 'aes-256-gcm';
+              String password = '';
+              if (uri.userInfo.isNotEmpty) {
+                try {
+                  // 尝试Base64解码用户信息
+                  String paddedUserInfo = uri.userInfo;
+                  final padding = 4 - (uri.userInfo.length % 4);
+                  if (padding != 4) {
+                    paddedUserInfo += '=' * padding;
+                  }
+                  final decoded = utf8.decode(base64Decode(paddedUserInfo));
+                  final parts = decoded.split(':');
+                  if (parts.length >= 2) {
+                    method = parts[0];
+                    password = parts[1];
+                  }
+                } catch (decodeError) {
+                  // 如果解码失败，直接使用用户信息
+                  final parts = uri.userInfo.split(':');
+                  if (parts.length >= 2) {
+                    method = parts[0];
+                    password = parts[1];
+                  }
+                }
+              }
+              
               proxies.add({
                 'name': name,
                 'type': 'shadowsocks',
+                'server': uri.host,
+                'port': uri.port,
+                'password': password,
+                'method': method,
                 'latency': -2, // -2表示未测试
                 'isSelected': false,
               });
@@ -565,6 +609,40 @@ class ShadowsocksService {
     } catch (e, stackTrace) {
       Logger.error('从订阅链接解析Shadowsocks代理列表失败: $e\nStack trace: $stackTrace');
       rethrow;
+    }
+  }
+  
+  // 获取指定代理的详细配置信息
+  Future<Map<String, dynamic>?> getProxyDetails(String proxyName) async {
+    try {
+      Logger.info('获取Shadowsocks代理详细配置信息: $proxyName');
+      
+      // 获取代理列表
+      final proxies = await getProxies();
+      
+      // 查找指定代理
+      for (var proxy in proxies) {
+        if (proxy['name'] == proxyName) {
+          // 构建协议配置
+          final protocolConfig = {
+            'name': proxyName,
+            'type': 'socks5', // Shadowsocks通过SOCKS5协议连接
+            'server': proxy['server'] ?? '127.0.0.1',
+            'port': proxy['port'] ?? 1080,
+            'password': proxy['password'],
+            'method': proxy['method'] ?? 'aes-256-gcm',
+          };
+          
+          Logger.info('构建的协议配置: $protocolConfig');
+          return protocolConfig;
+        }
+      }
+      
+      Logger.warn('未找到代理的详细配置信息: $proxyName');
+      return null;
+    } catch (e) {
+      Logger.error('获取Shadowsocks代理详细配置信息时出错: $e');
+      return null;
     }
   }
 }

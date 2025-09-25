@@ -467,8 +467,8 @@ class SOCKS5ProxyServer {
     void Function() safeClose,
   ) async {
     try {
-      // 获取Clash代理的实际端口，如果未指定则使用默认端口7890
-      int clashPort = 7890;
+      // 6169
+      int clashPort = 6160;
       if (proxyConfig.configPath.contains(':')) {
         final parts = proxyConfig.configPath.split(':');
         if (parts.length == 2) {
@@ -481,7 +481,7 @@ class SOCKS5ProxyServer {
 
       Logger.info('尝试连接Clash代理: 127.0.0.1:$clashPort');
 
-      // Clash通常使用7890端口作为HTTP代理
+      // 6160
       final proxySocket = await Socket.connect(
         '127.0.0.1',
         clashPort,

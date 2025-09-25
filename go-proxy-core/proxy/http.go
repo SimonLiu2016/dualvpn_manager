@@ -38,8 +38,10 @@ func NewHTTPServer(port int, rulesEngine *routing.RulesEngine, protocolManager *
 // Start 启动HTTP服务器
 func (hs *HTTPServer) Start() error {
 	addr := net.JoinHostPort("127.0.0.1", fmt.Sprintf("%d", hs.port))
+	log.Printf("尝试启动HTTP服务器在地址: %s", addr)
 	listener, err := net.Listen("tcp", addr)
 	if err != nil {
+		log.Printf("启动HTTP服务器失败: %v", err)
 		return err
 	}
 
@@ -129,51 +131,10 @@ func (hs *HTTPServer) handleConnection(clientConn net.Conn) {
 	}
 }
 
-// handleDirectConnection 处理直接连接
-func (hs *HTTPServer) handleDirectConnection(clientConn net.Conn, req *http.Request, targetAddr string) {
-	// 使用协议管理器进行直连
-	conn, err := hs.protocolManager.Connect("direct", targetAddr)
-	if err != nil {
-		log.Printf("Error connecting to target: %v", err)
-		// 发送错误响应
-		clientConn.Write([]byte("HTTP/1.1 502 Bad Gateway\r\n\r\n"))
-		return
-	}
-	defer conn.Close()
-
-	if req.Method == "CONNECT" {
-		// 对于HTTPS CONNECT请求，发送连接成功的响应
-		clientConn.Write([]byte("HTTP/1.1 200 Connection Established\r\n\r\n"))
-
-		// 创建带统计的连接包装器
-		statsClientConn := &StatsConn{Conn: clientConn, collector: &HTTPServerStats{server: hs}}
-		statsTargetConn := &StatsConn{Conn: conn, collector: &HTTPServerStats{server: hs}}
-
-		// 在客户端和目标服务器之间转发数据
-		go io.Copy(statsTargetConn, statsClientConn)
-		io.Copy(statsClientConn, statsTargetConn)
-	} else {
-		// 对于普通HTTP请求，转发请求到目标服务器
-		// 创建带统计的连接包装器
-		statsClientConn := &StatsConn{Conn: clientConn, collector: &HTTPServerStats{server: hs}}
-		statsTargetConn := &StatsConn{Conn: conn, collector: &HTTPServerStats{server: hs}}
-
-		// 先转发请求到目标服务器
-		err = req.Write(statsTargetConn)
-		if err != nil {
-			log.Printf("Error writing request to target: %v", err)
-			// 发送错误响应
-			statsClientConn.Write([]byte("HTTP/1.1 502 Bad Gateway\r\n\r\n"))
-			return
-		}
-
-		// 将目标服务器的响应转发给客户端
-		io.Copy(statsClientConn, statsTargetConn)
-	}
-}
-
 // handleProxyConnection 处理通过代理连接
 func (hs *HTTPServer) handleProxyConnection(clientConn net.Conn, req *http.Request, targetAddr string, proxySource string) {
+	log.Printf("HTTP服务器通过代理源 %s 连接到目标 %s", proxySource, targetAddr)
+
 	// 使用协议管理器通过指定代理连接
 	conn, err := hs.protocolManager.Connect(proxySource, targetAddr)
 	if err != nil {
@@ -186,6 +147,7 @@ func (hs *HTTPServer) handleProxyConnection(clientConn net.Conn, req *http.Reque
 
 	if req.Method == "CONNECT" {
 		// 对于HTTPS CONNECT请求，发送连接成功的响应
+		log.Printf("发送HTTP CONNECT成功响应")
 		clientConn.Write([]byte("HTTP/1.1 200 Connection Established\r\n\r\n"))
 
 		// 创建带统计的连接包装器
@@ -193,8 +155,18 @@ func (hs *HTTPServer) handleProxyConnection(clientConn net.Conn, req *http.Reque
 		statsTargetConn := &StatsConn{Conn: conn, collector: &HTTPServerStats{server: hs}}
 
 		// 在客户端和目标服务器之间转发数据
-		go io.Copy(statsTargetConn, statsClientConn)
-		io.Copy(statsClientConn, statsTargetConn)
+		go func() {
+			_, err := io.Copy(statsTargetConn, statsClientConn)
+			if err != nil {
+				log.Printf("数据转发错误 (客户端到目标): %v", err)
+			}
+			statsTargetConn.Close()
+		}()
+		_, err = io.Copy(statsClientConn, statsTargetConn)
+		if err != nil {
+			log.Printf("数据转发错误 (目标到客户端): %v", err)
+		}
+		statsClientConn.Close()
 	} else {
 		// 对于普通HTTP请求，转发请求到目标服务器
 		// 创建带统计的连接包装器
@@ -202,6 +174,7 @@ func (hs *HTTPServer) handleProxyConnection(clientConn net.Conn, req *http.Reque
 		statsTargetConn := &StatsConn{Conn: conn, collector: &HTTPServerStats{server: hs}}
 
 		// 先转发请求到目标服务器
+		log.Printf("转发HTTP请求到目标服务器")
 		err = req.Write(statsTargetConn)
 		if err != nil {
 			log.Printf("Error writing request to target: %v", err)
@@ -211,6 +184,73 @@ func (hs *HTTPServer) handleProxyConnection(clientConn net.Conn, req *http.Reque
 		}
 
 		// 将目标服务器的响应转发给客户端
-		io.Copy(statsClientConn, statsTargetConn)
+		log.Printf("转发目标服务器响应到客户端")
+		_, err = io.Copy(statsClientConn, statsTargetConn)
+		if err != nil {
+			log.Printf("转发目标服务器响应失败: %v", err)
+		}
+		statsClientConn.Close()
+	}
+}
+
+// handleDirectConnection 处理直接连接
+func (hs *HTTPServer) handleDirectConnection(clientConn net.Conn, req *http.Request, targetAddr string) {
+	log.Printf("HTTP服务器直接连接到目标 %s", targetAddr)
+
+	// 使用协议管理器进行直连
+	conn, err := hs.protocolManager.Connect("direct", targetAddr)
+	if err != nil {
+		log.Printf("Error connecting to target: %v", err)
+		// 发送错误响应
+		clientConn.Write([]byte("HTTP/1.1 502 Bad Gateway\r\n\r\n"))
+		return
+	}
+	defer conn.Close()
+
+	if req.Method == "CONNECT" {
+		// 对于HTTPS CONNECT请求，发送连接成功的响应
+		log.Printf("发送HTTP CONNECT成功响应")
+		clientConn.Write([]byte("HTTP/1.1 200 Connection Established\r\n\r\n"))
+
+		// 创建带统计的连接包装器
+		statsClientConn := &StatsConn{Conn: clientConn, collector: &HTTPServerStats{server: hs}}
+		statsTargetConn := &StatsConn{Conn: conn, collector: &HTTPServerStats{server: hs}}
+
+		// 在客户端和目标服务器之间转发数据
+		go func() {
+			_, err := io.Copy(statsTargetConn, statsClientConn)
+			if err != nil {
+				log.Printf("数据转发错误 (客户端到目标): %v", err)
+			}
+			statsTargetConn.Close()
+		}()
+		_, err = io.Copy(statsClientConn, statsTargetConn)
+		if err != nil {
+			log.Printf("数据转发错误 (目标到客户端): %v", err)
+		}
+		statsClientConn.Close()
+	} else {
+		// 对于普通HTTP请求，转发请求到目标服务器
+		// 创建带统计的连接包装器
+		statsClientConn := &StatsConn{Conn: clientConn, collector: &HTTPServerStats{server: hs}}
+		statsTargetConn := &StatsConn{Conn: conn, collector: &HTTPServerStats{server: hs}}
+
+		// 先转发请求到目标服务器
+		log.Printf("转发HTTP请求到目标服务器")
+		err = req.Write(statsTargetConn)
+		if err != nil {
+			log.Printf("Error writing request to target: %v", err)
+			// 发送错误响应
+			statsClientConn.Write([]byte("HTTP/1.1 502 Bad Gateway\r\n\r\n"))
+			return
+		}
+
+		// 将目标服务器的响应转发给客户端
+		log.Printf("转发目标服务器响应到客户端")
+		_, err = io.Copy(statsClientConn, statsTargetConn)
+		if err != nil {
+			log.Printf("转发目标服务器响应失败: %v", err)
+		}
+		statsClientConn.Close()
 	}
 }

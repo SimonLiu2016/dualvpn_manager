@@ -114,12 +114,52 @@ class VPNManager {
           _isConnected = false;
           return false;
         }
+      } else if (config.type == VPNType.clash &&
+          config.configPath.startsWith('http')) {
+        // 处理配置路径是订阅链接的情况
+        Logger.info('通过订阅链接连接: ${config.configPath}');
+
+        // 尝试连接并增加重试机制
+        bool connected = false;
+        int retryCount = 0;
+        const maxRetries = 3;
+
+        while (retryCount < maxRetries && !connected) {
+          try {
+            Logger.info('尝试连接Clash (第${retryCount + 1}次)');
+            connected = await _clashService.startWithSubscription(
+              config.configPath,
+            );
+            if (connected) {
+              Logger.info('Clash连接成功');
+              break;
+            }
+          } catch (e) {
+            Logger.warn('Clash连接失败: $e');
+            retryCount++;
+            if (retryCount < maxRetries) {
+              Logger.info('等待2秒后重试...');
+              await Future.delayed(const Duration(seconds: 2));
+            }
+          }
+        }
+
+        if (connected) {
+          _isConnected = true;
+          _currentConfig = config;
+          Logger.info('Clash连接成功完成');
+          return true;
+        } else {
+          Logger.error('经过$retryCount次尝试后Clash连接仍然失败');
+          _isConnected = false;
+          return false;
+        }
       } else {
         Logger.info('使用本地配置连接');
         // 对于本地配置，我们需要启动Clash服务
-        if (_currentConfig != null) {
+        if (config.configPath.isNotEmpty) {
           final success = await _clashService.startWithConfig(
-            _currentConfig!.configPath,
+            config.configPath,
           );
           if (success) {
             _isConnected = true;
@@ -132,7 +172,7 @@ class VPNManager {
             return false;
           }
         } else {
-          Logger.error('没有可用的本地配置文件');
+          Logger.error('没有可用的本地配置文件路径');
           _isConnected = false;
           return false;
         }
@@ -607,10 +647,18 @@ class VPNManager {
         Logger.info('Go代理核心启动成功');
         // 设置系统代理到Go代理核心端口
         // HTTP代理端口: 6160, SOCKS5代理端口: 6161
-        await _systemProxyManager.setSystemProxy('127.0.0.1', 6160, 6161);
+        final proxyResult = await _systemProxyManager.setSystemProxy(
+          '127.0.0.1',
+          6160,
+          6161,
+        );
+        if (proxyResult) {
+          Logger.info('系统代理设置成功');
+        } else {
+          Logger.error('系统代理设置失败');
+        }
 
-        // 初始化所有协议
-        await _initializeAllProtocols();
+        // 协议应该在Go代理核心启动时自动初始化，无需手动添加
       } else {
         Logger.error('Go代理核心启动失败');
       }
@@ -619,87 +667,6 @@ class VPNManager {
     } catch (e) {
       Logger.error('启动Go代理核心失败: $e');
       rethrow;
-    }
-  }
-
-  // 初始化所有协议
-  Future<void> _initializeAllProtocols() async {
-    try {
-      Logger.info('开始初始化所有协议...');
-
-      // 初始化Clash协议 (HTTP)
-      final clashHttpProtocol = {
-        'name': 'clash',
-        'type': 'http',
-        'server': '127.0.0.1',
-        'port': 7890, // Clash默认HTTP端口
-      };
-      await _goProxyService.addProtocol(clashHttpProtocol);
-      Logger.info('Clash HTTP协议初始化完成');
-
-      // 初始化Clash协议 (SOCKS5)
-      final clashSocksProtocol = {
-        'name': 'clash-socks',
-        'type': 'socks5',
-        'server': '127.0.0.1',
-        'port': 7891, // Clash默认SOCKS5端口
-      };
-      await _goProxyService.addProtocol(clashSocksProtocol);
-      Logger.info('Clash SOCKS5协议初始化完成');
-
-      // 初始化Shadowsocks协议
-      final shadowsocksProtocol = {
-        'name': 'shadowsocks',
-        'type': 'socks5',
-        'server': '127.0.0.1',
-        'port': 1080, // Shadowsocks默认端口
-      };
-      await _goProxyService.addProtocol(shadowsocksProtocol);
-      Logger.info('Shadowsocks协议初始化完成');
-
-      // 初始化V2Ray协议
-      final v2rayProtocol = {
-        'name': 'v2ray',
-        'type': 'socks5',
-        'server': '127.0.0.1',
-        'port': 1080, // V2Ray默认端口
-      };
-      await _goProxyService.addProtocol(v2rayProtocol);
-      Logger.info('V2Ray协议初始化完成');
-
-      // 初始化HTTP代理协议
-      final httpProtocol = {
-        'name': 'http',
-        'type': 'http',
-        'server': '127.0.0.1',
-        'port': 8080, // HTTP代理默认端口
-      };
-      await _goProxyService.addProtocol(httpProtocol);
-      Logger.info('HTTP代理协议初始化完成');
-
-      // 初始化SOCKS5代理协议
-      final socks5Protocol = {
-        'name': 'socks5',
-        'type': 'socks5',
-        'server': '127.0.0.1',
-        'port': 1080, // SOCKS5代理默认端口
-      };
-      await _goProxyService.addProtocol(socks5Protocol);
-      Logger.info('SOCKS5代理协议初始化完成');
-
-      // 初始化OpenVPN协议（直连）
-      final openvpnProtocol = {'name': 'openvpn', 'type': 'direct'};
-      await _goProxyService.addProtocol(openvpnProtocol);
-      Logger.info('OpenVPN协议初始化完成');
-
-      // 初始化Direct协议
-      final directProtocol = {'name': 'direct', 'type': 'direct'};
-      await _goProxyService.addProtocol(directProtocol);
-      Logger.info('Direct协议初始化完成');
-
-      Logger.info('所有协议初始化完成');
-    } catch (e) {
-      Logger.error('初始化协议时出错: $e');
     }
   }
 
@@ -825,25 +792,82 @@ class VPNManager {
       final cleanedProxyName = proxyName.replaceAll(RegExp(r'[^\w\- ]'), '');
       Logger.info('清理后的代理名称: $cleanedProxyName');
 
-      // 直接更新Go代理核心的路由规则，而不是连接Clash服务
-      // 创建一条针对此代理的路由规则
-      final List<Map<String, dynamic>> rules = [
-        {
-          'type': 'MATCH',
-          'pattern': '',
-          'proxy_source': cleanedProxyName,
-          'enabled': true,
-        },
-      ];
-
-      // 更新Go代理核心的路由规则
-      final result = await updateGoProxyRules(rules);
-      if (result) {
-        Logger.info('成功选择代理: $selector -> $proxyName (清理后: $cleanedProxyName)');
-      } else {
-        Logger.error('选择代理失败: $selector -> $proxyName');
+      // 获取Clash代理列表以获取代理详细信息
+      final clashProxies = await getClashProxies();
+      if (clashProxies == null || !clashProxies.containsKey('proxies')) {
+        Logger.error('无法获取Clash代理列表');
+        return false;
       }
-      return result;
+
+      final proxiesData = clashProxies['proxies'] as Map?;
+      if (proxiesData == null || !proxiesData.containsKey(cleanedProxyName)) {
+        Logger.error('未找到指定的代理: $cleanedProxyName');
+        return false;
+      }
+
+      final proxyData = proxiesData[cleanedProxyName] as Map?;
+      if (proxyData == null) {
+        Logger.error('代理数据为空: $cleanedProxyName');
+        return false;
+      }
+
+      // 构造代理信息
+      final proxyInfo = {
+        'id': cleanedProxyName,
+        'name': cleanedProxyName,
+        'type': proxyData['type'] ?? 'http',
+        'server': proxyData['server'] ?? '127.0.0.1',
+        'port': proxyData['port'] ?? 7890,
+        'config': <String, dynamic>{},
+      };
+
+      // 添加协议特定配置
+      if (proxyData.containsKey('cipher')) {
+        proxyInfo['config']['cipher'] = proxyData['cipher'];
+      }
+      if (proxyData.containsKey('password')) {
+        proxyInfo['config']['password'] = proxyData['password'];
+      }
+      if (proxyData.containsKey('method')) {
+        proxyInfo['config']['method'] = proxyData['method'];
+      }
+      if (proxyData.containsKey('uuid')) {
+        proxyInfo['config']['uuid'] = proxyData['uuid'];
+      }
+      if (proxyData.containsKey('network')) {
+        proxyInfo['config']['network'] = proxyData['network'];
+      }
+      if (proxyData.containsKey('tls')) {
+        proxyInfo['config']['tls'] = proxyData['tls'];
+      }
+
+      // 设置clash代理源的当前代理
+      final result = await setProxySourceCurrentProxy('clash', proxyInfo);
+      if (result) {
+        Logger.info('成功设置Clash代理源的当前代理: $cleanedProxyName');
+
+        // 更新路由规则以使用新的代理
+        final rules = [
+          {
+            'type': 'MATCH',
+            'pattern': '',
+            'proxy_source': 'clash', // 使用clash代理源而不是具体的代理名称
+            'enabled': true,
+          },
+        ];
+
+        final rulesResult = await updateGoProxyRules(rules);
+        if (rulesResult) {
+          Logger.info('成功更新路由规则以使用clash代理源');
+        } else {
+          Logger.error('更新路由规则失败');
+        }
+
+        return rulesResult;
+      } else {
+        Logger.error('设置Clash代理源当前代理失败: $selector -> $proxyName');
+        return false;
+      }
     } catch (e) {
       Logger.error('选择代理失败: $e');
       return false;
@@ -883,13 +907,37 @@ class VPNManager {
     }
   }
 
-  // 添加协议到Go代理核心
-  Future<bool> addProtocolToGoProxy(Map<String, dynamic> protocolConfig) async {
+  // 设置代理源的当前代理
+  Future<bool> setProxySourceCurrentProxy(
+    String sourceId,
+    Map<String, dynamic> proxyInfo,
+  ) async {
     try {
-      final result = await _goProxyService.addProtocol(protocolConfig);
+      final result = await _goProxyService.setCurrentProxy(sourceId, proxyInfo);
       return result;
     } catch (e) {
-      Logger.error('添加协议到Go代理核心失败: $e');
+      Logger.error('设置代理源当前代理失败: $e');
+      return false;
+    }
+  }
+
+  // 添加代理源
+  Future<bool> addProxySource(
+    String sourceId,
+    String sourceName,
+    String sourceType,
+    Map<String, dynamic> sourceConfig,
+  ) async {
+    try {
+      final result = await _goProxyService.addProxySource(
+        sourceId,
+        sourceName,
+        sourceType,
+        sourceConfig,
+      );
+      return result;
+    } catch (e) {
+      Logger.error('添加代理源失败: $e');
       return false;
     }
   }
