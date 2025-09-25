@@ -192,7 +192,7 @@ func (pc *ProxyCore) Start() error {
 	log.Printf("配置信息: HTTPPort=%d, Socks5Port=%d, APIPort=%d", pc.config.HTTPPort, pc.config.Socks5Port, pc.config.APIPort)
 
 	// 启动HTTP服务器
-	pc.httpServer = NewHTTPServer(pc.config.HTTPPort, pc.rulesEngine, pc.protocolManager)
+	pc.httpServer = NewHTTPServer(pc.config.HTTPPort, pc.rulesEngine, pc.protocolManager, pc) // 传递pc引用
 	go func() {
 		if err := pc.httpServer.Start(); err != nil {
 			log.Printf("HTTP server error: %v", err)
@@ -202,7 +202,7 @@ func (pc *ProxyCore) Start() error {
 	}()
 
 	// 启动SOCKS5服务器
-	pc.socks5Server = NewSOCKS5Server(pc.config.Socks5Port, pc.rulesEngine, pc.protocolManager)
+	pc.socks5Server = NewSOCKS5Server(pc.config.Socks5Port, pc.rulesEngine, pc.protocolManager, pc) // 传递pc引用
 	go func() {
 		if err := pc.socks5Server.Start(); err != nil {
 			log.Printf("SOCKS5 server error: %v", err)
@@ -436,9 +436,6 @@ func (pc *ProxyCore) updateStats() {
 	ticker := time.NewTicker(1 * time.Second)
 	defer ticker.Stop()
 
-	// 为每个代理源维护独立的统计信息
-	proxySourceStats := make(map[string]*ProxySourceStats)
-
 	for {
 		pc.mu.RLock()
 		running := pc.running
@@ -462,47 +459,14 @@ func (pc *ProxyCore) updateStats() {
 				socks5Upload, socks5Download, _ = pc.socks5Server.GetStats()
 			}
 
-			// 计算总统计数据
-			totalUpload := httpUpload + socks5Upload
-			totalDownload := httpDownload + socks5Download
+			// 不再需要计算总统计数据和平均分配
+			// 每个代理源的统计信息已经由ProxySourceStatsCollector独立维护
 
-			// 更新每个代理源的统计信息
-			pc.proxySourceMu.Lock()
-
-			// 初始化每个代理源的统计信息
-			for sourceId := range pc.currentProxies {
-				if _, exists := proxySourceStats[sourceId]; !exists {
-					proxySourceStats[sourceId] = &ProxySourceStats{
-						Upload:   0,
-						Download: 0,
-					}
-				}
-			}
-
-			// 为每个代理源分配流量（这里简化处理，实际应该根据连接情况分配）
-			numSources := len(pc.currentProxies)
-			if numSources > 0 {
-				// 简单的流量分配策略：将总流量平均分配给所有代理源
-				// 在实际实现中，应该根据每个代理源的实际使用情况来分配流量
-				uploadPerSource := totalUpload / uint64(numSources)
-				downloadPerSource := totalDownload / uint64(numSources)
-
-				for sourceId := range pc.currentProxies {
-					// 累加流量到每个代理源
-					proxySourceStats[sourceId].Upload += uploadPerSource
-					proxySourceStats[sourceId].Download += downloadPerSource
-
-					// 更新代理的统计信息
-					if proxy, exists := pc.currentProxies[sourceId]; exists {
-						if proxy.Stats == nil {
-							proxy.Stats = &ProxyStats{}
-						}
-						proxy.Stats.Upload = proxySourceStats[sourceId].Upload
-						proxy.Stats.Download = proxySourceStats[sourceId].Download
-					}
-				}
-			}
-			pc.proxySourceMu.Unlock()
+			// 可以在这里添加其他需要定期更新的统计逻辑
+			_ = httpUpload
+			_ = httpDownload
+			_ = socks5Upload
+			_ = socks5Download
 		}
 	}
 }

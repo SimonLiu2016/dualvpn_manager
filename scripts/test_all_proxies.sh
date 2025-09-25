@@ -204,4 +204,15 @@ echo "  更新后的统计信息:"
 curl -s http://127.0.0.1:6162/stats | jq '.'
 
 echo ""
+echo "测试完成！现在验证每个代理源的统计信息是否独立更新..."
+echo "再次测试google.com (应该只更新ss-source-1的统计信息):"
+curl -s -x http://127.0.0.1:6160 -I https://www.google.com 2>/dev/null | head -n 1
+
+echo "  等待统计信息更新..."
+sleep 3
+
+echo "  再次获取统计信息:"
+curl -s http://127.0.0.1:6162/stats | jq '.'
+
+echo ""
 echo "测试完成！"

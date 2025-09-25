@@ -15,6 +15,7 @@ type SOCKS5Server struct {
 	port            int
 	rulesEngine     *routing.RulesEngine
 	protocolManager *ProtocolManager
+	proxyCore       *ProxyCore // 添加对ProxyCore的引用
 	listener        net.Listener
 	running         bool
 	// 统计信息
@@ -24,11 +25,12 @@ type SOCKS5Server struct {
 }
 
 // NewSOCKS5Server 创建新的SOCKS5服务器
-func NewSOCKS5Server(port int, rulesEngine *routing.RulesEngine, protocolManager *ProtocolManager) *SOCKS5Server {
+func NewSOCKS5Server(port int, rulesEngine *routing.RulesEngine, protocolManager *ProtocolManager, proxyCore *ProxyCore) *SOCKS5Server {
 	return &SOCKS5Server{
 		port:            port,
 		rulesEngine:     rulesEngine,
 		protocolManager: protocolManager,
+		proxyCore:       proxyCore, // 初始化ProxyCore引用
 	}
 }
 
@@ -186,23 +188,37 @@ func (ss *SOCKS5Server) handleProxyConnection(clientConn net.Conn, targetAddr st
 	// 发送连接成功响应
 	clientConn.Write([]byte{0x05, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00})
 
-	// 创建带统计的连接包装器
-	statsClientConn := &StatsConn{Conn: clientConn, collector: &SOCKS5ServerStats{server: ss}}
-	statsTargetConn := &StatsConn{Conn: conn, collector: &SOCKS5ServerStats{server: ss}}
+	// 创建按代理源维度的统计收集器
+	proxySourceStatsCollector := NewProxySourceStatsCollector(proxySource, ss.proxyCore)
+
+	// 创建自定义的流量统计连接，正确区分上传和下载
+	// 客户端连接：isClientSide=true
+	uploadConn := &DirectionalStatsConn{
+		Conn:         clientConn,
+		collector:    proxySourceStatsCollector,
+		isClientSide: true,
+	}
+	// 目标服务器连接：isClientSide=false
+	downloadConn := &DirectionalStatsConn{
+		Conn:         conn,
+		collector:    proxySourceStatsCollector,
+		isClientSide: false,
+	}
 
 	// 在客户端和目标服务器之间转发数据
+	// 客户端到目标服务器的数据流（上传）
 	go func() {
-		_, err := io.Copy(statsTargetConn, statsClientConn)
+		_, err := io.Copy(downloadConn, uploadConn)
 		if err != nil {
 			log.Printf("数据转发错误 (客户端到目标): %v", err)
 		}
-		statsTargetConn.Close()
 	}()
-	_, err = io.Copy(statsClientConn, statsTargetConn)
+
+	// 目标服务器到客户端的数据流（下载）
+	_, err = io.Copy(uploadConn, downloadConn)
 	if err != nil {
 		log.Printf("数据转发错误 (目标到客户端): %v", err)
 	}
-	statsClientConn.Close()
 }
 
 // handleDirectConnection 处理直接连接
@@ -222,21 +238,35 @@ func (ss *SOCKS5Server) handleDirectConnection(clientConn net.Conn, targetAddr s
 	// 发送连接成功响应
 	clientConn.Write([]byte{0x05, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00})
 
-	// 创建带统计的连接包装器
-	statsClientConn := &StatsConn{Conn: clientConn, collector: &SOCKS5ServerStats{server: ss}}
-	statsTargetConn := &StatsConn{Conn: conn, collector: &SOCKS5ServerStats{server: ss}}
+	// 创建按代理源维度的统计收集器（直连使用"DIRECT"作为代理源ID）
+	proxySourceStatsCollector := NewProxySourceStatsCollector("DIRECT", ss.proxyCore)
+
+	// 创建自定义的流量统计连接，正确区分上传和下载
+	// 客户端连接：isClientSide=true
+	uploadConn := &DirectionalStatsConn{
+		Conn:         clientConn,
+		collector:    proxySourceStatsCollector,
+		isClientSide: true,
+	}
+	// 目标服务器连接：isClientSide=false
+	downloadConn := &DirectionalStatsConn{
+		Conn:         conn,
+		collector:    proxySourceStatsCollector,
+		isClientSide: false,
+	}
 
 	// 在客户端和目标服务器之间转发数据
+	// 客户端到目标服务器的数据流（上传）
 	go func() {
-		_, err := io.Copy(statsTargetConn, statsClientConn)
+		_, err := io.Copy(downloadConn, uploadConn)
 		if err != nil {
 			log.Printf("数据转发错误 (客户端到目标): %v", err)
 		}
-		statsTargetConn.Close()
 	}()
-	_, err = io.Copy(statsClientConn, statsTargetConn)
+
+	// 目标服务器到客户端的数据流（下载）
+	_, err = io.Copy(uploadConn, downloadConn)
 	if err != nil {
 		log.Printf("数据转发错误 (目标到客户端): %v", err)
 	}
-	statsClientConn.Close()
 }

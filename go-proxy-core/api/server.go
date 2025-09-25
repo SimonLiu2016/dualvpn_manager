@@ -487,25 +487,45 @@ func (as *APIServer) handleStats(w http.ResponseWriter, r *http.Request) {
 		response := make(map[string]interface{})
 		statsData := make(map[string]interface{})
 
-		for sourceId, proxyInfo := range currentProxies {
-			proxyStats := map[string]interface{}{
-				"source_id":  sourceId,
-				"proxy_id":   proxyInfo.ID,
-				"proxy_name": proxyInfo.Name,
-				"upload":     proxyInfo.Stats.Upload,
-				"download":   proxyInfo.Stats.Download,
-			}
-			statsData[sourceId] = proxyStats
+		// 获取所有代理源信息
+		allProxySources := as.proxyCore.GetAllProxySources()
 
-			// 累加总流量
-			totalUpload += proxyInfo.Stats.Upload
-			totalDownload += proxyInfo.Stats.Download
+		// 遍历所有代理源，获取其统计信息
+		for sourceId := range allProxySources {
+			// 获取该代理源的当前代理
+			if currentProxy, exists := currentProxies[sourceId]; exists && currentProxy.Stats != nil {
+				proxyStats := map[string]interface{}{
+					"source_id":  sourceId,
+					"proxy_id":   currentProxy.ID,
+					"proxy_name": currentProxy.Name,
+					"upload":     currentProxy.Stats.Upload,
+					"download":   currentProxy.Stats.Download,
+				}
+				statsData[sourceId] = proxyStats
+
+				// 累加总流量
+				totalUpload += currentProxy.Stats.Upload
+				totalDownload += currentProxy.Stats.Download
+			} else if sourceId == "DIRECT" {
+				// 处理直连情况
+				proxyStats := map[string]interface{}{
+					"source_id":  "DIRECT",
+					"proxy_id":   "DIRECT",
+					"proxy_name": "Direct Connection",
+					"upload":     uint64(0),
+					"download":   uint64(0),
+				}
+
+				// 如果有直连的统计信息，需要从某个地方获取
+				// 这里暂时设置为0，后续可以考虑实现直连统计
+				statsData["DIRECT"] = proxyStats
+			}
 		}
 
 		// 添加总的上传和下载速度字段，以满足Flutter端的期望格式
 		response["stats"] = statsData
-		response["upload_speed"] = formatSpeed(totalUpload)     // 格式化为字符串，如 "↑ 10 KB/s"
-		response["download_speed"] = formatSpeed(totalDownload) // 格式化为字符串，如 "↓ 20 KB/s"
+		response["upload_speed"] = formatSpeed(totalUpload)             // 格式化为字符串，如 "↑ 10 KB/s"
+		response["download_speed"] = formatDownloadSpeed(totalDownload) // 格式化为字符串，如 "↓ 20 KB/s"
 
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(response)
@@ -588,5 +608,16 @@ func formatSpeed(bytesPerSecond uint64) string {
 		return fmt.Sprintf("↑ %.2f KB/s", float64(bytesPerSecond)/1024)
 	} else {
 		return fmt.Sprintf("↑ %.2f MB/s", float64(bytesPerSecond)/(1024*1024))
+	}
+}
+
+// formatDownloadSpeed 将下载字节速率格式化为人类可读的字符串
+func formatDownloadSpeed(bytesPerSecond uint64) string {
+	if bytesPerSecond < 1024 {
+		return fmt.Sprintf("↓ %d B/s", bytesPerSecond)
+	} else if bytesPerSecond < 1024*1024 {
+		return fmt.Sprintf("↓ %.2f KB/s", float64(bytesPerSecond)/1024)
+	} else {
+		return fmt.Sprintf("↓ %.2f MB/s", float64(bytesPerSecond)/(1024*1024))
 	}
 }

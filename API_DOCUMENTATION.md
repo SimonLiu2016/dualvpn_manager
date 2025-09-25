@@ -24,11 +24,11 @@ Go 代理核心支持以下协议类型：
 
 ## 统计信息说明
 
-当前版本的统计信息实现具有以下特点：
+Go 代理核心现在支持更精准的流量统计能力：
 
-1. 统计信息按代理源维度进行跟踪
-2. 由于架构限制，所有代理源的统计信息目前显示相同的值（总流量被平均分配）
-3. 在未来版本中，将实现更精确的按代理源独立统计功能
+1. **按代理源维度统计**：统计信息按代理源维度进行跟踪，每个代理源都有独立的上传和下载统计
+2. **独立流量跟踪**：每个代理源的流量被独立跟踪，不再使用平均分配的方式
+3. **实时更新**：统计信息实时更新，反映每个代理源的实际使用情况
 
 ## 1. 代理源管理接口
 
@@ -38,28 +38,28 @@ Go 代理核心支持以下协议类型：
 - **方法**: GET
 - **描述**: 获取所有代理源及其代理列表
 - **响应**:
-  ``json
-  {
-  "proxy_sources": {
-  "source_id": {
-  "id": "source_id",
-  "name": "source_name",
-  "type": "source_type",
-  "config": {},
-  "proxies": {
-  "proxy_id": {
-  "id": "proxy_id",
-  "name": "proxy_name",
-  "type": "proxy_type",
-  "server": "server_address",
-  "port": 1234,
-  "config": {}
-  }
-  }
-  }
-  }
-  }
 
+```json
+{
+  "proxy_sources": {
+    "source_id": {
+      "id": "source_id",
+      "name": "source_name",
+      "type": "source_type",
+      "config": {},
+      "proxies": {
+        "proxy_id": {
+          "id": "proxy_id",
+          "name": "proxy_name",
+          "type": "proxy_type",
+          "server": "server_address",
+          "port": 1234,
+          "config": {}
+        }
+      }
+    }
+  }
+}
 ```
 
 ### 1.2 添加代理源
@@ -71,11 +71,12 @@ Go 代理核心支持以下协议类型：
 
 ``json
 {
-  "id": "source_id",
-  "name": "source_name",
-  "type": "source_type",
-  "config": {}
+"id": "source_id",
+"name": "source_name",
+"type": "source_type",
+"config": {}
 }
+
 ```
 
 - **响应**:
@@ -127,15 +128,16 @@ Go 代理核心支持以下协议类型：
 
 ``json
 {
-  "proxy_id": {
-    "id": "proxy_id",
-    "name": "proxy_name",
-    "type": "proxy_type",
-    "server": "server_address",
-    "port": 1234,
-    "config": {}
-  }
+"proxy_id": {
+"id": "proxy_id",
+"name": "proxy_name",
+"type": "proxy_type",
+"server": "server_address",
+"port": 1234,
+"config": {}
 }
+}
+
 ```
 
 ### 1.6 更新代理源的所有代理
@@ -172,13 +174,14 @@ Go 代理核心支持以下协议类型：
 
 ``json
 {
-  "id": "proxy_id",
-  "name": "proxy_name",
-  "type": "proxy_type",
-  "server": "server_address",
-  "port": 1234,
-  "config": {}
+"id": "proxy_id",
+"name": "proxy_name",
+"type": "proxy_type",
+"server": "server_address",
+"port": 1234,
+"config": {}
 }
+
 ```
 
 ### 1.8 设置代理源的当前代理
@@ -215,13 +218,14 @@ Go 代理核心支持以下协议类型：
 
 ``json
 [
-  {
-    "type": "DOMAIN",
-    "pattern": "example.com",
-    "proxy_source": "proxy_source_id",
-    "enabled": true
-  }
+{
+"type": "DOMAIN",
+"pattern": "example.com",
+"proxy_source": "proxy_source_id",
+"enabled": true
+}
 ]
+
 ```
 
 ### 2.2 更新路由规则
@@ -257,18 +261,19 @@ Go 代理核心支持以下协议类型：
 
 ``json
 {
-  "stats": {
-    "source_id": {
-      "source_id": "source_id",
-      "proxy_id": "proxy_id",
-      "proxy_name": "proxy_name",
-      "upload": 12345,
-      "download": 67890
-    }
-  },
-  "upload_speed": "↑ 10 KB/s",
-  "download_speed": "↓ 20 KB/s"
+"stats": {
+"source_id": {
+"source_id": "source_id",
+"proxy_id": "proxy_id",
+"proxy_name": "proxy_name",
+"upload": 12345,
+"download": 67890
 }
+},
+"upload_speed": "↑ 10 KB/s",
+"download_speed": "↓ 20 KB/s"
+}
+
 ```
 
 ## 4. 协议管理接口
@@ -301,11 +306,12 @@ Go 代理核心支持以下协议类型：
 
 ``json
 {
-  "name": "protocol_name",
-  "type": "protocol_type",
-  "config_field": "config_value"
+"name": "protocol_name",
+"type": "protocol_type",
+"config_field": "config_value"
 }
-```
+
+````
 
 - **响应**:
   - 201 Created: 协议添加成功
@@ -325,4 +331,4 @@ Go 代理核心支持以下协议类型：
   "running": true,
   "version": "0.1.0"
 }
-```
+````

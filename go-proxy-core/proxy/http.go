@@ -18,6 +18,7 @@ type HTTPServer struct {
 	port            int
 	rulesEngine     *routing.RulesEngine
 	protocolManager *ProtocolManager
+	proxyCore       *ProxyCore // 添加对ProxyCore的引用
 	listener        net.Listener
 	running         bool
 	// 统计信息
@@ -27,11 +28,12 @@ type HTTPServer struct {
 }
 
 // NewHTTPServer 创建新的HTTP服务器
-func NewHTTPServer(port int, rulesEngine *routing.RulesEngine, protocolManager *ProtocolManager) *HTTPServer {
+func NewHTTPServer(port int, rulesEngine *routing.RulesEngine, protocolManager *ProtocolManager, proxyCore *ProxyCore) *HTTPServer {
 	return &HTTPServer{
 		port:            port,
 		rulesEngine:     rulesEngine,
 		protocolManager: protocolManager,
+		proxyCore:       proxyCore, // 初始化ProxyCore引用
 	}
 }
 
@@ -150,46 +152,72 @@ func (hs *HTTPServer) handleProxyConnection(clientConn net.Conn, req *http.Reque
 		log.Printf("发送HTTP CONNECT成功响应")
 		clientConn.Write([]byte("HTTP/1.1 200 Connection Established\r\n\r\n"))
 
-		// 创建带统计的连接包装器
-		statsClientConn := &StatsConn{Conn: clientConn, collector: &HTTPServerStats{server: hs}}
-		statsTargetConn := &StatsConn{Conn: conn, collector: &HTTPServerStats{server: hs}}
+		// 创建按代理源维度的统计收集器
+		proxySourceStatsCollector := NewProxySourceStatsCollector(proxySource, hs.proxyCore)
+
+		// 创建自定义的流量统计连接，正确区分上传和下载
+		// 客户端连接：isClientSide=true
+		uploadConn := &DirectionalStatsConn{
+			Conn:         clientConn,
+			collector:    proxySourceStatsCollector,
+			isClientSide: true,
+		}
+		// 目标服务器连接：isClientSide=false
+		downloadConn := &DirectionalStatsConn{
+			Conn:         conn,
+			collector:    proxySourceStatsCollector,
+			isClientSide: false,
+		}
 
 		// 在客户端和目标服务器之间转发数据
+		// 客户端到目标服务器的数据流（上传）
 		go func() {
-			_, err := io.Copy(statsTargetConn, statsClientConn)
+			_, err := io.Copy(downloadConn, uploadConn)
 			if err != nil {
 				log.Printf("数据转发错误 (客户端到目标): %v", err)
 			}
-			statsTargetConn.Close()
 		}()
-		_, err = io.Copy(statsClientConn, statsTargetConn)
+
+		// 目标服务器到客户端的数据流（下载）
+		_, err = io.Copy(uploadConn, downloadConn)
 		if err != nil {
 			log.Printf("数据转发错误 (目标到客户端): %v", err)
 		}
-		statsClientConn.Close()
 	} else {
 		// 对于普通HTTP请求，转发请求到目标服务器
-		// 创建带统计的连接包装器
-		statsClientConn := &StatsConn{Conn: clientConn, collector: &HTTPServerStats{server: hs}}
-		statsTargetConn := &StatsConn{Conn: conn, collector: &HTTPServerStats{server: hs}}
+		// 创建按代理源维度的统计收集器
+		proxySourceStatsCollector := NewProxySourceStatsCollector(proxySource, hs.proxyCore)
 
-		// 先转发请求到目标服务器
+		// 创建自定义的流量统计连接，正确区分上传和下载
+		// 客户端连接：isClientSide=true
+		uploadConn := &DirectionalStatsConn{
+			Conn:         clientConn,
+			collector:    proxySourceStatsCollector,
+			isClientSide: true,
+		}
+		// 目标服务器连接：isClientSide=false
+		downloadConn := &DirectionalStatsConn{
+			Conn:         conn,
+			collector:    proxySourceStatsCollector,
+			isClientSide: false,
+		}
+
+		// 先转发请求到目标服务器（上传）
 		log.Printf("转发HTTP请求到目标服务器")
-		err = req.Write(statsTargetConn)
+		err = req.Write(downloadConn)
 		if err != nil {
 			log.Printf("Error writing request to target: %v", err)
 			// 发送错误响应
-			statsClientConn.Write([]byte("HTTP/1.1 502 Bad Gateway\r\n\r\n"))
+			uploadConn.Write([]byte("HTTP/1.1 502 Bad Gateway\r\n\r\n"))
 			return
 		}
 
-		// 将目标服务器的响应转发给客户端
+		// 将目标服务器的响应转发给客户端（下载）
 		log.Printf("转发目标服务器响应到客户端")
-		_, err = io.Copy(statsClientConn, statsTargetConn)
+		_, err = io.Copy(uploadConn, downloadConn)
 		if err != nil {
 			log.Printf("转发目标服务器响应失败: %v", err)
 		}
-		statsClientConn.Close()
 	}
 }
 
@@ -212,45 +240,71 @@ func (hs *HTTPServer) handleDirectConnection(clientConn net.Conn, req *http.Requ
 		log.Printf("发送HTTP CONNECT成功响应")
 		clientConn.Write([]byte("HTTP/1.1 200 Connection Established\r\n\r\n"))
 
-		// 创建带统计的连接包装器
-		statsClientConn := &StatsConn{Conn: clientConn, collector: &HTTPServerStats{server: hs}}
-		statsTargetConn := &StatsConn{Conn: conn, collector: &HTTPServerStats{server: hs}}
+		// 创建按代理源维度的统计收集器（直连使用"DIRECT"作为代理源ID）
+		proxySourceStatsCollector := NewProxySourceStatsCollector("DIRECT", hs.proxyCore)
+
+		// 创建自定义的流量统计连接，正确区分上传和下载
+		// 客户端连接：isClientSide=true
+		uploadConn := &DirectionalStatsConn{
+			Conn:         clientConn,
+			collector:    proxySourceStatsCollector,
+			isClientSide: true,
+		}
+		// 目标服务器连接：isClientSide=false
+		downloadConn := &DirectionalStatsConn{
+			Conn:         conn,
+			collector:    proxySourceStatsCollector,
+			isClientSide: false,
+		}
 
 		// 在客户端和目标服务器之间转发数据
+		// 客户端到目标服务器的数据流（上传）
 		go func() {
-			_, err := io.Copy(statsTargetConn, statsClientConn)
+			_, err := io.Copy(downloadConn, uploadConn)
 			if err != nil {
 				log.Printf("数据转发错误 (客户端到目标): %v", err)
 			}
-			statsTargetConn.Close()
 		}()
-		_, err = io.Copy(statsClientConn, statsTargetConn)
+
+		// 目标服务器到客户端的数据流（下载）
+		_, err = io.Copy(uploadConn, downloadConn)
 		if err != nil {
 			log.Printf("数据转发错误 (目标到客户端): %v", err)
 		}
-		statsClientConn.Close()
 	} else {
 		// 对于普通HTTP请求，转发请求到目标服务器
-		// 创建带统计的连接包装器
-		statsClientConn := &StatsConn{Conn: clientConn, collector: &HTTPServerStats{server: hs}}
-		statsTargetConn := &StatsConn{Conn: conn, collector: &HTTPServerStats{server: hs}}
+		// 创建按代理源维度的统计收集器（直连使用"DIRECT"作为代理源ID）
+		proxySourceStatsCollector := NewProxySourceStatsCollector("DIRECT", hs.proxyCore)
 
-		// 先转发请求到目标服务器
+		// 创建自定义的流量统计连接，正确区分上传和下载
+		// 客户端连接：isClientSide=true
+		uploadConn := &DirectionalStatsConn{
+			Conn:         clientConn,
+			collector:    proxySourceStatsCollector,
+			isClientSide: true,
+		}
+		// 目标服务器连接：isClientSide=false
+		downloadConn := &DirectionalStatsConn{
+			Conn:         conn,
+			collector:    proxySourceStatsCollector,
+			isClientSide: false,
+		}
+
+		// 先转发请求到目标服务器（上传）
 		log.Printf("转发HTTP请求到目标服务器")
-		err = req.Write(statsTargetConn)
+		err = req.Write(downloadConn)
 		if err != nil {
 			log.Printf("Error writing request to target: %v", err)
 			// 发送错误响应
-			statsClientConn.Write([]byte("HTTP/1.1 502 Bad Gateway\r\n\r\n"))
+			uploadConn.Write([]byte("HTTP/1.1 502 Bad Gateway\r\n\r\n"))
 			return
 		}
 
-		// 将目标服务器的响应转发给客户端
+		// 将目标服务器的响应转发给客户端（下载）
 		log.Printf("转发目标服务器响应到客户端")
-		_, err = io.Copy(statsClientConn, statsTargetConn)
+		_, err = io.Copy(uploadConn, downloadConn)
 		if err != nil {
 			log.Printf("转发目标服务器响应失败: %v", err)
 		}
-		statsClientConn.Close()
 	}
 }
