@@ -10,6 +10,7 @@ DualVPN Go Proxy Core 是一个用 Go 语言实现的代理核心，用于管理
 - **跨平台**：支持 Windows、macOS 和 Linux 系统
 - **系统代理**：自动设置和清除系统代理配置
 - **API 接口**：提供 RESTful API 用于配置管理和状态查询
+- **OpenVPN 集成**：完全集成的 OpenVPN 客户端实现，无需依赖外部命令
 
 ## 架构设计
 
@@ -118,6 +119,15 @@ Content-Type: application/json
   "password": "pass"
 }
 ```
+
+## OpenVPN 集成说明
+
+本项目实现了完全集成的 OpenVPN 客户端，无需依赖外部的 OpenVPN 命令。OpenVPN 客户端具有以下特点：
+
+1. **完全集成**：OpenVPN 客户端完全使用 Go 语言实现，无需外部依赖
+2. **配置文件支持**：支持标准的 OpenVPN 配置文件格式
+3. **SOCKS 代理转换**：将 OpenVPN 连接转换为 SOCKS 代理，便于其他组件使用
+4. **认证支持**：支持用户名/密码认证和证书认证
 
 ## 使用方法
 

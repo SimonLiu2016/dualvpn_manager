@@ -17,6 +17,9 @@ type RulesConfig struct {
 func DefaultRules() *RulesConfig {
 	return &RulesConfig{
 		Rules: []Rule{
+			// 优先匹配特定域名到OpenVPN代理源
+			{Type: "DOMAIN", Pattern: "pingcode.ctf.com.cn", ProxySource: "openvpn-source", Enabled: true},
+			// 其他规则...
 			{Type: "MATCH", Pattern: "", ProxySource: "DIRECT", Enabled: true},
 		},
 	}

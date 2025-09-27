@@ -1,19 +1,19 @@
 #!/bin/bash
 
 # 构建脚本
-echo "Building DualVPN Proxy Core..."
 
-# 设置Go模块
-export GO111MODULE=on
+echo "构建Go代理核心..."
 
-# 构建主程序
-echo "Building main program..."
-go build -o bin/dualvpn-proxy cmd/main.go
+# 创建bin目录
+mkdir -p bin
+
+# 构建主程序，只编译cmd目录下的代码
+go build -o bin/go-proxy-core ./cmd
 
 if [ $? -eq 0 ]; then
-    echo "Build successful!"
-    echo "Binary location: bin/dualvpn-proxy"
+    echo "构建成功！"
+    echo "可执行文件位置: bin/go-proxy-core"
 else
-    echo "Build failed!"
+    echo "构建失败！"
     exit 1
 fi

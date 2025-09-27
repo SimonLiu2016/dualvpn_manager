@@ -90,6 +90,8 @@ func (hs *HTTPServer) handleConnection(clientConn net.Conn) {
 	atomic.AddInt64(&hs.connections, 1)
 	defer atomic.AddInt64(&hs.connections, -1)
 
+	log.Printf("接受新的HTTP连接: %s", clientConn.RemoteAddr().String())
+
 	// 读取客户端请求
 	reader := bufio.NewReader(clientConn)
 	req, err := http.ReadRequest(reader)
@@ -97,6 +99,8 @@ func (hs *HTTPServer) handleConnection(clientConn net.Conn) {
 		log.Printf("Error reading request: %v", err)
 		return
 	}
+
+	log.Printf("收到HTTP请求: %s %s", req.Method, req.URL.String())
 
 	// 获取目标地址
 	var targetAddr string
@@ -119,6 +123,8 @@ func (hs *HTTPServer) handleConnection(clientConn net.Conn) {
 			}
 		}
 	}
+
+	log.Printf("目标地址: %s", targetAddr)
 
 	// 根据路由规则决定代理源
 	proxySource := hs.rulesEngine.Match(targetAddr)

@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Go代理核心服务检测脚本
-# 用于检测dualvpn-proxy服务的运行状态
+# 用于检测go-proxy-core服务的运行状态
 
 echo "检测Go代理核心服务状态..."
 

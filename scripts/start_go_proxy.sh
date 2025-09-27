@@ -10,17 +10,18 @@ echo "======================"
 echo "检查端口占用情况..."
 PORTS_USED=false
 
-if lsof -Pi :6160 -sTCP:LISTEN -t >/dev/null ; then
+# 检查端口时忽略权限错误
+if netstat -an | grep LISTEN | grep -q "\.6160 "; then
     echo "  发现端口 6160 (HTTP代理) 被占用"
     PORTS_USED=true
 fi
 
-if lsof -Pi :6161 -sTCP:LISTEN -t >/dev/null ; then
+if netstat -an | grep LISTEN | grep -q "\.6161 "; then
     echo "  发现端口 6161 (SOCKS5代理) 被占用"
     PORTS_USED=true
 fi
 
-if lsof -Pi :6162 -sTCP:LISTEN -t >/dev/null ; then
+if netstat -an | grep LISTEN | grep -q "\.6162 "; then
     echo "  发现端口 6162 (API服务) 被占用"
     PORTS_USED=true
 fi
@@ -40,17 +41,17 @@ echo ""
 echo "再次检查端口状态..."
 PORTS_STILL_USED=false
 
-if lsof -Pi :6160 -sTCP:LISTEN -t >/dev/null ; then
+if netstat -an | grep LISTEN | grep -q "\.6160 "; then
     echo "  端口 6160 (HTTP代理) 仍然被占用，无法启动服务"
     PORTS_STILL_USED=true
 fi
 
-if lsof -Pi :6161 -sTCP:LISTEN -t >/dev/null ; then
+if netstat -an | grep LISTEN | grep -q "\.6161 "; then
     echo "  端口 6161 (SOCKS5代理) 仍然被占用，无法启动服务"
     PORTS_STILL_USED=true
 fi
 
-if lsof -Pi :6162 -sTCP:LISTEN -t >/dev/null ; then
+if netstat -an | grep LISTEN | grep -q "\.6162 "; then
     echo "  端口 6162 (API服务) 仍然被占用，无法启动服务"
     PORTS_STILL_USED=true
 fi
@@ -68,41 +69,72 @@ echo ""
 echo "启动Go代理核心服务..."
 cd /Users/simon/Workspace/vsProject/dualvpn_manager/go-proxy-core
 
-# 检查dualvpn-proxy可执行文件是否存在
-if [ -f "./dualvpn-proxy" ]; then
+# 检查go-proxy-core可执行文件是否存在
+if [ -f "./bin/go-proxy-core" ]; then
     echo "使用已编译的可执行文件启动服务..."
-    nohup ./dualvpn-proxy > /tmp/go-proxy-core.log 2>&1 &
-    echo "服务启动命令已执行，PID: $!"
+    # OpenVPN需要管理员权限来创建TUN设备
+    if [ "$NEEDS_ROOT" = "true" ]; then
+        echo "以管理员权限启动服务..."
+        # 检查是否在macOS上运行
+        if [[ "$OSTYPE" == "darwin"* ]]; then
+            # 在macOS上，使用sudo启动并确保TUN设备可访问
+            sudo -b nohup ./bin/go-proxy-core > /tmp/go-proxy-core.log 2>&1
+            echo "服务启动命令已执行（管理员权限）"
+        else
+            # 在其他系统上直接使用sudo
+            sudo -b nohup ./bin/go-proxy-core > /tmp/go-proxy-core.log 2>&1
+            echo "服务启动命令已执行（管理员权限）"
+        fi
+    else
+        nohup ./bin/go-proxy-core > /tmp/go-proxy-core.log 2>&1 &
+        PID=$!
+        echo "服务启动命令已执行，PID: $PID"
+    fi
 else
     echo "未找到可执行文件，使用go run启动服务..."
-    nohup go run cmd/main.go > /tmp/go-proxy-core.log 2>&1 &
-    echo "服务启动命令已执行，PID: $!"
+    if [ "$NEEDS_ROOT" = "true" ]; then
+        echo "以管理员权限启动服务..."
+        # 检查是否在macOS上运行
+        if [[ "$OSTYPE" == "darwin"* ]]; then
+            # 在macOS上，使用sudo启动并确保TUN设备可访问
+            sudo -b nohup go run . > /tmp/go-proxy-core.log 2>&1
+            echo "服务启动命令已执行（管理员权限）"
+        else
+            # 在其他系统上直接使用sudo
+            sudo -b nohup go run . > /tmp/go-proxy-core.log 2>&1
+            echo "服务启动命令已执行（管理员权限）"
+        fi
+    else
+        nohup go run . > /tmp/go-proxy-core.log 2>&1 &
+        PID=$!
+        echo "服务启动命令已执行，PID: $PID"
+    fi
 fi
 
-# 等待几秒钟让服务启动
+# 等待更长时间让服务启动
 echo "等待服务启动..."
-sleep 3
+sleep 10
 
 # 检查服务是否成功启动
 echo ""
 echo "检查服务启动状态..."
 SERVICE_STARTED=false
 
-if lsof -Pi :6160 -sTCP:LISTEN -t >/dev/null ; then
+if netstat -an | grep LISTEN | grep -q "\.6160 "; then
     echo "  HTTP代理服务已启动 (端口 6160)"
     SERVICE_STARTED=true
 else
     echo "  HTTP代理服务启动失败 (端口 6160)"
 fi
 
-if lsof -Pi :6161 -sTCP:LISTEN -t >/dev/null ; then
+if netstat -an | grep LISTEN | grep -q "\.6161 "; then
     echo "  SOCKS5代理服务已启动 (端口 6161)"
     SERVICE_STARTED=true
 else
     echo "  SOCKS5代理服务启动失败 (端口 6161)"
 fi
 
-if lsof -Pi :6162 -sTCP:LISTEN -t >/dev/null ; then
+if netstat -an | grep LISTEN | grep -q "\.6162 "; then
     echo "  API服务已启动 (端口 6162)"
     SERVICE_STARTED=true
 else
@@ -121,5 +153,7 @@ if [ "$SERVICE_STARTED" = true ]; then
 else
     echo ""
     echo "错误：服务启动失败，请检查日志文件 /tmp/go-proxy-core.log"
+    echo "显示最近的日志内容："
+    tail -n 20 /tmp/go-proxy-core.log
     exit 1
 fi

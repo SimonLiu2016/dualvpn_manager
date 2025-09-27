@@ -46,7 +46,6 @@ DualVPN Proxy Core
 
 系统要求：
 - Clash (用于Shadowsocks/V2Ray协议)
-- OpenVPN (用于OpenVPN协议)
 
 支持的操作系统：
 - Windows

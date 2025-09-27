@@ -4,18 +4,27 @@ import 'package:path/path.dart' as path;
 import 'package:dualvpn_manager/utils/logger.dart';
 
 class OpenVPNService {
-  Process? _process;
   bool _isConnected = false;
+  String? _configPath;
+  String? _username;
+  String? _password;
 
   bool get isConnected => _isConnected;
 
-  // 连接到OpenVPN
+  // 连接到OpenVPN（通过Go代理核心，不使用外部命令）
   Future<bool> connect(
     String configPath, {
     String? username,
     String? password,
   }) async {
     try {
+      Logger.info('通过Go代理核心连接OpenVPN...');
+
+      // 保存配置信息，用于后续操作
+      _configPath = configPath;
+      _username = username;
+      _password = password;
+
       // 检查配置文件是否存在
       final configFile = File(configPath);
       if (!await configFile.exists()) {
@@ -31,71 +40,45 @@ class OpenVPNService {
         throw Exception('OpenVPN配置文件不可读: $configPath');
       }
 
-      // 检查OpenVPN命令是否可用
-      try {
-        final result = await Process.run('which', ['openvpn']);
-        if (result.exitCode != 0) {
-          Logger.error('OpenVPN命令未找到，请确保已安装OpenVPN');
-          throw Exception('OpenVPN命令未找到，请确保已安装OpenVPN');
-        }
-      } catch (e) {
-        Logger.error('检查OpenVPN命令失败: $e');
-        throw Exception('检查OpenVPN命令失败: $e');
-      }
+      // 通过Go代理核心API设置OpenVPN代理
+      // 构建请求体
+      final Map<String, dynamic> requestBody = {
+        'id': 'openvpn-proxy-1',
+        'name': 'OpenVPN Proxy',
+        'type': 'openvpn',
+        'server': '120.25.102.59',
+        'port': 1194,
+        'config': {'config_path': configPath},
+      };
 
-      // 构建OpenVPN命令
-      List<String> args = [
-        '--config', configPath,
-        '--daemon', // 后台运行
-      ];
-
-      // 如果提供了用户名和密码，则添加认证参数
+      // 如果提供了用户名和密码，则添加到配置中
       if (username != null && password != null) {
-        // 创建临时认证文件
-        final tempDir = await Directory.systemTemp.createTemp('openvpn_auth');
-        final authFile = File(path.join(tempDir.path, 'auth.txt'));
-        await authFile.writeAsString('$username\n$password\n');
-        args.addAll(['--auth-user-pass', authFile.path]);
+        requestBody['config']['username'] = username;
+        requestBody['config']['password'] = password;
       }
 
-      // 启动OpenVPN进程
-      Logger.info('正在启动OpenVPN进程...');
-      _process = await Process.start('openvpn', args);
+      // 发送请求到Go代理核心
+      final response =
+          await HttpClient().putUrl(
+              Uri.parse(
+                'http://127.0.0.1:6162/proxy-sources/openvpn-source/current-proxy',
+              ),
+            )
+            ..headers.set('Content-Type', 'application/json')
+            ..write(jsonEncode(requestBody));
 
-      // 监听进程输出以确定连接状态
-      _process!.stdout.listen(
-        (data) {
-          final output = utf8.decode(data);
-          Logger.debug('OpenVPN stdout: $output');
-          if (output.contains('Initialization Sequence Completed')) {
-            _isConnected = true;
-            Logger.info('OpenVPN初始化序列完成');
-          }
-        },
-        onError: (Object error) {
-          Logger.error('OpenVPN stdout监听错误: $error');
-        },
-      );
+      final httpResponse = await response.close();
 
-      _process!.stderr.listen(
-        (data) {
-          final output = utf8.decode(data);
-          Logger.error('OpenVPN stderr: $output');
-          if (output.contains('AUTH_FAILED') || output.contains('TLS Error')) {
-            _isConnected = false;
-            Logger.warn('OpenVPN认证失败或TLS错误');
-          }
-        },
-        onError: (Object error) {
-          Logger.error('OpenVPN stderr监听错误: $error');
-        },
-      );
-
-      // 等待一段时间以确定连接是否成功
-      await Future.delayed(const Duration(seconds: 5));
-
-      Logger.info('OpenVPN连接${_isConnected ? '成功' : '可能失败'}');
-      return _isConnected;
+      if (httpResponse.statusCode == 200) {
+        _isConnected = true;
+        Logger.info('OpenVPN连接成功');
+        return true;
+      } else {
+        final responseBody = await utf8.decodeStream(httpResponse);
+        Logger.error('OpenVPN连接失败: $responseBody');
+        _isConnected = false;
+        return false;
+      }
     } catch (e, stackTrace) {
       Logger.error('OpenVPN连接失败: $e\nStack trace: $stackTrace');
       _isConnected = false;
@@ -106,23 +89,20 @@ class OpenVPNService {
   // 断开OpenVPN连接
   Future<void> disconnect() async {
     try {
-      if (_process != null) {
-        // 尝试优雅地停止OpenVPN
-        _process!.kill(ProcessSignal.sigterm);
+      // 通过Go代理核心API停止OpenVPN代理
+      final response = await HttpClient().deleteUrl(
+        Uri.parse(
+          'http://127.0.0.1:6162/proxy-sources/openvpn-source/current-proxy',
+        ),
+      );
 
-        // 等待进程结束
-        await _process!.exitCode.timeout(
-          const Duration(seconds: 10),
-          onTimeout: () {
-            // 如果进程没有在10秒内结束，则强制杀死
-            _process!.kill(ProcessSignal.sigkill);
-            return 0;
-          },
-        );
+      await response.close();
 
-        _process = null;
-      }
       _isConnected = false;
+      _configPath = null;
+      _username = null;
+      _password = null;
+
       Logger.info('OpenVPN已断开连接');
     } catch (e, stackTrace) {
       Logger.error('断开OpenVPN连接时出错: $e\nStack trace: $stackTrace');
@@ -133,9 +113,24 @@ class OpenVPNService {
   // 检查OpenVPN是否正在运行
   Future<bool> checkStatus() async {
     try {
-      // 在macOS/Linux上检查OpenVPN进程
-      final result = await Process.run('pgrep', ['openvpn']);
-      return result.exitCode == 0;
+      // 通过Go代理核心API检查OpenVPN状态
+      final response = await HttpClient().getUrl(
+        Uri.parse('http://127.0.0.1:6162/proxy-sources/openvpn-source'),
+      );
+
+      final httpResponse = await response.close();
+
+      if (httpResponse.statusCode == 200) {
+        final responseBody = await utf8.decodeStream(httpResponse);
+        final data = jsonDecode(responseBody);
+
+        // 检查代理源是否有当前代理
+        if (data['currentProxy'] != null) {
+          return true;
+        }
+      }
+
+      return false;
     } catch (e, stackTrace) {
       Logger.error('检查OpenVPN状态时出错: $e\nStack trace: $stackTrace');
       return false;

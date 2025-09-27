@@ -7,18 +7,17 @@ import (
 
 	"github.com/dualvpn/go-proxy-core/config"
 	"github.com/dualvpn/go-proxy-core/dns"
-	"github.com/dualvpn/go-proxy-core/openvpn"
 	"github.com/dualvpn/go-proxy-core/routing"
 )
 
 // ProxyCore 代理核心
 type ProxyCore struct {
-	config          *config.Config
-	rulesEngine     *routing.RulesEngine
-	httpServer      *HTTPServer
-	socks5Server    *SOCKS5Server
-	dnsServer       *dns.DNSServer
-	openVPNProxy    *openvpn.OpenVPNProxy
+	config       *config.Config
+	rulesEngine  *routing.RulesEngine
+	httpServer   *HTTPServer
+	socks5Server *SOCKS5Server
+	dnsServer    *dns.DNSServer
+	// openVPNProxy    *openvpn.OpenVPNProxy  // 已移除，使用内部OpenVPN实现
 	tunDevice       *TUNDevice
 	protocolManager *ProtocolManager
 
@@ -152,10 +151,15 @@ func NewProxyCore(cfg *config.Config) *ProxyCore {
 	protocolManager.CreateProtocol(ProtocolSOCKS5, "socks5", socks5Config)
 
 	// OpenVPN协议
-	openvpnConfig := map[string]interface{}{
-		"name": "openvpn",
-	}
-	protocolManager.CreateProtocol(ProtocolOpenVPN, "openvpn", openvpnConfig)
+	// 注释掉默认的OpenVPN协议创建，OpenVPN协议应该通过API动态添加
+	/*
+		openvpnConfig := map[string]interface{}{
+			"name":   "openvpn",
+			"server": "127.0.0.1",
+			"port":   1194,
+		}
+		protocolManager.CreateProtocol(ProtocolOpenVPN, "openvpn", openvpnConfig)
+	*/
 
 	// 创建TUN设备（如果需要）
 	var tunDevice *TUNDevice
@@ -254,6 +258,9 @@ func (pc *ProxyCore) Stop() {
 	if pc.tunDevice != nil {
 		pc.tunDevice.Stop()
 	}
+
+	// 停止OpenVPN代理（如果正在运行）
+	// 注意：现在OpenVPN实现在协议内部处理，不需要在这里单独停止
 
 	pc.running = false
 	log.Println("Proxy core stopped")
@@ -410,6 +417,9 @@ func (pc *ProxyCore) SetCurrentProxy(sourceId string, proxy *ProxyInfo) {
 
 	// 添加日志以确认当前代理已设置
 	log.Printf("代理源 %s 的当前代理已设置为: %+v", sourceId, proxy)
+
+	// 注意：我们不再需要启动外部的OpenVPN代理，因为OpenVPN协议现在完全在内部实现
+	// OpenVPN连接将通过OpenVPNProtocol和OpenVPNClient内部处理
 }
 
 // GetCurrentProxy 获取代理源的当前代理

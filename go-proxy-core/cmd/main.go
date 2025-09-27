@@ -22,18 +22,25 @@ func main() {
 		cfg = config.DefaultConfig()
 	}
 
+	log.Printf("配置加载完成: HTTPPort=%d, Socks5Port=%d, APIPort=%d", cfg.HTTPPort, cfg.Socks5Port, cfg.APIPort)
+
 	// 创建代理核心
 	proxyCore := proxy.NewProxyCore(cfg) // 更改类型引用
+	log.Println("代理核心创建完成")
 
 	// 启动API服务
 	apiServer := api.NewAPIServer(proxyCore, cfg.APIPort)
 	go func() {
+		log.Printf("启动API服务器在端口 %d", cfg.APIPort)
 		if err := apiServer.Start(); err != nil {
 			log.Printf("API server error: %v", err)
+		} else {
+			log.Printf("API服务器启动成功")
 		}
 	}()
 
 	// 启动代理核心
+	log.Printf("启动代理核心...")
 	if err := proxyCore.Start(); err != nil {
 		log.Fatalf("Failed to start proxy core: %v", err)
 	}
@@ -41,13 +48,15 @@ func main() {
 	// 添加启动完成的日志
 	log.Printf("Proxy core fully started and ready to accept connections")
 
-	// 等待一段时间确保所有服务都已启动
-	time.Sleep(2 * time.Second)
-	log.Printf("All services should now be running")
-
 	// 等待中断信号
+	log.Println("等待中断信号...")
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
+
+	// 等待几秒钟看是否有错误
+	time.Sleep(5 * time.Second)
+	log.Println("5秒后程序仍在运行...")
+
 	<-sigChan
 
 	log.Println("Shutting down...")

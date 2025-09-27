@@ -1,13 +1,16 @@
 #!/bin/bash
 
 # Go代理核心完整测试脚本
-# 测试所有支持的代理类型：Shadowsocks, Trojan, VLESS
+# 测试所有支持的代理类型：Shadowsocks, Trojan, VLESS, OpenVPN
 
 echo "Go代理核心完整测试脚本"
 echo "======================"
 
 # 1. 启动服务
 echo "1. 启动Go代理核心服务..."
+# 设置环境变量，指示需要管理员权限来运行OpenVPN
+export NEEDS_ROOT=true
+cd /Users/simon/Workspace/vsProject/dualvpn_manager
 ./scripts/start_go_proxy.sh
 sleep 3
 
@@ -59,6 +62,16 @@ curl -s -X POST http://127.0.0.1:6162/proxy-sources \
     "type": "vless",
     "config": {}
   }' && echo "  ✓ 添加VLESS代理源"
+
+# 添加OpenVPN代理源
+curl -s -X POST http://127.0.0.1:6162/proxy-sources \
+  -H "Content-Type: application/json" \
+  -d '{
+    "id": "openvpn-source",
+    "name": "OpenVPN代理源",
+    "type": "openvpn",
+    "config": {}
+  }' && echo "  ✓ 添加OpenVPN代理源"
 
 # 4. 设置代理源的当前代理
 echo ""
@@ -124,6 +137,22 @@ curl -s -X PUT http://127.0.0.1:6162/proxy-sources/vless-source/current-proxy \
     }
   }' && echo "  ✓ 设置VLESS代理"
 
+# 设置OpenVPN代理
+curl -s -X PUT http://127.0.0.1:6162/proxy-sources/openvpn-source/current-proxy \
+  -H "Content-Type: application/json" \
+  -d '{
+    "id": "openvpn-proxy-1",
+    "name": "CTF OpenVPN",
+    "type": "openvpn",
+    "server": "120.25.102.59",
+    "port": 1194,
+    "config": {
+      "config_path": "/Users/simon/ctf-vpn-config/ctf-new-1128/config.ovpn",
+      "username": "liuzhongren",
+      "password": "Ctf#1234.panshi09"
+    }
+  }' && echo "  ✓ 设置OpenVPN代理"
+
 # 5. 配置路由规则
 echo ""
 echo "5. 配置路由规则..."
@@ -152,6 +181,12 @@ curl -s -X PUT http://127.0.0.1:6162/rules \
       "type": "DOMAIN-SUFFIX",
       "pattern": "microsoft.com",
       "proxy_source": "vless-source",
+      "enabled": true
+    },
+    {
+      "type": "DOMAIN-SUFFIX",
+      "pattern": "pingcode.ctf.com.cn",
+      "proxy_source": "openvpn-source",
       "enabled": true
     },
     {
@@ -196,6 +231,9 @@ curl -s -x http://127.0.0.1:6160 -I https://www.github.com 2>/dev/null | head -n
 
 echo "  测试microsoft.com (VLESS代理):"
 curl -s -x http://127.0.0.1:6160 -I https://www.microsoft.com 2>/dev/null | head -n 1
+
+echo "  测试https://pingcode.ctf.com.cn (OpenVPN代理):"
+curl -s -x http://127.0.0.1:6160 -I https://pingcode.ctf.com.cn --connect-timeout 30 --max-time 60 2>/dev/null | head -n 1 || echo "  OpenVPN代理测试超时或失败"
 
 echo "  等待统计信息更新..."
 sleep 3

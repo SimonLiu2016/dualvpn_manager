@@ -112,6 +112,11 @@ func (pm *ProtocolManager) CreateProtocol(protocolType ProtocolType, name string
 		return nil, fmt.Errorf("unsupported protocol type: %s", protocolType)
 	}
 
+	// 确保配置中包含协议名称
+	if _, exists := config["name"]; !exists {
+		config["name"] = name
+	}
+
 	protocol, err := factory.CreateProtocol(config)
 	if err != nil {
 		log.Printf("创建协议 %s 失败: %v", protocolType, err)
@@ -123,6 +128,12 @@ func (pm *ProtocolManager) CreateProtocol(protocolType ProtocolType, name string
 
 	// 添加日志以调试协议创建过程
 	log.Printf("成功创建并注册协议: name=%s, type=%s", name, protocolType)
+
+	// 打印所有已注册的协议
+	log.Printf("当前已注册的协议数量: %d", len(pm.protocols))
+	for pname, p := range pm.protocols {
+		log.Printf("已注册协议: name=%s, type=%s", pname, p.Type())
+	}
 
 	return protocol, nil
 }
@@ -148,6 +159,12 @@ func (pm *ProtocolManager) GetAllProtocols() map[string]ProxyProtocol {
 // Connect 通过指定协议连接到目标地址
 func (pm *ProtocolManager) Connect(protocolName, targetAddr string) (net.Conn, error) {
 	log.Printf("协议管理器尝试通过协议 %s 连接到目标 %s", protocolName, targetAddr)
+
+	// 添加调试日志，显示当前所有已注册的协议
+	log.Printf("当前已注册的协议数量: %d", len(pm.protocols))
+	for name, protocol := range pm.protocols {
+		log.Printf("已注册协议: %s (%s)", name, protocol.Type())
+	}
 
 	protocol, exists := pm.protocols[protocolName]
 	if !exists {
