@@ -1,9 +1,7 @@
-http_port: 8080
-socks5_port: 8081
-api_port: 8082
-openvpn_port: 1080
+http_port: 6160
+socks5_port: 6161
+api_port: 6162
 dns_port: 53
 dns_type: "fakeip"
 doh_server: "https://1.1.1.1/dns-query"
-rules_file: "rules.yaml"
 log_level: "info"

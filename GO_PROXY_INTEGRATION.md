@@ -34,7 +34,7 @@ Go代理核心 (独立进程)
 
 ```bash
 cd /Users/simon/Workspace/vsProject/dualvpn_manager/go-proxy-core
-./dualvpn-proxy
+./go-proxy-core
 ```
 
 ### 2. 通过 Flutter 应用启动
@@ -118,7 +118,7 @@ rules:
 1. **启动 Go 代理核心**：
 
    - 方法一：在 Flutter 应用中点击"启动"按钮
-   - 方法二：在终端中手动运行 `./dualvpn-proxy`
+   - 方法二：在终端中手动运行 `./go-proxy-core`
 
 2. **配置代理源**：
 
@@ -177,7 +177,7 @@ tail -f go-proxy-core/logs/error.log
 
 ```bash
 # 查找进程ID
-ps aux | grep dualvpn-proxy
+ps aux | grep go-proxy-core
 
 # 杀死进程
 kill -9 <进程ID>

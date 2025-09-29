@@ -25,7 +25,7 @@ mkdir -p "$OUTPUT_DIR"
 
 # 构建主程序
 echo "Building main proxy core..."
-go build -o "$OUTPUT_DIR/dualvpn-proxy" ./cmd/main.go
+go build -o "$OUTPUT_DIR/go-proxy-core" ./cmd/main.go
 
 # 复制配置文件
 echo "Copying configuration files..."
@@ -42,7 +42,7 @@ DualVPN Proxy Core
 使用方法：
 1. 编辑 config.yaml 配置文件
 2. 编辑 rules.yaml 路由规则文件
-3. 运行 dualvpn-proxy 可执行文件
+3. 运行 go-proxy-core 可执行文件
 
 系统要求：
 - Clash (用于Shadowsocks/V2Ray协议)

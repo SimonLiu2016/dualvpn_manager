@@ -51,7 +51,7 @@ go mod tidy
 ## 编译
 
 ```bash
-go build -o dualvpn-proxy ./cmd/main.go
+go build -o go-proxy-core ./cmd/main.go
 ```
 
 ## 配置文件
@@ -135,7 +135,7 @@ Content-Type: application/json
 2. 运行代理核心：
 
 ```bash
-./dualvpn-proxy
+./go-proxy-core
 ```
 
 3. 通过 Flutter UI 或 API 接口进行配置管理

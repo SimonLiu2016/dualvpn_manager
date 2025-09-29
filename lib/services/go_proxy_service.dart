@@ -400,9 +400,9 @@ class GoProxyService {
       // 首先尝试在项目目录中查找
       final projectDir = Directory.current;
       final possiblePaths = [
-        path.join(projectDir.path, 'go-proxy-core', 'dualvpn-proxy'),
-        path.join(projectDir.path, 'go-proxy-core', 'bin', 'dualvpn-proxy'),
-        path.join(projectDir.path, 'go-proxy-core', 'dist', 'dualvpn-proxy'),
+        path.join(projectDir.path, 'go-proxy-core', 'go-proxy-core'),
+        path.join(projectDir.path, 'go-proxy-core', 'bin', 'go-proxy-core'),
+        path.join(projectDir.path, 'go-proxy-core', 'dist', 'go-proxy-core'),
       ];
 
       for (final p in possiblePaths) {
@@ -414,7 +414,7 @@ class GoProxyService {
       }
 
       // 尝试在系统PATH中查找
-      final result = await Process.run('which', ['dualvpn-proxy']);
+      final result = await Process.run('which', ['go-proxy-core']);
       if (result.exitCode == 0) {
         final path = result.stdout.toString().trim();
         Logger.info('在系统PATH中找到代理核心可执行文件: $path');
@@ -428,12 +428,12 @@ class GoProxyService {
         final buildResult = await Process.run('go', [
           'build',
           '-o',
-          'dualvpn-proxy',
+          'go-proxy-core',
           './cmd/main.go',
         ], workingDirectory: goProxyDir.path);
 
         if (buildResult.exitCode == 0) {
-          final executablePath = path.join(goProxyDir.path, 'dualvpn-proxy');
+          final executablePath = path.join(goProxyDir.path, 'go-proxy-core');
           final file = File(executablePath);
           if (await file.exists()) {
             Logger.info('成功构建代理核心可执行文件: $executablePath');
@@ -455,8 +455,8 @@ class GoProxyService {
   /// 终止任何已运行的Go代理核心实例
   Future<void> _killExistingProcess() async {
     try {
-      // 在macOS上终止任何已运行的dualvpn-proxy进程
-      final result = await Process.run('pkill', ['-f', 'dualvpn-proxy']);
+      // 在macOS上终止任何已运行的go-proxy-core进程
+      final result = await Process.run('pkill', ['-f', 'go-proxy-core']);
       if (result.exitCode == 0) {
         Logger.info('已终止现有的Go代理核心实例');
         // 等待一段时间确保进程完全终止

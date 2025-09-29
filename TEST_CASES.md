@@ -61,7 +61,7 @@ Go 代理核心现在支持更精准的流量统计能力：
 
 ```
 cd /Users/simon/Workspace/vsProject/dualvpn_manager/go-proxy-core
-./dualvpn-proxy
+./go-proxy-core
 ```
 
 ### 方法 3：使用构建脚本
@@ -69,7 +69,7 @@ cd /Users/simon/Workspace/vsProject/dualvpn_manager/go-proxy-core
 ```
 cd /Users/simon/Workspace/vsProject/dualvpn_manager/go-proxy-core
 ./build.sh
-./bin/dualvpn-proxy
+./bin/go-proxy-core
 ```
 
 ### 方法 4：直接使用 Go 运行
