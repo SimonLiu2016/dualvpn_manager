@@ -66,17 +66,6 @@ class AppState extends ChangeNotifier {
       Logger.info('=== 开始应用启动后已选中的代理 ===');
       Logger.info('当前代理缓存数量: ${_proxiesByConfig.length}');
 
-      // 打印所有缓存的代理状态
-      _proxiesByConfig.forEach((configId, proxies) {
-        Logger.info('配置 $configId 有 ${proxies.length} 个代理');
-        for (var i = 0; i < proxies.length; i++) {
-          final proxy = proxies[i];
-          Logger.info(
-            '  代理 $i: name=${proxy['name']}, latency=${proxy['latency']}, isSelected=${proxy['isSelected']}',
-          );
-        }
-      });
-
       // 检查是否有任何选中的代理
       bool hasAnySelectedProxy = false;
       for (var entry in _proxiesByConfig.entries) {
@@ -274,25 +263,19 @@ class AppState extends ChangeNotifier {
       Logger.info('初始化代理源...');
 
       // 初始化常用的代理源
-      final proxySources = [
-        {'id': 'clash', 'name': 'Clash', 'type': 'clash'},
-        {'id': 'shadowsocks', 'name': 'Shadowsocks', 'type': 'shadowsocks'},
-        {'id': 'v2ray', 'name': 'V2Ray', 'type': 'v2ray'},
-        {'id': 'http', 'name': 'HTTP Proxy', 'type': 'http'},
-        {'id': 'socks5', 'name': 'SOCKS5 Proxy', 'type': 'socks5'},
-      ];
+      final List<VPNConfig> proxySources = await ConfigManager.loadConfigs();
 
       for (final source in proxySources) {
         final result = await _vpnManager.addProxySource(
-          source['id']!,
-          source['name']!,
-          source['type']!,
+          source.id,
+          source.name,
+          source.type.toString(),
           {},
         );
         if (result) {
-          Logger.info('成功初始化代理源: ${source['id']}');
+          Logger.info('成功初始化代理源: ${source.id}, name: ${source.name}');
         } else {
-          Logger.warn('初始化代理源失败: ${source['id']}');
+          Logger.warn('初始化代理源失败: ${source.id}, name: ${source.name}');
         }
       }
 
@@ -975,14 +958,6 @@ class AppState extends ChangeNotifier {
       Logger.info('正在将选中的代理应用到Go代理核心: $proxyName');
       Logger.info('当前代理列表数量: ${_proxies.length}');
 
-      // 打印当前所有代理的信息用于调试
-      for (var i = 0; i < _proxies.length; i++) {
-        final proxy = _proxies[i];
-        Logger.info(
-          '  当前代理 $i: name=${proxy['name']}, type=${proxy['type']}, server=${proxy['server']}, port=${proxy['port']}, method=${proxy['method']}, cipher=${proxy['cipher']}, password=${proxy['password']}, isSelected=${proxy['isSelected']}',
-        );
-      }
-
       // 获取当前选中的配置
       final configs = await ConfigManager.loadConfigs();
       final currentConfig = configs.firstWhere(
@@ -991,42 +966,9 @@ class AppState extends ChangeNotifier {
       );
 
       // 根据配置类型确定代理源ID和类型
-      String sourceId;
-      String sourceType;
-      String sourceName;
-
-      switch (currentConfig.type) {
-        case VPNType.clash:
-          sourceId = 'clash';
-          sourceType = 'clash';
-          sourceName = 'Clash';
-          break;
-        case VPNType.shadowsocks:
-          sourceId = 'shadowsocks';
-          sourceType = 'shadowsocks';
-          sourceName = 'Shadowsocks';
-          break;
-        case VPNType.v2ray:
-          sourceId = 'v2ray';
-          sourceType = 'v2ray';
-          sourceName = 'V2Ray';
-          break;
-        case VPNType.httpProxy:
-          sourceId = 'http';
-          sourceType = 'http';
-          sourceName = 'HTTP Proxy';
-          break;
-        case VPNType.socks5:
-          sourceId = 'socks5';
-          sourceType = 'socks5';
-          sourceName = 'SOCKS5 Proxy';
-          break;
-        default:
-          sourceId = 'direct';
-          sourceType = 'direct';
-          sourceName = 'Direct';
-      }
-
+      String sourceId = currentConfig.id;
+      String sourceType = currentConfig.type.toString();
+      String sourceName = currentConfig.name;
       Logger.info('确定代理源信息: id=$sourceId, type=$sourceType, name=$sourceName');
 
       // 查找选中的代理信息
@@ -1056,12 +998,33 @@ class AppState extends ChangeNotifier {
       }
 
       Logger.info('找到选中的代理信息: $selectedProxy');
+      var proxyType = selectedProxy['type'];
+      switch (currentConfig.type) {
+        case VPNType.shadowsocks:
+        case VPNType.clash:
+        case VPNType.v2ray:
+          switch (selectedProxy['type']) {
+            case 'ss':
+              proxyType = 'shadowsocks';
+              break;
+            case 'ssr':
+              proxyType = 'shadowsocksr';
+              break;
+          }
+          break;
+        case VPNType.openVPN:
+          proxyType = 'openvpn';
+          break;
+
+        default:
+          proxyType = 'unknown';
+      }
 
       // 构造完整的代理信息，包含cipher和password等配置
       final proxyInfo = {
-        'id': selectedProxy['name'], // 使用代理名称作为ID
+        'id': _generateProxyId(selectedProxy['name']),
         'name': selectedProxy['name'],
-        'type': selectedProxy['type'] ?? 'unknown',
+        'type': proxyType,
         'server': selectedProxy['server'] ?? '127.0.0.1',
         'port': selectedProxy['port'] ?? 1080,
         'config': <String, dynamic>{},
@@ -1138,19 +1101,6 @@ class AppState extends ChangeNotifier {
 
       Logger.info('准备设置代理源 $sourceId 的当前代理: $proxyInfo');
 
-      // 添加额外的调试日志
-      Logger.info('代理信息详情:');
-      proxyInfo.forEach((key, value) {
-        if (key == 'config') {
-          Logger.info('  config:');
-          (value as Map).forEach((k, v) {
-            Logger.info('    $k: $v');
-          });
-        } else {
-          Logger.info('  $key: $value');
-        }
-      });
-
       // 设置代理源的当前代理
       final result = await _vpnManager.setProxySourceCurrentProxy(
         sourceId,
@@ -1168,6 +1118,32 @@ class AppState extends ChangeNotifier {
       Logger.error('应用选中代理到Go代理核心时出错: $e');
       Logger.error('Stack trace: $stackTrace');
     }
+  }
+
+  // 生成代理ID（基于代理名称做转码）
+  String _generateProxyId(String proxyName) {
+    // 清理代理名称中的特殊字符，只保留字母、数字、连字符和下划线
+    final cleanedName = proxyName.replaceAll(RegExp(r'[^\w\- ]'), '');
+    // 将空格替换为下划线
+    final normalizedName = cleanedName.replaceAll(' ', '_');
+
+    // 控制名称长度，避免过长
+    final maxNameLength = 50;
+    String processedName = normalizedName;
+    if (processedName.length > maxNameLength) {
+      processedName = processedName.substring(0, maxNameLength);
+    }
+
+    // 使用代理名称的哈希值作为后缀，确保唯一性
+    final nameHash = proxyName.hashCode.abs();
+
+    // 确保ID不为空，如果为空则使用默认值
+    if (processedName.isEmpty) {
+      return 'proxy_${DateTime.now().millisecondsSinceEpoch}_$nameHash';
+    }
+
+    // 返回带哈希后缀的ID，确保唯一性
+    return '${processedName}_$nameHash';
   }
 
   // 更新托盘图标
@@ -2313,30 +2289,8 @@ class AppState extends ChangeNotifier {
           String proxySource = 'DIRECT'; // 默认直连
 
           if (config != null) {
-            // 根据配置类型确定代理源
-            switch (config.type) {
-              case VPNType.openVPN:
-                proxySource = 'openvpn';
-                break;
-              case VPNType.clash:
-                // 修复：使用与VPN管理器中一致的名称'clash'
-                proxySource = 'clash';
-                break;
-              case VPNType.shadowsocks:
-                proxySource = 'shadowsocks';
-                break;
-              case VPNType.v2ray:
-                proxySource = 'v2ray';
-                break;
-              case VPNType.httpProxy:
-                proxySource = 'http';
-                break;
-              case VPNType.socks5:
-                proxySource = 'socks5';
-                break;
-              default:
-                proxySource = 'DIRECT';
-            }
+            
+            proxySource = config.id;
 
             Logger.info(
               '路由规则映射: 配置ID=${rule.proxyId}, 配置类型=${config.type}, 代理源=$proxySource',
