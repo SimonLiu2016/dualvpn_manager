@@ -4,8 +4,6 @@ import (
 	"fmt"
 	"log"
 	"net"
-	"sync"
-	"time"
 
 	"github.com/dualvpn/go-proxy-core/openvpn"
 )
@@ -19,43 +17,6 @@ type OpenVPNProtocol struct {
 	password   string
 	configPath string                 // OpenVPN配置文件路径
 	client     *openvpn.OpenVPNClient // 使用内部OpenVPN客户端
-	socksPort  int
-}
-
-// 用于跟踪已使用的SOCKS端口
-var (
-	socksPortMutex sync.Mutex
-	socksPortPool  = make(map[int]bool)
-	nextSocksPort  = 1080 // 从1080开始分配端口
-)
-
-// 获取可用的SOCKS端口
-func getAvailableSocksPort() int {
-	socksPortMutex.Lock()
-	defer socksPortMutex.Unlock()
-
-	// 查找可用的端口
-	for {
-		// 检查端口是否已被使用
-		if !socksPortPool[nextSocksPort] {
-			// 检查端口是否真的可用
-			addr := fmt.Sprintf("127.0.0.1:%d", nextSocksPort)
-			if listener, err := net.Listen("tcp", addr); err == nil {
-				listener.Close()
-				socksPortPool[nextSocksPort] = true
-				port := nextSocksPort
-				nextSocksPort++
-				if nextSocksPort > 65535 {
-					nextSocksPort = 1080 // 重新从1080开始
-				}
-				return port
-			}
-		}
-		nextSocksPort++
-		if nextSocksPort > 65535 {
-			nextSocksPort = 1080 // 重新从1080开始
-		}
-	}
 }
 
 // OpenVPNProtocolFactory OpenVPN协议工厂
@@ -82,9 +43,6 @@ func (f *OpenVPNProtocolFactory) CreateProtocol(config map[string]interface{}) (
 		name = fmt.Sprintf("openvpn-%s:%d", server, port)
 	}
 
-	// 使用动态分配的SOCKS端口
-	socksPort := getAvailableSocksPort()
-
 	protocol := &OpenVPNProtocol{
 		BaseProtocol: BaseProtocol{
 			name:         name,
@@ -95,7 +53,6 @@ func (f *OpenVPNProtocolFactory) CreateProtocol(config map[string]interface{}) (
 		username:   username,
 		password:   password,
 		configPath: configPath,
-		socksPort:  socksPort,
 	}
 
 	return protocol, nil
@@ -103,13 +60,13 @@ func (f *OpenVPNProtocolFactory) CreateProtocol(config map[string]interface{}) (
 
 // Connect 连接到目标地址（通过OpenVPN）
 func (op *OpenVPNProtocol) Connect(targetAddr string) (net.Conn, error) {
-	log.Printf("OpenVPN协议开始连接: targetAddr=%s, server=%s, port=%d, configPath=%s, socksPort=%d", targetAddr, op.server, op.port, op.configPath, op.socksPort)
+	log.Printf("OpenVPN协议开始连接: targetAddr=%s, server=%s, port=%d, configPath=%s", targetAddr, op.server, op.port, op.configPath)
 
 	// 如果OpenVPN客户端尚未启动，则启动它
 	if op.client == nil {
-		log.Printf("创建并启动OpenVPN客户端: configPath=%s, server=%s, port=%d, socksPort=%d", op.configPath, op.server, op.port, op.socksPort)
+		log.Printf("创建并启动OpenVPN客户端: configPath=%s, server=%s, port=%d", op.configPath, op.server, op.port)
 		// 创建并启动OpenVPN客户端
-		op.client = openvpn.NewOpenVPNClient(op.configPath, op.server, op.port, op.socksPort)
+		op.client = openvpn.NewOpenVPNClient(op.configPath, op.server, op.port, 0) // SOCKS端口参数已移除
 		// 设置凭据
 		op.client.SetCredentials(op.username, op.password)
 
@@ -143,30 +100,15 @@ func (op *OpenVPNProtocol) Connect(targetAddr string) (net.Conn, error) {
 	}
 
 	// 通过OpenVPN客户端连接到目标地址
-	// 这里会通过SOCKS代理连接，确保流量通过OpenVPN隧道传输
+	// 这会检查隧道是否就绪并正确处理连接
 	log.Printf("通过OpenVPN客户端连接到目标: %s", targetAddr)
-
-	// 增加重试机制，确保连接成功
-	var conn net.Conn
-	var err error
-	for i := 0; i < 3; i++ {
-		log.Printf("第%d次尝试通过OpenVPN连接到目标: %s", i+1, targetAddr)
-		// 设置连接超时时间
-		conn, err = op.client.ConnectToTarget(targetAddr)
-		if err == nil {
-			log.Printf("第%d次尝试通过OpenVPN连接到目标成功", i+1)
-			break
-		}
-		log.Printf("第%d次尝试通过OpenVPN连接到目标失败: %v，等待1秒后重试", i+1, err)
-		time.Sleep(1 * time.Second)
-	}
-
+	conn, err := op.client.ConnectToTarget(targetAddr)
 	if err != nil {
-		log.Printf("通过OpenVPN连接到目标失败: %v", err)
-		return nil, fmt.Errorf("failed to connect to target %s through OpenVPN: %v", targetAddr, err)
+		log.Printf("通过OpenVPN客户端连接到目标失败: %v", err)
+		return nil, fmt.Errorf("failed to connect to target %s through OpenVPN client: %v", targetAddr, err)
 	}
 
-	log.Printf("成功通过OpenVPN连接到目标: %s", targetAddr)
+	log.Printf("成功通过OpenVPN客户端连接到目标: %s", targetAddr)
 	return conn, nil
 }
 
@@ -174,11 +116,6 @@ func (op *OpenVPNProtocol) Connect(targetAddr string) (net.Conn, error) {
 func (op *OpenVPNProtocol) Close() error {
 	// 关闭OpenVPN客户端
 	if op.client != nil {
-		// 释放SOCKS端口
-		socksPortMutex.Lock()
-		delete(socksPortPool, op.socksPort)
-		socksPortMutex.Unlock()
-
 		return op.client.Stop()
 	}
 	return nil
