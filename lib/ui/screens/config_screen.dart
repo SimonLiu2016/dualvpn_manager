@@ -31,7 +31,6 @@ class _ConfigScreenState extends State<ConfigScreen> {
 
   VPNType _selectedType = VPNType.openVPN;
   VPNType _editSelectedType = VPNType.openVPN;
-  bool _showAdvancedSettings = false;
   VPNConfig? _editingConfig; // 当前正在编辑的配置
 
   @override
@@ -79,6 +78,12 @@ class _ConfigScreenState extends State<ConfigScreen> {
         return;
       }
       configPath = _pathController.text;
+
+      // 为OpenVPN类型添加用户名和密码到设置中
+      if (_selectedType == VPNType.openVPN) {
+        settings['username'] = _usernameController.text;
+        settings['password'] = _passwordController.text;
+      }
     } else {
       // 对于其他类型，使用服务器地址和端口
       if (_serverController.text.isEmpty || _portController.text.isEmpty) {
@@ -281,6 +286,12 @@ class _ConfigScreenState extends State<ConfigScreen> {
             config.settings['username']?.toString() ?? '';
         _editPasswordController.text =
             config.settings['password']?.toString() ?? '';
+      } else if (config.type == VPNType.openVPN) {
+        // 如果是OpenVPN类型，加载用户名和密码
+        _editUsernameController.text =
+            config.settings['username']?.toString() ?? '';
+        _editPasswordController.text =
+            config.settings['password']?.toString() ?? '';
       }
     });
 
@@ -346,15 +357,38 @@ class _ConfigScreenState extends State<ConfigScreen> {
                 if (_editSelectedType == VPNType.openVPN ||
                     _editSelectedType == VPNType.clash ||
                     _editSelectedType.supportsSubscription)
-                  TextField(
-                    controller: _editPathController,
-                    decoration: InputDecoration(
-                      labelText: _editSelectedType == VPNType.openVPN
-                          ? '配置文件路径'
-                          : _editSelectedType.supportsSubscription
-                          ? '配置文件路径或订阅链接'
-                          : '配置文件路径',
-                    ),
+                  Column(
+                    children: [
+                      TextField(
+                        controller: _editPathController,
+                        decoration: InputDecoration(
+                          labelText: _editSelectedType == VPNType.openVPN
+                              ? '配置文件路径'
+                              : _editSelectedType.supportsSubscription
+                              ? '配置文件路径或订阅链接'
+                              : '配置文件路径',
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      // 为OpenVPN类型添加用户名和密码输入框
+                      if (_editSelectedType == VPNType.openVPN) ...[
+                        TextField(
+                          controller: _editUsernameController,
+                          decoration: const InputDecoration(
+                            labelText: '用户名(可选)',
+                          ),
+                        ),
+                        const SizedBox(height: 16),
+                        TextField(
+                          controller: _editPasswordController,
+                          decoration: const InputDecoration(
+                            labelText: '密码(可选)',
+                          ),
+                          obscureText: true,
+                        ),
+                        const SizedBox(height: 16),
+                      ],
+                    ],
                   )
                 else
                   Column(
@@ -431,6 +465,12 @@ class _ConfigScreenState extends State<ConfigScreen> {
         return;
       }
       configPath = _editPathController.text;
+
+      // 为OpenVPN类型添加用户名和密码到设置中
+      if (_editSelectedType == VPNType.openVPN) {
+        settings['username'] = _editUsernameController.text;
+        settings['password'] = _editPasswordController.text;
+      }
     } else {
       // 对于其他类型，使用服务器地址和端口
       if (_editServerController.text.isEmpty ||
@@ -596,17 +636,44 @@ class _ConfigScreenState extends State<ConfigScreen> {
                       if (_selectedType == VPNType.openVPN ||
                           _selectedType == VPNType.clash ||
                           _selectedType.supportsSubscription)
-                        TextField(
-                          controller: _pathController,
-                          decoration: InputDecoration(
-                            labelText: _selectedType == VPNType.openVPN
-                                ? '配置文件路径'
-                                : _selectedType.supportsSubscription
-                                ? '配置文件路径或订阅链接'
-                                : '配置文件路径',
-                            border: const OutlineInputBorder(),
-                            prefixIcon: const Icon(Icons.file_present),
-                          ),
+                        Column(
+                          children: [
+                            TextField(
+                              controller: _pathController,
+                              decoration: InputDecoration(
+                                labelText: _selectedType == VPNType.openVPN
+                                    ? '配置文件路径'
+                                    : _selectedType.supportsSubscription
+                                    ? '配置文件路径或订阅链接'
+                                    : '配置文件路径',
+                                border: const OutlineInputBorder(),
+                                prefixIcon: const Icon(Icons.file_present),
+                              ),
+                            ),
+                            const SizedBox(height: 16),
+                            // 为OpenVPN类型添加用户名和密码输入框
+                            if (_selectedType == VPNType.openVPN) ...[
+                              TextField(
+                                controller: _usernameController,
+                                decoration: const InputDecoration(
+                                  labelText: '用户名(可选)',
+                                  border: OutlineInputBorder(),
+                                  prefixIcon: Icon(Icons.person),
+                                ),
+                              ),
+                              const SizedBox(height: 16),
+                              TextField(
+                                controller: _passwordController,
+                                decoration: const InputDecoration(
+                                  labelText: '密码(可选)',
+                                  border: OutlineInputBorder(),
+                                  prefixIcon: Icon(Icons.lock),
+                                ),
+                                obscureText: true,
+                              ),
+                              const SizedBox(height: 16),
+                            ],
+                          ],
                         )
                       else
                         Column(

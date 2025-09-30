@@ -7,7 +7,6 @@ import 'package:dualvpn_manager/services/smart_routing_engine.dart'
 import 'package:dualvpn_manager/utils/logger.dart';
 import 'package:dualvpn_manager/utils/config_manager.dart';
 import 'package:dualvpn_manager/utils/tray_manager.dart';
-import 'dart:io';
 import 'dart:convert';
 import 'package:window_manager/window_manager.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -1148,16 +1147,6 @@ class AppState extends ChangeNotifier {
 
   // 更新托盘图标
   void _updateTrayIcon() {
-    // 检查是否有任何VPN/代理连接
-    bool hasAnyConnection =
-        _openVPNConnected ||
-        _clashConnected ||
-        _shadowsocksConnected ||
-        _v2rayConnected ||
-        _httpProxyConnected ||
-        _socks5ProxyConnected ||
-        _isRunning; // 添加Go代理核心运行状态
-
     // 更新托盘图标，考虑Go代理核心的运行状态
     _trayManager.updateTrayIcon(_openVPNConnected, _clashConnected);
   }
@@ -1586,9 +1575,7 @@ class AppState extends ChangeNotifier {
         return smart_routing_engine.RuleType.domainSuffix;
       case RouteType.custom:
         return smart_routing_engine.RuleType.domainSuffix;
-      default:
-        return smart_routing_engine.RuleType.domainSuffix;
-    }
+      }
   }
 
   // 设置活动配置到代理管理器

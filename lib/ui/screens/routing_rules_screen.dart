@@ -211,9 +211,7 @@ class _RoutingRulesScreenState extends State<RoutingRulesScreen> {
         return '强制使用SOCKS5代理';
       case RouteType.custom:
         return '强制使用自定义代理';
-      default:
-        return '强制使用默认路由';
-    }
+      }
   }
 
   // 获取VPN配置名称
@@ -279,9 +277,7 @@ class _RoutingRulesScreenState extends State<RoutingRulesScreen> {
         return smart_routing_engine.RuleType.domainSuffix;
       case RouteType.custom:
         return smart_routing_engine.RuleType.domainSuffix;
-      default:
-        return smart_routing_engine.RuleType.domainSuffix;
-    }
+      }
   }
 
   @override

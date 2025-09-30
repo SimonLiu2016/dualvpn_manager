@@ -1,20 +1,19 @@
-import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
-import 'package:window_manager/window_manager.dart';
+import 'dart:developer' as developer;
+import 'dart:io' show Platform;
+
+import 'package:dualvpn_manager/debug_screen.dart';
 import 'package:dualvpn_manager/models/app_state.dart';
 import 'package:dualvpn_manager/models/vpn_config.dart';
-import 'package:dualvpn_manager/utils/config_manager.dart';
 import 'package:dualvpn_manager/ui/screens/config_screen.dart';
-import 'package:dualvpn_manager/ui/screens/routing_screen.dart';
 import 'package:dualvpn_manager/ui/screens/proxy_list_screen.dart';
-import 'package:dualvpn_manager/debug_screen.dart';
+import 'package:dualvpn_manager/ui/screens/routing_screen.dart';
 import 'package:dualvpn_manager/ui/widgets/go_proxy_stats_widget.dart';
 import 'package:dualvpn_manager/ui/widgets/selected_proxies_widget.dart';
-import 'dart:io' show Platform, exit;
-import 'package:flutter/foundation.dart' show kIsWeb;
-import 'dart:io' show Platform;
-import 'dart:developer' as developer;
+import 'package:dualvpn_manager/utils/config_manager.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:provider/provider.dart';
+import 'package:window_manager/window_manager.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -159,7 +158,6 @@ class _HomeScreenState extends State<HomeScreen> with WindowListener {
       Future.delayed(const Duration(milliseconds: 150), () {
         // 隐藏窗口而不是关闭应用
         windowManager.hide();
-        print('窗口已隐藏');
       });
 
       // 显示提示信息
@@ -170,10 +168,8 @@ class _HomeScreenState extends State<HomeScreen> with WindowListener {
             duration: Duration(seconds: 2),
           ),
         );
-        print('提示信息已显示');
       }
     } catch (e) {
-      print('处理窗口关闭事件时出错: $e');
       // 即使出错也尝试隐藏窗口
       try {
         windowManager.hide();

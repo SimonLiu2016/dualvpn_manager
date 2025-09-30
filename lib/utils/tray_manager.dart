@@ -1,10 +1,8 @@
 import 'package:tray_manager/tray_manager.dart';
 import 'package:window_manager/window_manager.dart';
-import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'dart:io';
 import 'dart:developer' as developer;
-import 'package:provider/provider.dart';
 import 'package:dualvpn_manager/models/app_state.dart';
 
 class DualVPNTrayManager with TrayListener {
