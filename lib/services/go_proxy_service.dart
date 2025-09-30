@@ -59,6 +59,10 @@ class GoProxyService {
 
       Logger.info('正在启动Go代理核心: $executablePath');
 
+      // 创建日志文件
+      final logFile = File('/tmp/go-proxy-core.log');
+      final logSink = logFile.openWrite(mode: FileMode.writeOnlyAppend);
+
       // 启动进程，设置工作目录为可执行文件所在目录
       _process = await Process.start(
         executablePath,
@@ -66,10 +70,13 @@ class GoProxyService {
         workingDirectory: executableDir,
       );
 
-      // 监听标准输出
+      // 监听标准输出并同时写入日志文件和应用日志
       _process!.stdout.listen(
         (data) {
           final output = utf8.decode(data);
+          // 写入日志文件
+          logSink.write(output);
+
           Logger.debug('Go代理核心 stdout: $output');
 
           // 检查是否启动成功
@@ -82,12 +89,18 @@ class GoProxyService {
         onError: (Object error) {
           Logger.error('Go代理核心 stdout 监听错误: $error');
         },
+        onDone: () {
+          logSink.close();
+        },
       );
 
-      // 监听标准错误
+      // 监听标准错误并同时写入日志文件和应用日志
       _process!.stderr.listen(
         (data) {
           final output = utf8.decode(data);
+          // 写入日志文件
+          logSink.write(output);
+
           // Logger.info('Go代理核心 stderr: $output');
 
           // 检查是否启动成功
@@ -99,6 +112,9 @@ class GoProxyService {
         },
         onError: (Object error) {
           Logger.error('Go代理核心 stderr 监听错误: $error');
+        },
+        onDone: () {
+          logSink.close();
         },
       );
 
