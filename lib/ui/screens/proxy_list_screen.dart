@@ -44,7 +44,7 @@ class _ProxyListScreenState extends State<ProxyListScreen> {
   }
 
   // 加载代理列表
-  void _loadProxies() {
+  void _loadProxies() async {
     final appState = Provider.of<AppState>(context, listen: false);
     Logger.info('=== 开始加载代理列表 ===');
     Logger.info('当前选中配置ID: ${appState.selectedConfig}');
@@ -61,16 +61,47 @@ class _ProxyListScreenState extends State<ProxyListScreen> {
       }
     });
 
-    // 只有在当前配置没有缓存代理列表时才重新加载
-    if (!appState.proxiesByConfig.containsKey(appState.selectedConfig) ||
-        appState.proxiesByConfig[appState.selectedConfig]!.isEmpty) {
-      Logger.info('当前配置没有缓存的代理列表，正在加载...');
-      appState.loadProxies();
-    } else {
-      Logger.info('使用缓存的代理列表');
-      // 确保AppState中的当前代理列表与缓存一致
-      appState.setProxies(appState.proxiesByConfig[appState.selectedConfig]!);
+    // 对于OpenVPN类型，总是重新加载，因为配置文件可能已更改
+    // 对于其他类型，只有在当前配置没有缓存代理列表时才重新加载
+    final configs = await ConfigManager.loadConfigs();
+    VPNConfig? currentConfig;
+    try {
+      currentConfig = configs.firstWhere(
+        (config) => config.id == appState.selectedConfig,
+      );
+    } catch (e) {
+      Logger.warn('未找到当前选中的配置: ${appState.selectedConfig}');
+      if (configs.isNotEmpty) {
+        currentConfig = configs.first;
+      }
     }
+
+    bool shouldReload = false;
+    if (currentConfig != null) {
+      // 对于OpenVPN类型，总是重新加载
+      if (currentConfig.type == VPNType.openVPN) {
+        Logger.info('OpenVPN类型配置，总是重新加载代理列表');
+        shouldReload = true;
+      }
+      // 对于其他类型，只有在没有缓存或缓存为空时才重新加载
+      else if (!appState.proxiesByConfig.containsKey(appState.selectedConfig) ||
+          appState.proxiesByConfig[appState.selectedConfig]!.isEmpty) {
+        Logger.info('当前配置没有缓存的代理列表，正在加载...');
+        shouldReload = true;
+      } else {
+        Logger.info('使用缓存的代理列表');
+        // 确保AppState中的当前代理列表与缓存一致
+        appState.setProxies(appState.proxiesByConfig[appState.selectedConfig]!);
+      }
+    } else {
+      Logger.info('没有找到当前配置，尝试重新加载');
+      shouldReload = true;
+    }
+
+    if (shouldReload) {
+      appState.loadProxies();
+    }
+
     Logger.info('=== 代理列表加载请求已发送 ===');
   }
 

@@ -67,8 +67,9 @@ class _ProxyListView extends StatelessWidget {
               ),
       );
 
-      // 只有Clash、Shadowsocks和V2Ray三种类型支持代理列表
+      // OpenVPN、Clash、Shadowsocks和V2Ray类型支持代理列表
       bool supportsProxyList =
+          currentConfig.type == VPNType.openVPN ||
           currentConfig.type == VPNType.clash ||
           currentConfig.type == VPNType.shadowsocks ||
           currentConfig.type == VPNType.v2ray;
@@ -124,6 +125,7 @@ class _ProxyListView extends StatelessWidget {
             final latency = proxy['latency'];
             final isSelected = proxy['isSelected'] as bool;
             final proxyName = proxy['name'];
+            final proxyType = proxy['type'];
 
             return AnimatedContainer(
               duration: const Duration(milliseconds: 300),
@@ -181,8 +183,17 @@ class _ProxyListView extends StatelessWidget {
                   subtitle: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text('类型: ${proxy['type']}'),
-                      if (latency == -2)
+                      Text('类型: $proxyType'),
+                      // 对于OpenVPN类型，显示服务器地址和端口
+                      if (proxyType == 'openvpn' &&
+                          proxy.containsKey('server') &&
+                          proxy.containsKey('port')) ...[
+                        Text('服务器: ${proxy['server']}:${proxy['port']}'),
+                        if (proxy.containsKey('protocol'))
+                          Text('协议: ${proxy['protocol']}'),
+                      ]
+                      // 对于其他类型，保持原有的显示方式
+                      else if (latency == -2)
                         const Text('未测试', style: TextStyle(color: Colors.grey))
                       else if (latency == -1)
                         const Text(

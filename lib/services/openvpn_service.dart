@@ -2,6 +2,7 @@ import 'dart:io';
 import 'dart:convert';
 import 'package:path/path.dart' as path;
 import 'package:dualvpn_manager/utils/logger.dart';
+import 'package:dualvpn_manager/utils/openvpn_config_parser.dart';
 
 class OpenVPNService {
   bool _isConnected = false;
@@ -40,22 +41,18 @@ class OpenVPNService {
         throw Exception('OpenVPN配置文件不可读: $configPath');
       }
 
+      // 解析OpenVPN配置文件获取服务器和端口信息
+      final proxyInfo = await OpenVPNConfigParser.parseProxyInfo(
+        configPath: configPath,
+        proxyId: 'openvpn-proxy-${DateTime.now().millisecondsSinceEpoch}',
+        proxyName: 'OpenVPN Proxy',
+        username: username,
+        password: password,
+      );
+
       // 通过Go代理核心API设置OpenVPN代理
       // 构建请求体
-      final Map<String, dynamic> requestBody = {
-        'id': 'openvpn-proxy-1',
-        'name': 'OpenVPN Proxy',
-        'type': 'openvpn',
-        'server': '120.25.102.59',
-        'port': 1194,
-        'config': {'config_path': configPath},
-      };
-
-      // 如果提供了用户名和密码，则添加到配置中
-      if (username != null && password != null) {
-        requestBody['config']['username'] = username;
-        requestBody['config']['password'] = password;
-      }
+      final Map<String, dynamic> requestBody = proxyInfo.toJson();
 
       // 发送请求到Go代理核心
       final response =

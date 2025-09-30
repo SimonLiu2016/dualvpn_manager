@@ -7,10 +7,12 @@ import 'package:dualvpn_manager/services/smart_routing_engine.dart'
 import 'package:dualvpn_manager/utils/logger.dart';
 import 'package:dualvpn_manager/utils/config_manager.dart';
 import 'package:dualvpn_manager/utils/tray_manager.dart';
+import 'package:dualvpn_manager/utils/openvpn_config_parser.dart';
 import 'dart:convert';
 import 'package:window_manager/window_manager.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:async';
+import 'dart:io';
 
 class AppState extends ChangeNotifier {
   final VPNManager _vpnManager = VPNManager();
@@ -998,6 +1000,7 @@ class AppState extends ChangeNotifier {
 
       Logger.info('找到选中的代理信息: $selectedProxy');
       var proxyType = selectedProxy['type'];
+
       switch (currentConfig.type) {
         case VPNType.shadowsocks:
         case VPNType.clash:
@@ -1091,6 +1094,48 @@ class AppState extends ChangeNotifier {
           if (parts.length == 2) {
             proxyInfo['server'] = parts[0];
             proxyInfo['port'] = int.tryParse(parts[1]) ?? 1080;
+          }
+          break;
+        case VPNType.openVPN:
+          // 对于OpenVPN类型，我们需要从配置文件中解析服务器和端口信息
+          // 如果代理信息中已经有server和port，则使用它们
+          // 否则从配置文件中解析
+          if (selectedProxy.containsKey('server') &&
+              selectedProxy['server'] != null &&
+              selectedProxy.containsKey('port') &&
+              selectedProxy['port'] != null) {
+            proxyInfo['server'] = selectedProxy['server'].toString();
+            proxyInfo['port'] = selectedProxy['port'] as int;
+          } else {
+            // 如果没有server和port信息，尝试从配置文件中解析
+            try {
+              // 注意：对于OpenVPN类型，configPath是配置文件路径
+              final openvpnConfigPath = currentConfig.configPath;
+              final remoteInfo = await OpenVPNConfigParser.parseRemoteInfo(
+                openvpnConfigPath,
+              );
+              proxyInfo['server'] = remoteInfo.server;
+              proxyInfo['port'] = remoteInfo.port;
+              Logger.info(
+                '从OpenVPN配置文件解析到服务器信息: ${remoteInfo.server}:${remoteInfo.port}',
+              );
+            } catch (e) {
+              Logger.error('解析OpenVPN配置文件失败: $e');
+              // 使用默认值
+              proxyInfo['server'] = '127.0.0.1';
+              proxyInfo['port'] = 1194;
+            }
+          }
+
+          // 添加OpenVPN特定配置
+          proxyInfo['config']['config_path'] = currentConfig.configPath;
+          if (currentConfig.settings.containsKey('username')) {
+            proxyInfo['config']['username'] =
+                currentConfig.settings['username'];
+          }
+          if (currentConfig.settings.containsKey('password')) {
+            proxyInfo['config']['password'] =
+                currentConfig.settings['password'];
           }
           break;
         default:
@@ -1575,7 +1620,7 @@ class AppState extends ChangeNotifier {
         return smart_routing_engine.RuleType.domainSuffix;
       case RouteType.custom:
         return smart_routing_engine.RuleType.domainSuffix;
-      }
+    }
   }
 
   // 设置活动配置到代理管理器
@@ -1760,18 +1805,22 @@ class AppState extends ChangeNotifier {
       // 检查是否已缓存该配置的代理列表
       if (_proxiesByConfig.containsKey(currentConfig.id)) {
         _proxies = _proxiesByConfig[currentConfig.id]!;
-        setIsLoadingProxies(false);
-        notifyListeners();
-        return;
+        // 判断_proxies是否为空
+        if (_proxies.isNotEmpty) {
+          setIsLoadingProxies(false);
+          notifyListeners();
+          return;
+        }
       }
 
       // 根据配置类型加载相应的代理列表
       List<Map<String, dynamic>> proxies = [];
 
-      // 只有Clash、Shadowsocks和V2Ray三种类型支持代理列表
+      // 只有Clash、Shadowsocks、V2Ray和OpenVPN类型需要在代理列表中显示代理信息
       if (currentConfig.type == VPNType.clash ||
           currentConfig.type == VPNType.shadowsocks ||
-          currentConfig.type == VPNType.v2ray) {
+          currentConfig.type == VPNType.v2ray ||
+          currentConfig.type == VPNType.openVPN) {
         switch (currentConfig.type) {
           case VPNType.clash:
             final proxiesData = await getClashProxies();
@@ -1993,6 +2042,69 @@ class AppState extends ChangeNotifier {
             }
             break;
 
+          case VPNType.openVPN:
+            // 对于OpenVPN类型，从配置文件中解析服务器信息并创建一个代理条目
+            try {
+              Logger.info('开始解析OpenVPN配置文件: ${currentConfig.configPath}');
+              // 检查配置文件是否存在
+              final file = File(currentConfig.configPath);
+              if (!await file.exists()) {
+                Logger.error('OpenVPN配置文件不存在: ${currentConfig.configPath}');
+                throw Exception('OpenVPN配置文件不存在: ${currentConfig.configPath}');
+              }
+
+              final remoteInfo = await OpenVPNConfigParser.parseRemoteInfo(
+                currentConfig.configPath,
+              );
+              Logger.info(
+                '解析OpenVPN配置文件成功: server=${remoteInfo.server}, port=${remoteInfo.port}, protocol=${remoteInfo.protocol}',
+              );
+
+              // 检查是否已存在该代理的状态
+              Map<String, dynamic>? existingProxy;
+              for (var p in _proxies) {
+                if (p['name'] == currentConfig.name) {
+                  existingProxy = p;
+                  break;
+                }
+              }
+
+              // 构建OpenVPN代理信息
+              final proxyInfo = {
+                'name': currentConfig.name,
+                'type': 'openvpn',
+                'server': remoteInfo.server,
+                'port': remoteInfo.port,
+                'protocol': remoteInfo.protocol,
+                'config_path': currentConfig.configPath,
+                'username': currentConfig.settings['username'] ?? '',
+                'password': currentConfig.settings['password'] ?? '',
+                'latency': existingProxy?['latency'] ?? -2, // -2表示未测试
+                'isSelected': existingProxy?['isSelected'] ?? false,
+              };
+
+              Logger.info('创建OpenVPN代理信息: $proxyInfo');
+              proxies.add(proxyInfo);
+            } catch (e, stackTrace) {
+              Logger.error('解析OpenVPN配置文件失败: $e\nStack trace: $stackTrace');
+              // 即使解析失败，也添加一个基本的代理条目
+              final proxyInfo = {
+                'name': currentConfig.name,
+                'type': 'openvpn',
+                'server': '127.0.0.1',
+                'port': 1194,
+                'protocol': 'udp',
+                'config_path': currentConfig.configPath,
+                'username': currentConfig.settings['username'] ?? '',
+                'password': currentConfig.settings['password'] ?? '',
+                'latency': -2, // -2表示未测试
+                'isSelected': false,
+              };
+
+              proxies.add(proxyInfo);
+            }
+            break;
+
           default:
             // 不应该到达这里，因为已经检查了类型
             proxies = [];
@@ -2002,9 +2114,10 @@ class AppState extends ChangeNotifier {
         proxies = [];
       }
 
+      Logger.info('加载代理列表完成，共${proxies.length}个代理');
       setProxies(proxies);
-    } catch (e) {
-      Logger.error('加载代理列表失败: $e');
+    } catch (e, stackTrace) {
+      Logger.error('加载代理列表失败: $e\nStack trace: $stackTrace');
       setProxies([]); // 出错时清空代理列表
     } finally {
       setIsLoadingProxies(false);
@@ -2276,7 +2389,6 @@ class AppState extends ChangeNotifier {
           String proxySource = 'DIRECT'; // 默认直连
 
           if (config != null) {
-            
             proxySource = config.id;
 
             Logger.info(
@@ -2504,13 +2616,6 @@ class AppState extends ChangeNotifier {
       default:
         return 'MATCH';
     }
-  }
-
-  // 转换代理ID到Go核心可以理解的代理源
-  String _convertProxyIdToGoProxySource(String proxyId) {
-    // 这个方法现在不再使用，但我们保留它以避免破坏其他代码
-    // 实际的代理源转换在_sendRoutingRulesToGoProxy方法中完成
-    return 'DIRECT';
   }
 
   // 启动统计信息更新定时器
