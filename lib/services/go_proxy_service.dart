@@ -503,7 +503,7 @@ class GoProxyService {
 
       if (httpResponse.statusCode == 200) {
         final stats = jsonDecode(responseBody) as Map<String, dynamic>;
-        Logger.info('获取统计信息成功');
+        Logger.info('获取统计信息成功: $stats');
         return stats;
       } else {
         Logger.error('获取统计信息失败: ${httpResponse.statusCode}, $responseBody');

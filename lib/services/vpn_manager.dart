@@ -114,8 +114,7 @@ class VPNManager {
           _isConnected = false;
           return false;
         }
-      } else if (config.type == VPNType.clash &&
-          config.configPath.startsWith('http')) {
+      } else if (config.configPath.startsWith('http')) {
         // 处理配置路径是订阅链接的情况
         Logger.info('通过订阅链接连接: ${config.configPath}');
 

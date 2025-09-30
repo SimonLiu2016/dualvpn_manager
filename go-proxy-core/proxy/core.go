@@ -99,25 +99,6 @@ func NewProxyCore(cfg *config.Config) *ProxyCore {
 	}
 	protocolManager.CreateProtocol(ProtocolDIRECT, "direct", directConfig)
 
-	// 移除初始化时创建的默认 Clash 协议，这些应该通过 API 动态添加
-	/*
-		// Clash协议 (HTTP)
-		clashHttpConfig := map[string]interface{}{
-			"name":   "clash",
-			"server": "127.0.0.1",
-			"port":   7890,
-		}
-		protocolManager.CreateProtocol(ProtocolHTTP, "clash", clashHttpConfig)
-
-		// Clash协议 (SOCKS5)
-		clashSocksConfig := map[string]interface{}{
-			"name":   "clash-socks",
-			"server": "127.0.0.1",
-			"port":   7891,
-		}
-		protocolManager.CreateProtocol(ProtocolSOCKS5, "clash-socks", clashSocksConfig)
-	*/
-
 	// Shadowsocks协议
 	shadowsocksConfig := map[string]interface{}{
 		"name":   "shadowsocks",
@@ -149,17 +130,6 @@ func NewProxyCore(cfg *config.Config) *ProxyCore {
 		"port":   1080,
 	}
 	protocolManager.CreateProtocol(ProtocolSOCKS5, "socks5", socks5Config)
-
-	// OpenVPN协议
-	// 注释掉默认的OpenVPN协议创建，OpenVPN协议应该通过API动态添加
-	/*
-		openvpnConfig := map[string]interface{}{
-			"name":   "openvpn",
-			"server": "127.0.0.1",
-			"port":   1194,
-		}
-		protocolManager.CreateProtocol(ProtocolOpenVPN, "openvpn", openvpnConfig)
-	*/
 
 	// 创建TUN设备（如果需要）
 	var tunDevice *TUNDevice
