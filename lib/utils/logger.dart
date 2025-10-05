@@ -48,16 +48,20 @@ class Logger {
   }
 
   static Future<void> _writeToFile(String level, String message) async {
+    // 添加调试输出以确认此方法被调用
+    debugPrint('尝试写入日志文件: [$level] $message');
+
     // 检查是否应该记录此消息
     if (!_shouldLog(message)) {
+      debugPrint('消息被过滤器阻止');
       return;
     }
 
-    // 在测试环境中不写入文件
-    if (!_isDebugMode) return;
-
     await _initLogFile();
-    if (_logFile == null) return;
+    if (_logFile == null) {
+      debugPrint('日志文件未初始化');
+      return;
+    }
 
     try {
       final now = DateTime.now();
@@ -67,6 +71,7 @@ class Logger {
 
       final logMessage = '[$timestamp] [$level] $message\n';
       await _logFile!.writeAsString(logMessage, mode: FileMode.writeOnlyAppend);
+      debugPrint('成功写入日志文件');
     } catch (e) {
       // 如果写入文件失败，忽略错误
       if (_isDebugMode) {

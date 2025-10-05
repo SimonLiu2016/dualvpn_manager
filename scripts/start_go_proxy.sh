@@ -86,9 +86,17 @@ if [ -f "./bin/go-proxy-core" ]; then
             echo "服务启动命令已执行（管理员权限）"
         fi
     else
-        nohup ./bin/go-proxy-core > /tmp/go-proxy-core.log 2>&1 &
-        PID=$!
-        echo "服务启动命令已执行，PID: $PID"
+        # 在macOS上，优先尝试通过特权助手工具启动
+        if [[ "$OSTYPE" == "darwin"* ]]; then
+            echo "在macOS上启动服务，尝试使用特权助手工具..."
+            nohup ./bin/go-proxy-core > /tmp/go-proxy-core.log 2>&1 &
+            PID=$!
+            echo "服务启动命令已执行，PID: $PID"
+        else
+            nohup ./bin/go-proxy-core > /tmp/go-proxy-core.log 2>&1 &
+            PID=$!
+            echo "服务启动命令已执行，PID: $PID"
+        fi
     fi
 else
     echo "未找到可执行文件，使用go run启动服务..."
@@ -105,9 +113,17 @@ else
             echo "服务启动命令已执行（管理员权限）"
         fi
     else
-        nohup go run . > /tmp/go-proxy-core.log 2>&1 &
-        PID=$!
-        echo "服务启动命令已执行，PID: $PID"
+        # 在macOS上，优先尝试通过特权助手工具启动
+        if [[ "$OSTYPE" == "darwin"* ]]; then
+            echo "在macOS上启动服务，尝试使用特权助手工具..."
+            nohup go run . > /tmp/go-proxy-core.log 2>&1 &
+            PID=$!
+            echo "服务启动命令已执行，PID: $PID"
+        else
+            nohup go run . > /tmp/go-proxy-core.log 2>&1 &
+            PID=$!
+            echo "服务启动命令已执行，PID: $PID"
+        fi
     fi
 fi
 

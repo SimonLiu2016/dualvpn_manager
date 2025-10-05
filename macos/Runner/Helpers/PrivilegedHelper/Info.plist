@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+    <dict>
+        <key>CFBundleIdentifier</key>
+        <string>com.dualvpn.manager.helper</string>
+        <key>CFBundleVersion</key>
+        <string>1.0.0</string>
+        <key>CFBundleShortVersionString</key>
+        <string>1.0.0</string>
+        <key>CFBundleExecutable</key>
+        <string>PrivilegedHelper</string>
+        <key>CFBundleInfoDictionaryVersion</key>
+        <string>6.0</string>
+        <key>CFBundleName</key>
+        <string>DualVPN Manager Helper</string>
+        <key>CFBundlePackageType</key>
+        <string>APPL</string>
+        <key>LSBackgroundOnly</key>
+        <true/>
+        <key>LSUIElement</key>
+        <true/>
+        <key>SMAuthorizedClients</key>
+        <array>
+            <string>identifier "com.dualvpn.manager" and anchor apple generic and certificate leaf[subject.CN] = "Apple Development: YOUR_DEVELOPER_ID"</string>
+        </array>
+    </dict>
+</plist>

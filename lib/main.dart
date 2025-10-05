@@ -10,12 +10,18 @@ void main() async {
   // 确保Flutter绑定已初始化
   WidgetsFlutterBinding.ensureInitialized();
 
+  // 添加启动日志
+  Logger.info('DualVPN Manager 正在启动...');
+
   // 初始化窗口管理器
   await _initWindowManager();
 
   // 初始化系统托盘
   final trayManager = DualVPNTrayManager();
   await trayManager.initTray();
+
+  // 记录初始化完成
+  Logger.info('系统托盘初始化完成');
 
   runApp(
     ChangeNotifierProvider(
@@ -34,8 +40,11 @@ Future<void> _initWindowManager() async {
     await windowManager.setPreventClose(true);
     // 隐藏标题栏
     await windowManager.setTitleBarStyle(TitleBarStyle.hidden);
+
+    // 记录窗口管理器初始化成功
+    Logger.info('窗口管理器初始化成功');
   } catch (e) {
-    print('窗口管理器初始化失败: $e');
+    Logger.error('窗口管理器初始化失败: $e');
   }
 }
 
@@ -46,6 +55,9 @@ class DualVPNApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // 添加一个简单的测试日志
+    Logger.info('构建DualVPNApp widget');
+
     return Consumer<AppState>(
       builder: (context, appState, child) {
         // 设置AppState到托盘管理器

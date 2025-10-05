@@ -44,6 +44,4 @@ flutter:
     - assets/icons/openvpn_connected.png
     - assets/icons/clash_connected.png
     - assets/icons/both_connected.png
-
-executables:
-  test_socks5_server:
+    - macos/Runner/Assets/PrivilegedHelper.app/

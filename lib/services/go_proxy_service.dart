@@ -429,6 +429,27 @@ class GoProxyService {
         }
       }
 
+      // 尝试在应用包的Contents/Resources目录中查找（用于发布版本）
+      try {
+        final executable = Platform.resolvedExecutable;
+        final appDir = File(executable).parent.parent; // Contents目录
+        final resourcesBinPath = path.join(
+          appDir.path,
+          'Resources',
+          'bin',
+          'go-proxy-core',
+        );
+        final resourcesBinFile = File(resourcesBinPath);
+        if (await resourcesBinFile.exists()) {
+          Logger.info(
+            '在应用包Contents/Resources目录中找到代理核心可执行文件: $resourcesBinPath',
+          );
+          return resourcesBinPath;
+        }
+      } catch (e) {
+        Logger.warn('检查应用包Contents/Resources目录时出错: $e');
+      }
+
       // 尝试在系统PATH中查找
       final result = await Process.run('which', ['go-proxy-core']);
       if (result.exitCode == 0) {
@@ -490,16 +511,27 @@ class GoProxyService {
     try {
       final url = Uri.parse('http://127.0.0.1:6162/status');
       Logger.info('检查Go代理核心状态: $url');
-      final response = await HttpClient().getUrl(url);
+
+      final client = HttpClient();
+      client.idleTimeout = const Duration(seconds: 5);
+
+      final response = await client
+          .getUrl(url)
+          .timeout(const Duration(seconds: 5));
       final httpResponse = await response.close();
       final responseBody = await utf8.decodeStream(httpResponse);
+
+      Logger.info('收到状态检查响应，状态码: ${httpResponse.statusCode}');
+      Logger.info('响应体: $responseBody');
 
       if (httpResponse.statusCode == 200) {
         final status = jsonDecode(responseBody) as Map<String, dynamic>;
         Logger.info('Go代理核心状态检查成功: running=${status['running']}');
+        client.close();
         return status['running'] == true;
       } else {
         Logger.error('检查状态失败: ${httpResponse.statusCode}, $responseBody');
+        client.close();
         return false;
       }
     } catch (e, stackTrace) {
