@@ -1,4 +1,4 @@
-module com.dualvpn.manager.helper
+module com.v8en.dualvpn.manager.helper
 
 go 1.20
 
