@@ -1,5 +1,6 @@
 import 'dart:io';
 import 'dart:convert';
+import 'package:dualvpn_manager/services/privileged_helper_service.dart';
 import 'package:dualvpn_manager/utils/logger.dart';
 import 'package:path/path.dart' as path;
 
@@ -63,15 +64,15 @@ class GoProxyService {
       final logFile = File('/tmp/go-proxy-core.log');
       final logSink = logFile.openWrite(mode: FileMode.writeOnlyAppend);
 
-      // 启动进程，设置工作目录为可执行文件所在目录
-      _process = await Process.start(
-        executablePath,
-        [],
-        workingDirectory: executableDir,
+      final helper = HelperService();
+      final _process = await helper.runGoProxyCore(
+        executablePath: executablePath,
+        executableDir: executableDir,
+        arguments: [],
       );
 
       // 监听标准输出并同时写入日志文件和应用日志
-      _process!.stdout.listen(
+      _process.stdout.listen(
         (data) {
           final output = utf8.decode(data);
           // 写入日志文件
@@ -122,17 +123,16 @@ class GoProxyService {
       await Future.delayed(const Duration(seconds: 5));
 
       // 再次检查进程是否仍在运行
-      if (_process != null && _isRunning) {
+      if (_isRunning) {
         try {
           // 检查进程是否已经退出
-          final exitCode = _process!.exitCode;
+          final exitCode = _process.exitCode;
           if (await exitCode.timeout(
                 const Duration(milliseconds: 100),
                 onTimeout: () => -1,
               ) !=
               -1) {
             _isRunning = false;
-            _process = null;
             Logger.error('Go代理核心在启动后意外退出');
             return false;
           }

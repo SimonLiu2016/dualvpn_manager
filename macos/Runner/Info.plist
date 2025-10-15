@@ -28,5 +28,12 @@
 	<string>MainMenu</string>
 	<key>NSPrincipalClass</key>
 	<string>NSApplication</string>
+	<!-- 主工程的签名参数 -->
+	<key>SMAuthorizedClients</key>
+	<array>
+		<string>anchor apple generic and identifier "com.v8en.dualvpnManager" and (certificate leaf[field.1.2.840.113635.100.6.1.9] /* exists */ or certificate 1[field.1.2.840.113635.100.6.2.6] /* exists */ and certificate leaf[field.1.2.840.113635.100.6.1.13] /* exists */ and certificate leaf[subject.OU] = "4UKN65653U")</string>
+	</array>
+	<key>com.v8en.dualvpnManager.PrivilegedHelper</key>
+    <string>anchor apple generic and identifier "com.v8en.dualvpnManager.PrivilegedHelper" and (certificate leaf[field.1.2.840.113635.100.6.1.9] /* exists */ or certificate 1[field.1.2.840.113635.100.6.2.6] /* exists */ and certificate leaf[field.1.2.840.113635.100.6.1.13] /* exists */ and certificate leaf[subject.OU] = "4UKN65653U")</string>
 </dict>
 </plist>

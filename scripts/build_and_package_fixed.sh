@@ -37,18 +37,22 @@ echo "步骤3: 构建特权助手工具..."
 cd "${WORKSPACE_DIR}"
 ./scripts/build_helper.sh
 
-if [ ! -f "${RELEASE_DIR}/PrivilegedHelper.app/Contents/MacOS/PrivilegedHelper" ]; then
+if [ ! -f "${RELEASE_DIR}/PrivilegedHelper.app/Contents/MacOS/com.v8en.dualvpnManager.PrivilegedHelper" ]; then
     echo "错误: 特权助手工具构建失败"
     exit 1
 fi
 
 echo "特权助手工具构建成功"
 
-# 4. 复制助手工具到Flutter资源目录
-echo "步骤4: 复制助手工具到Flutter资源目录..."
-FLUTTER_ASSETS_DIR="${WORKSPACE_DIR}/macos/Runner/Assets"
-mkdir -p "${FLUTTER_ASSETS_DIR}"
-cp -R "${RELEASE_DIR}/PrivilegedHelper.app" "${FLUTTER_ASSETS_DIR}/"
+# 4. 复制助手工具到主应用bundle的LaunchServices目录
+echo "步骤4: 复制助手工具到主应用bundle的LaunchServices目录..."
+APP_CONTENTS_DIR="${RELEASE_DIR}/dualvpn_manager.app/Contents"
+LAUNCH_SERVICES_DIR="${APP_CONTENTS_DIR}/Library/LaunchServices"
+mkdir -p "${LAUNCH_SERVICES_DIR}"
+cp "${RELEASE_DIR}/PrivilegedHelper.app/Contents/MacOS/com.v8en.dualvpnManager.PrivilegedHelper" "${LAUNCH_SERVICES_DIR}/"
+cp "${RELEASE_DIR}/PrivilegedHelper.app/Contents/com.v8en.dualvpnManager.PrivilegedHelper-Info.plist" "${LAUNCH_SERVICES_DIR}/com.v8en.dualvpnManager.PrivilegedHelper.plist"
+cp "${RELEASE_DIR}/PrivilegedHelper.app/Contents/com.v8en.dualvpnManager.PrivilegedHelper-Launchd.plist" "${LAUNCH_SERVICES_DIR}/com.v8en.dualvpnManager.PrivilegedHelper-Launchd.plist"
+
 
 echo "助手工具复制完成"
 
@@ -69,6 +73,7 @@ echo "步骤6: 复制Go代理核心到应用包中..."
 APP_CONTENTS_DIR="${WORKSPACE_DIR}/build/macos/Build/Products/Release/dualvpn_manager.app/Contents"
 mkdir -p "${APP_CONTENTS_DIR}/Resources/bin"
 cp "${WORKSPACE_DIR}/go-proxy-core/bin/go-proxy-core" "${APP_CONTENTS_DIR}/Resources/bin/"
+cp "${WORKSPACE_DIR}/go-proxy-core/config.yaml" "${APP_CONTENTS_DIR}/Resources/bin/"
 
 echo "Go代理核心复制完成"
 
