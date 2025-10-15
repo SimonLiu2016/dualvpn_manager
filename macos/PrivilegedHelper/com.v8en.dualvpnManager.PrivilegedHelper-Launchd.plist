@@ -2,19 +2,14 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-    <key>Label</key>
-    <string>com.v8en.dualvpnManager.PrivilegedHelper</string>
-    <key>RunAtLoad</key>
-    <true/>
-    <key>MachServices</key>
-    <dict>
-        <key>com.v8en.dualvpnManager.PrivilegedHelper</key>
-        <true/>
-    </dict>
-    <key>KeepAlive</key>
-    <dict>
-        <key>SuccessfulExit</key>
-        <false/>
-    </dict>
+	<key>Label</key>
+	<string>com.v8en.dualvpnManager.PrivilegedHelper</string>
+	<key>AssociatedBundleIdentifiers</key>
+	<string>com.v8en.dualvpnManager</string>
+	<key>MachServices</key>
+	<dict>
+		<key>com.v8en.dualvpnManager.PrivilegedHelper</key>
+		<true/>
+	</dict>
 </dict>
 </plist>
