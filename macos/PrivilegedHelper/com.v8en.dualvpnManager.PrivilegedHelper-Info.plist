@@ -12,7 +12,7 @@
 	<string>XPC!</string>
 	<key>SMAuthorizedClients</key>
 	<array>
-		<string>anchor apple generic and identifier &quot;com.v8en.dualvpnManager.PrivilegedHelper&quot; and certificate leaf[subject.OU] = &quot;4UKN65653U&quot;</string>
+		<string>anchor apple generic and identifier "com.v8en.dualvpnManager.PrivilegedHelper" and certificate leaf[subject.OU] = "4UKN65653U"</string>
 	</array>
 </dict>
 </plist>
