@@ -41,8 +41,19 @@ mkdir -p "${HELPER_APP_DIR}/Contents/Resources"
 cp "${TEMP_BUILD_DIR}/${HELPER_NAME}" "${HELPER_APP_DIR}/Contents/MacOS/com.v8en.dualvpnManager.PrivilegedHelper"
 
 # 复制Info.plist
-cp com.v8en.dualvpnManager.PrivilegedHelper-Info.plist "${HELPER_APP_DIR}/Contents/com.v8en.dualvpnManager.PrivilegedHelper-Info.plist"
+cp com.v8en.dualvpnManager.PrivilegedHelper-Info.plist "${HELPER_APP_DIR}/Contents/Info.plist"
 cp com.v8en.dualvpnManager.PrivilegedHelper-Launchd.plist "${HELPER_APP_DIR}/Contents/com.v8en.dualvpnManager.PrivilegedHelper-Launchd.plist"
+
+# 创建PkgInfo文件
+echo -n "APPL????" > "${HELPER_APP_DIR}/Contents/PkgInfo"
+
+# 对助手工具进行代码签名
+echo "对助手工具进行代码签名..."
+codesign --force --deep --sign "Developer ID Application: Simon Liu (4UKN65653U)" "${HELPER_APP_DIR}"
+
+# 验证签名
+echo "验证助手工具签名..."
+codesign --verify --verbose=4 "${HELPER_APP_DIR}"
 
 echo "助手工具.app bundle创建完成: ${HELPER_APP_DIR}"
 

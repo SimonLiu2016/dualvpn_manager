@@ -12,11 +12,15 @@
 		<true/>
 		<key>com.apple.security.files.user-selected.read-write</key>
 		<true/>
-		    <!-- 关键：Service Management 权限 -->
 		<key>com.apple.security.temporary-exception.mach-lookup.global-name</key>
 		<array>
 			<string>com.apple.SystemAdministrationWrite</string>
 			<string>com.apple.launchd</string>
+			<string>com.v8en.dualvpnManager.PrivilegedHelper</string>
+		</array>
+		<key>com.apple.security.application-groups</key>
+		<array>
+			<string>4UKN65653U.com.v8en.dualvpnManager</string> <!-- 团队ID + 主程序Bundle ID -->
 		</array>
 	</dict>
 </plist>

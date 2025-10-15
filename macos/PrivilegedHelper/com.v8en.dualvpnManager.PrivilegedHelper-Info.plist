@@ -12,7 +12,7 @@
 	<string>XPC!</string>
 	<key>SMAuthorizedClients</key>
 	<array>
-		<string>anchor apple generic and identifier "com.v8en.dualvpnManager.PrivilegedHelper" and certificate leaf[subject.OU] = "4UKN65653U"</string>
+		<string>identifier=com.v8en.dualvpnManager</string> <!-- 主程序的Bundle ID -->
 	</array>
 </dict>
 </plist>
