@@ -78,22 +78,22 @@ if [ -f "./bin/go-proxy-core" ]; then
         # 检查是否在macOS上运行
         if [[ "$OSTYPE" == "darwin"* ]]; then
             # 在macOS上，使用sudo启动并确保TUN设备可访问
-            sudo -b nohup ./bin/go-proxy-core > /tmp/go-proxy-core.log 2>&1
+            sudo -b nohup ./bin/go-proxy-core > /private/var/tmp/go-proxy-core.log 2>&1
             echo "服务启动命令已执行（管理员权限）"
         else
             # 在其他系统上直接使用sudo
-            sudo -b nohup ./bin/go-proxy-core > /tmp/go-proxy-core.log 2>&1
+            sudo -b nohup ./bin/go-proxy-core > /private/var/tmp/go-proxy-core.log 2>&1
             echo "服务启动命令已执行（管理员权限）"
         fi
     else
         # 在macOS上，优先尝试通过特权助手工具启动
         if [[ "$OSTYPE" == "darwin"* ]]; then
             echo "在macOS上启动服务，尝试使用特权助手工具..."
-            nohup ./bin/go-proxy-core > /tmp/go-proxy-core.log 2>&1 &
+            nohup ./bin/go-proxy-core > /private/var/tmp/go-proxy-core.log 2>&1 &
             PID=$!
             echo "服务启动命令已执行，PID: $PID"
         else
-            nohup ./bin/go-proxy-core > /tmp/go-proxy-core.log 2>&1 &
+            nohup ./bin/go-proxy-core > /private/var/tmp/go-proxy-core.log 2>&1 &
             PID=$!
             echo "服务启动命令已执行，PID: $PID"
         fi
@@ -105,22 +105,22 @@ else
         # 检查是否在macOS上运行
         if [[ "$OSTYPE" == "darwin"* ]]; then
             # 在macOS上，使用sudo启动并确保TUN设备可访问
-            sudo -b nohup go run . > /tmp/go-proxy-core.log 2>&1
+            sudo -b nohup go run . > /private/var/tmp/go-proxy-core.log 2>&1
             echo "服务启动命令已执行（管理员权限）"
         else
             # 在其他系统上直接使用sudo
-            sudo -b nohup go run . > /tmp/go-proxy-core.log 2>&1
+            sudo -b nohup go run . > /private/var/tmp/go-proxy-core.log 2>&1
             echo "服务启动命令已执行（管理员权限）"
         fi
     else
         # 在macOS上，优先尝试通过特权助手工具启动
         if [[ "$OSTYPE" == "darwin"* ]]; then
             echo "在macOS上启动服务，尝试使用特权助手工具..."
-            nohup go run . > /tmp/go-proxy-core.log 2>&1 &
+            nohup go run . > /private/var/tmp/go-proxy-core.log 2>&1 &
             PID=$!
             echo "服务启动命令已执行，PID: $PID"
         else
-            nohup go run . > /tmp/go-proxy-core.log 2>&1 &
+            nohup go run . > /private/var/tmp/go-proxy-core.log 2>&1 &
             PID=$!
             echo "服务启动命令已执行，PID: $PID"
         fi
@@ -160,7 +160,7 @@ fi
 if [ "$SERVICE_STARTED" = true ]; then
     echo ""
     echo "Go代理核心服务启动完成！"
-    echo "日志文件位置: /tmp/go-proxy-core.log"
+    echo "日志文件位置: /private/var/tmp/go-proxy-core.log"
     echo ""
     echo "服务端口信息:"
     echo "  HTTP代理端口: 6160"
@@ -168,8 +168,8 @@ if [ "$SERVICE_STARTED" = true ]; then
     echo "  API端口: 6162"
 else
     echo ""
-    echo "错误：服务启动失败，请检查日志文件 /tmp/go-proxy-core.log"
+    echo "错误：服务启动失败，请检查日志文件 /private/var/tmp/go-proxy-core.log"
     echo "显示最近的日志内容："
-    tail -n 20 /tmp/go-proxy-core.log
+    tail -n 20 /private/var/tmp/go-proxy-core.log
     exit 1
 fi

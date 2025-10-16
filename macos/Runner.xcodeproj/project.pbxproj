@@ -74,8 +74,8 @@
 		F4E7D3E92E9E4EB900CCD406 /* CopyFiles */ = {
 			isa = PBXCopyFilesBuildPhase;
 			buildActionMask = 2147483647;
-			dstPath = /usr/share/man/man1/;
-			dstSubfolderSpec = 0;
+			dstPath = usr/share/man/man1;
+			dstSubfolderSpec = 10;
 			files = (
 			);
 			runOnlyForDeploymentPostprocessing = 1;
@@ -109,6 +109,7 @@
 		9740EEB21CF90195004384FC /* Debug.xcconfig */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.xcconfig; path = Debug.xcconfig; sourceTree = "<group>"; };
 		CE0DA1D8713370ABF1407C0B /* Pods-RunnerTests.release.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-RunnerTests.release.xcconfig"; path = "Target Support Files/Pods-RunnerTests/Pods-RunnerTests.release.xcconfig"; sourceTree = "<group>"; };
 		E6011AE07A2C838A35CD4D75 /* Pods_RunnerTests.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; includeInIndex = 0; path = Pods_RunnerTests.framework; sourceTree = BUILT_PRODUCTS_DIR; };
+		F424DE5A2EA0C85E006B1654 /* device_info_plus.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; path = device_info_plus.framework; sourceTree = BUILT_PRODUCTS_DIR; };
 		F4E7D3EB2E9E4EB900CCD406 /* com.v8en.dualvpnManager.PrivilegedHelper */ = {isa = PBXFileReference; explicitFileType = "compiled.mach-o.executable"; includeInIndex = 0; path = com.v8en.dualvpnManager.PrivilegedHelper; sourceTree = BUILT_PRODUCTS_DIR; };
 		F4E7D3F72E9E657500CCD406 /* Security.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Security.framework; path = System/Library/Frameworks/Security.framework; sourceTree = SDKROOT; };
 		F4E7D3F92E9E658600CCD406 /* ServiceManagement.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = ServiceManagement.framework; path = System/Library/Frameworks/ServiceManagement.framework; sourceTree = SDKROOT; };
@@ -250,6 +251,7 @@
 		D73912EC22F37F3D000D13A0 /* Frameworks */ = {
 			isa = PBXGroup;
 			children = (
+				F424DE5A2EA0C85E006B1654 /* device_info_plus.framework */,
 				F4E7D3F92E9E658600CCD406 /* ServiceManagement.framework */,
 				F4E7D3F72E9E657500CCD406 /* Security.framework */,
 				25E0E925DC27BCE538A14328 /* Pods_Runner.framework */,
@@ -978,7 +980,6 @@
 				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
 				MTL_FAST_MATH = YES;
 				OTHER_LDFLAGS = (
-					"$(inherited)",
 					"-sectcreate",
 					__TEXT,
 					__info_plist,
@@ -1037,7 +1038,6 @@
 				MACOSX_DEPLOYMENT_TARGET = 15.7;
 				MTL_FAST_MATH = YES;
 				OTHER_LDFLAGS = (
-					"$(inherited)",
 					"-sectcreate",
 					__TEXT,
 					__info_plist,
@@ -1095,7 +1095,6 @@
 				MACOSX_DEPLOYMENT_TARGET = 15.7;
 				MTL_FAST_MATH = YES;
 				OTHER_LDFLAGS = (
-					"$(inherited)",
 					"-sectcreate",
 					__TEXT,
 					__info_plist,

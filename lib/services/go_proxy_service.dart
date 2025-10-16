@@ -61,7 +61,7 @@ class GoProxyService {
       Logger.info('正在启动Go代理核心: $executablePath');
 
       // 创建日志文件
-      final logFile = File('/tmp/go-proxy-core.log');
+      final logFile = File('/private/var/tmp/go-proxy-core.log');
       final logSink = logFile.openWrite(mode: FileMode.writeOnlyAppend);
 
       final helper = HelperService();

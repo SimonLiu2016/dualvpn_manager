@@ -17,7 +17,7 @@ class Logger {
     private init() {
         // 设置日志文件路径
         let fileManager = FileManager.default
-        let logDirectory = "/tmp"
+        let logDirectory = "/private/var/tmp"
 
         // 确保日志目录存在
         do {
@@ -247,6 +247,17 @@ class AppDelegate: FlutterAppDelegate {
             xpcConnection?.remoteObjectInterface = NSXPCInterface(
                 with: PrivilegedHelperProtocol.self)
             xpcConnection?.resume()
+
+            // 主程序中添加连接中断监听
+            xpcConnection?.interruptionHandler = {
+                Logger.shared.writeLog("XPC连接中断", level: "ERROR")
+                self.xpcConnection = nil
+            }
+
+            xpcConnection?.invalidationHandler = {
+                Logger.shared.writeLog("XPC连接失效", level: "ERROR")
+                self.xpcConnection = nil
+            }
         }
 
         guard

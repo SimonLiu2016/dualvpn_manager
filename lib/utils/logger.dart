@@ -32,7 +32,7 @@ class Logger {
     try {
       // final directory = await getApplicationDocumentsDirectory();
       // final logDir = Directory(path.join(directory.path, 'logs'));
-      final logDir = Directory('/tmp');
+      final logDir = Directory('/private/var/tmp');
       if (!await logDir.exists()) {
         await logDir.create(recursive: true);
       }
