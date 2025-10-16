@@ -8,6 +8,7 @@ private var globalHelper: PrivilegedHelper?
     func runGoProxyCore(
         executablePath: String, executableDir: String, arguments: [String],
         completion: @escaping (Bool, String?) -> Void)
+    func stopGoProxyCore(completion: @escaping (Bool, String?) -> Void)
 }
 
 // 日志工具类
@@ -78,6 +79,7 @@ class Logger {
 
 class PrivilegedHelper: NSObject, PrivilegedHelperProtocol, NSXPCListenerDelegate {
     private var isShuttingDown = false
+    private var runningProcesses: [Process] = []
 
     override init() {
         super.init()
@@ -169,24 +171,61 @@ class PrivilegedHelper: NSObject, PrivilegedHelperProtocol, NSXPCListenerDelegat
             }
         }
 
-        process.terminationHandler = { proc in
+        process.terminationHandler = { [weak self] proc in
             let message = "go-proxy-core terminated with status: \(proc.terminationStatus)"
             Logger.shared.writeLog(message)
             outputPipe.fileHandleForReading.readabilityHandler = nil
             errorPipe.fileHandleForReading.readabilityHandler = nil
-            completion(
-                proc.terminationStatus == 0,
-                proc.terminationStatus != 0
-                    ? "Terminated with status: \(proc.terminationStatus)" : nil)
+
+            // 从运行进程中移除
+            if let self = self {
+                self.runningProcesses.removeAll { $0 === proc }
+            }
+
+            // 注意：这里我们不调用 completion，因为我们已经立即返回了成功
         }
 
         do {
             try process.run()
-            Logger.shared.writeLog("Successfully started go-proxy-core")
+            // 将进程添加到运行列表中
+            runningProcesses.append(process)
+            Logger.shared.writeLog(
+                "Successfully started go-proxy-core (PID: \(process.processIdentifier))")
+            // 立即返回成功，因为我们已经成功启动了进程
+            completion(true, nil)
         } catch {
             let errorMsg = "Failed to start go-proxy-core: \(error.localizedDescription)"
             Logger.shared.writeLog(errorMsg)
             completion(false, errorMsg)
+        }
+    }
+
+    func stopGoProxyCore(completion: @escaping (Bool, String?) -> Void) {
+        Logger.shared.writeLog("stopGoProxyCore called")
+
+        // 终止所有正在运行的进程
+        for process in runningProcesses {
+            if process.isRunning {
+                Logger.shared.writeLog("Terminating process PID: \(process.processIdentifier)")
+                process.terminate()
+            }
+        }
+
+        // 等待一段时间让进程终止
+        DispatchQueue.global().asyncAfter(deadline: .now() + 2.0) {
+            for process in self.runningProcesses {
+                if process.isRunning {
+                    Logger.shared.writeLog(
+                        "Force killing process PID: \(process.processIdentifier)")
+                    process.interrupt()
+                }
+            }
+
+            // 清空运行进程列表
+            self.runningProcesses.removeAll()
+
+            Logger.shared.writeLog("All go-proxy-core processes stopped")
+            completion(true, nil)
         }
     }
 
@@ -195,7 +234,25 @@ class PrivilegedHelper: NSObject, PrivilegedHelperProtocol, NSXPCListenerDelegat
         if !isShuttingDown {
             isShuttingDown = true
             Logger.shared.writeLog("PrivilegedHelper shutting down...")
-            // 这里可以添加其他清理代码
+
+            // 终止所有正在运行的进程
+            for process in runningProcesses {
+                if process.isRunning {
+                    Logger.shared.writeLog("Terminating process PID: \(process.processIdentifier)")
+                    process.terminate()
+                }
+            }
+
+            // 等待一段时间让进程终止
+            DispatchQueue.global().asyncAfter(deadline: .now() + 2.0) {
+                for process in self.runningProcesses {
+                    if process.isRunning {
+                        Logger.shared.writeLog(
+                            "Force killing process PID: \(process.processIdentifier)")
+                        process.interrupt()
+                    }
+                }
+            }
         }
     }
 }

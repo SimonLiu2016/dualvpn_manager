@@ -7,6 +7,7 @@ import ServiceManagement
     func runGoProxyCore(
         executablePath: String, executableDir: String, arguments: [String],
         completion: @escaping (Bool, String?) -> Void)
+    func stopGoProxyCore(completion: @escaping (Bool, String?) -> Void)
 }
 
 // 日志工具类
@@ -149,6 +150,20 @@ class AppDelegate: FlutterAppDelegate {
                                     details: nil))
                         }
                     })
+            case "stopGoProxyCore":
+                Logger.shared.writeLog("停止Go代理核心")
+                self?.stopGoProxyCore { success, error in
+                    if success {
+                        Logger.shared.writeLog("Go代理核心停止成功")
+                        result(true)
+                    } else {
+                        Logger.shared.writeLog("Go代理核心停止失败: \(error ?? "未知错误")", level: "ERROR")
+                        result(
+                            FlutterError(
+                                code: "HELPER_ERROR", message: error ?? "Unknown error",
+                                details: nil))
+                    }
+                }
             default:
                 Logger.shared.writeLog("未实现的方法: \(call.method)", level: "WARN")
                 result(FlutterMethodNotImplemented)
@@ -271,5 +286,42 @@ class AppDelegate: FlutterAppDelegate {
         proxy.runGoProxyCore(
             executablePath: executablePath, executableDir: executableDir, arguments: arguments,
             completion: completion)
+    }
+
+    private func stopGoProxyCore(completion: @escaping (Bool, String?) -> Void) {
+        Logger.shared.writeLog("停止Go代理核心")
+        if xpcConnection == nil {
+            Logger.shared.writeLog("创建XPC连接")
+            xpcConnection = NSXPCConnection(
+                machServiceName: "com.v8en.dualvpnManager.PrivilegedHelper")
+            xpcConnection?.remoteObjectInterface = NSXPCInterface(
+                with: PrivilegedHelperProtocol.self)
+            xpcConnection?.resume()
+
+            // 主程序中添加连接中断监听
+            xpcConnection?.interruptionHandler = {
+                Logger.shared.writeLog("XPC连接中断", level: "ERROR")
+                self.xpcConnection = nil
+            }
+
+            xpcConnection?.invalidationHandler = {
+                Logger.shared.writeLog("XPC连接失效", level: "ERROR")
+                self.xpcConnection = nil
+            }
+        }
+
+        guard
+            let proxy = xpcConnection?.remoteObjectProxyWithErrorHandler({ error in
+                Logger.shared.writeLog("创建XPC代理失败: \(error.localizedDescription)", level: "ERROR")
+                completion(false, error.localizedDescription)
+            }) as? PrivilegedHelperProtocol
+        else {
+            Logger.shared.writeLog("无法创建XPC代理", level: "ERROR")
+            completion(false, "Failed to create XPC proxy")
+            return
+        }
+
+        Logger.shared.writeLog("调用特权助手停止Go代理核心")
+        proxy.stopGoProxyCore(completion: completion)
     }
 }

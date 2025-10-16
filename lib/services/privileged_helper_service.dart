@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:dualvpn_manager/utils/logger.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter/foundation.dart';
 
 class PrivilegedProcess {
   final StreamController<List<int>> _stdoutController =
@@ -51,22 +52,39 @@ class HelperService {
       Logger.info('Starting processor for go-proxy-core...');
       _process = PrivilegedProcess();
       Logger.info('Starting go-proxy-core via privileged helper...');
-      final result = await platform.invokeMethod('runGoProxyCore', {
-        'executablePath': executablePath,
-        'executableDir': executableDir,
-        'arguments': arguments,
-      });
-      if (result as bool) {
-        Logger.info('Started go-proxy-core');
-        return _process!;
-      } else {
-        Logger.error('Failed to start go-proxy-core');
-        _process?.complete(-1);
-        throw Exception('Failed to start go-proxy-core');
-      }
+
+      // 使用异步调用而不是阻塞调用
+      unawaited(
+        platform
+            .invokeMethod('runGoProxyCore', {
+              'executablePath': executablePath,
+              'executableDir': executableDir,
+              'arguments': arguments,
+            })
+            .then((_) {
+              Logger.info('Started go-proxy-core via privileged helper');
+            })
+            .catchError((error) {
+              Logger.error('Failed to start go-proxy-core: $error');
+              _process?.complete(-1);
+            }),
+      );
+
+      return _process!;
     } catch (e) {
       Logger.error('Failed to start go-proxy-core: $e');
       _process?.complete(-1);
+      rethrow;
+    }
+  }
+
+  Future<void> stopGoProxyCore() async {
+    try {
+      Logger.info('Stopping go-proxy-core via privileged helper...');
+      await platform.invokeMethod('stopGoProxyCore');
+      Logger.info('Stop command sent to privileged helper');
+    } catch (e) {
+      Logger.error('Failed to stop go-proxy-core: $e');
       rethrow;
     }
   }

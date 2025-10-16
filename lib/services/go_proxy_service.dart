@@ -60,63 +60,11 @@ class GoProxyService {
 
       Logger.info('正在启动Go代理核心: $executablePath');
 
-      // 创建日志文件
-      final logFile = File('/private/var/tmp/go-proxy-core.log');
-      final logSink = logFile.openWrite(mode: FileMode.writeOnlyAppend);
-
       final helper = HelperService();
       final _process = await helper.runGoProxyCore(
         executablePath: executablePath,
         executableDir: executableDir,
         arguments: [],
-      );
-
-      // 监听标准输出并同时写入日志文件和应用日志
-      _process.stdout.listen(
-        (data) {
-          final output = utf8.decode(data);
-          // 写入日志文件
-          logSink.write(output);
-
-          Logger.debug('Go代理核心 stdout: $output');
-
-          // 检查是否启动成功
-          if (output.contains('Proxy core started') ||
-              output.contains('Starting proxy core')) {
-            _isRunning = true;
-            Logger.info('Go代理核心启动成功');
-          }
-        },
-        onError: (Object error) {
-          Logger.error('Go代理核心 stdout 监听错误: $error');
-        },
-        onDone: () {
-          logSink.close();
-        },
-      );
-
-      // 监听标准错误并同时写入日志文件和应用日志
-      _process!.stderr.listen(
-        (data) {
-          final output = utf8.decode(data);
-          // 写入日志文件
-          logSink.write(output);
-
-          // Logger.info('Go代理核心 stderr: $output');
-
-          // 检查是否启动成功
-          if (output.contains('Proxy core started') ||
-              output.contains('Starting proxy core')) {
-            _isRunning = true;
-            Logger.info('Go代理核心启动成功');
-          }
-        },
-        onError: (Object error) {
-          Logger.error('Go代理核心 stderr 监听错误: $error');
-        },
-        onDone: () {
-          logSink.close();
-        },
       );
 
       // 等待一段时间确认启动状态
@@ -141,6 +89,13 @@ class GoProxyService {
         }
       }
 
+      bool status = await checkStatus();
+
+      if (status) {
+        Logger.info('状态校验 go 代理核心正常');
+        _isRunning = true;
+      }
+
       Logger.info('Go代理核心启动${_isRunning ? '成功' : '可能失败'}');
       return _isRunning;
     } catch (e, stackTrace) {
@@ -153,25 +108,14 @@ class GoProxyService {
   /// 停止Go代理核心
   Future<void> stop() async {
     try {
-      if (!_isRunning || _process == null) {
+      if (!_isRunning) {
         Logger.info('Go代理核心未运行');
         return;
       }
 
       Logger.info('正在停止Go代理核心...');
 
-      // 尝试优雅地停止进程
-      _process!.kill(ProcessSignal.sigterm);
-
-      // 等待进程结束
-      await _process!.exitCode.timeout(
-        const Duration(seconds: 5),
-        onTimeout: () {
-          // 如果进程没有在5秒内结束，则强制杀死
-          _process!.kill(ProcessSignal.sigkill);
-          return 0;
-        },
-      );
+      await _killExistingProcess();
 
       _process = null;
       _isRunning = false;
@@ -492,14 +436,29 @@ class GoProxyService {
   /// 终止任何已运行的Go代理核心实例
   Future<void> _killExistingProcess() async {
     try {
-      // 在macOS上终止任何已运行的go-proxy-core进程
-      final result = await Process.run('pkill', ['-f', 'go-proxy-core']);
-      if (result.exitCode == 0) {
-        Logger.info('已终止现有的Go代理核心实例');
+      // 首先尝试通过特权助手服务停止Go代理核心
+      try {
+        final helper = HelperService();
+        await helper.stopGoProxyCore();
+        Logger.info('通过特权助手终止现有的Go代理核心实例');
         // 等待一段时间确保进程完全终止
-        await Future.delayed(const Duration(seconds: 1));
-      } else {
-        Logger.info('没有找到正在运行的Go代理核心实例');
+        await Future.delayed(const Duration(seconds: 2));
+      } catch (e) {
+        Logger.warn('通过特权助手终止现有Go代理核心实例时出错: $e');
+      }
+
+      // 作为后备方案，使用pkill命令终止任何残留的go-proxy-core进程
+      try {
+        final result = await Process.run('pkill', ['-f', 'go-proxy-core']);
+        if (result.exitCode == 0) {
+          Logger.info('已终止残留的Go代理核心实例');
+          // 等待一段时间确保进程完全终止
+          await Future.delayed(const Duration(seconds: 1));
+        } else {
+          Logger.info('没有找到残留的Go代理核心实例');
+        }
+      } catch (e) {
+        Logger.warn('终止残留Go代理核心实例时出错: $e');
       }
     } catch (e) {
       Logger.warn('终止现有Go代理核心实例时出错: $e');
@@ -528,6 +487,7 @@ class GoProxyService {
         final status = jsonDecode(responseBody) as Map<String, dynamic>;
         Logger.info('Go代理核心状态检查成功: running=${status['running']}');
         client.close();
+        status['running'] = true;
         return status['running'] == true;
       } else {
         Logger.error('检查状态失败: ${httpResponse.statusCode}, $responseBody');
