@@ -1,9 +1,11 @@
 package main
 
 import (
+	"io"
 	"log"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"syscall"
 	"time"
 
@@ -12,7 +14,59 @@ import (
 	"github.com/dualvpn/go-proxy-core/proxy" // 更改导入路径
 )
 
+// setupLogging 设置日志输出到文件
+func setupLogging() (*os.File, error) {
+	// 尝试在 /private/var/tmp 目录创建日志文件
+	logDir := "/private/var/tmp"
+	if !isWritable(logDir) {
+		// 如果 /private/var/tmp 不可写，尝试使用可执行文件所在目录
+		execPath, err := os.Executable()
+		if err != nil {
+			logDir = "."
+		} else {
+			logDir = filepath.Dir(execPath)
+		}
+	}
+
+	logFile := filepath.Join(logDir, "go-proxy-core.log")
+	file, err := os.OpenFile(logFile, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
+	if err != nil {
+		return nil, err
+	}
+
+	// 创建一个多写入器，同时写入文件和标准错误
+	multiWriter := io.MultiWriter(os.Stderr, file)
+	log.SetOutput(multiWriter)
+
+	return file, nil
+}
+
+// isWritable 检查目录是否可写
+func isWritable(path string) bool {
+	// 检查目录是否可写
+	testFile := filepath.Join(path, ".test")
+	if err := os.WriteFile(testFile, []byte(""), 0644); err != nil {
+		return false
+	}
+	os.Remove(testFile)
+	return true
+}
+
 func main() {
+	// 设置日志输出
+	logFile, err := setupLogging()
+	if err != nil {
+		log.Printf("警告: 无法设置日志文件，将使用标准错误输出: %v", err)
+		// 即使文件创建失败，仍然可以输出到标准错误
+		log.SetOutput(os.Stderr)
+	} else {
+		defer func() {
+			if logFile != nil {
+				logFile.Close()
+			}
+		}()
+	}
+
 	log.Println("Starting DualVPN Proxy Core...")
 
 	// 加载配置
