@@ -36,12 +36,9 @@ class HelperService {
   PrivilegedProcess? _process;
 
   HelperService() {
-    // 设置 MethodChannel 的日志回调
+    // 设置 MethodChannel 的回调
     platform.setMethodCallHandler((call) async {
-      if (call.method == 'onGoProxyCoreLog') {
-        final log = call.arguments as String;
-        _process?.addLog(log);
-      }
+      // 不再处理日志回调，因为助手工具直接将日志写入文件
     });
   }
 

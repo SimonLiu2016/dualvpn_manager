@@ -6,7 +6,7 @@ import ServiceManagement
 @objc protocol PrivilegedHelperProtocol {
     func runGoProxyCore(
         executablePath: String, executableDir: String, arguments: [String],
-        completion: @escaping (Bool, String?) -> Void, logHandler: @escaping (String) -> Void)
+        completion: @escaping (Bool, String?) -> Void)
 }
 
 // 日志工具类
@@ -148,10 +148,6 @@ class AppDelegate: FlutterAppDelegate {
                                     code: "HELPER_ERROR", message: error ?? "Unknown error",
                                     details: nil))
                         }
-                    },
-                    logHandler: { log in
-                        Logger.shared.writeLog("Go代理核心日志: \(log)")
-                        self?.channel?.invokeMethod("onGoProxyCoreLog", arguments: log)
                     })
             default:
                 Logger.shared.writeLog("未实现的方法: \(call.method)", level: "WARN")
@@ -237,7 +233,7 @@ class AppDelegate: FlutterAppDelegate {
 
     private func runGoProxyCore(
         executablePath: String, executableDir: String, arguments: [String],
-        completion: @escaping (Bool, String?) -> Void, logHandler: @escaping (String) -> Void
+        completion: @escaping (Bool, String?) -> Void
     ) {
         Logger.shared.writeLog("运行Go代理核心: \(executablePath)")
         if xpcConnection == nil {
@@ -274,6 +270,6 @@ class AppDelegate: FlutterAppDelegate {
         Logger.shared.writeLog("调用特权助手运行Go代理核心")
         proxy.runGoProxyCore(
             executablePath: executablePath, executableDir: executableDir, arguments: arguments,
-            completion: completion, logHandler: logHandler)
+            completion: completion)
     }
 }

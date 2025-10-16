@@ -9,21 +9,22 @@ echo "检测Go代理核心服务状态..."
 echo "检查端口占用情况:"
 PORTS_USED=false
 
-if lsof -Pi :6160 -sTCP:LISTEN -t >/dev/null ; then
+# 检查端口是否被占用（改进的检测方法）
+if lsof -Pi :6160 -sTCP:LISTEN >/dev/null 2>&1 || netstat -an | grep LISTEN | grep "\.6160 " >/dev/null 2>&1; then
     echo "  HTTP代理服务正在运行 (端口 6160)"
     PORTS_USED=true
 else
     echo "  HTTP代理服务未运行 (端口 6160)"
 fi
 
-if lsof -Pi :6161 -sTCP:LISTEN -t >/dev/null ; then
+if lsof -Pi :6161 -sTCP:LISTEN >/dev/null 2>&1 || netstat -an | grep LISTEN | grep "\.6161 " >/dev/null 2>&1; then
     echo "  SOCKS5代理服务正在运行 (端口 6161)"
     PORTS_USED=true
 else
     echo "  SOCKS5代理服务未运行 (端口 6161)"
 fi
 
-if lsof -Pi :6162 -sTCP:LISTEN -t >/dev/null ; then
+if lsof -Pi :6162 -sTCP:LISTEN >/dev/null 2>&1 || netstat -an | grep LISTEN | grep "\.6162 " >/dev/null 2>&1; then
     echo "  API服务正在运行 (端口 6162)"
     PORTS_USED=true
 else
@@ -51,7 +52,12 @@ fi
 # 获取当前协议列表
 echo ""
 echo "当前支持的协议列表:"
-curl -s http://127.0.0.1:6162/protocols | jq '.' 2>/dev/null || echo "  无法获取协议列表"
+PROTOCOLS_OUTPUT=$(curl -s http://127.0.0.1:6162/protocols 2>/dev/null)
+if [ -n "$PROTOCOLS_OUTPUT" ]; then
+    echo "$PROTOCOLS_OUTPUT" | jq '.' 2>/dev/null || echo "$PROTOCOLS_OUTPUT"
+else
+    echo "  无法获取协议列表"
+fi
 
 echo ""
 echo "服务检测完成"

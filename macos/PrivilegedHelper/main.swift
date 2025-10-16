@@ -7,7 +7,7 @@ private var globalHelper: PrivilegedHelper?
 @objc protocol PrivilegedHelperProtocol {
     func runGoProxyCore(
         executablePath: String, executableDir: String, arguments: [String],
-        completion: @escaping (Bool, String?) -> Void, logHandler: @escaping (String) -> Void)
+        completion: @escaping (Bool, String?) -> Void)
 }
 
 // 日志工具类
@@ -102,7 +102,7 @@ class PrivilegedHelper: NSObject, PrivilegedHelperProtocol, NSXPCListenerDelegat
 
     func runGoProxyCore(
         executablePath: String, executableDir: String, arguments: [String],
-        completion: @escaping (Bool, String?) -> Void, logHandler: @escaping (String) -> Void
+        completion: @escaping (Bool, String?) -> Void
     ) {
         Logger.shared.writeLog(
             "runGoProxyCore called with executablePath: \(executablePath), executableDir: \(executableDir), arguments: \(arguments)"
@@ -159,7 +159,6 @@ class PrivilegedHelper: NSObject, PrivilegedHelperProtocol, NSXPCListenerDelegat
             if let output = String(data: handle.availableData, encoding: .utf8), !output.isEmpty {
                 let message = "stdout: \(output)"
                 Logger.shared.writeLog(message)
-                logHandler(message)
             }
         }
 
@@ -167,7 +166,6 @@ class PrivilegedHelper: NSObject, PrivilegedHelperProtocol, NSXPCListenerDelegat
             if let output = String(data: handle.availableData, encoding: .utf8), !output.isEmpty {
                 let message = "stderr: \(output)"
                 Logger.shared.writeLog(message)
-                logHandler(message)
             }
         }
 
