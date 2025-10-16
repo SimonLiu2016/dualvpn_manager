@@ -32,32 +32,8 @@ fi
 
 echo "Go代理核心构建成功"
 
-# 3. 构建特权助手工具
-echo "步骤3: 构建特权助手工具..."
-cd "${WORKSPACE_DIR}"
-./scripts/build_helper.sh
-
-if [ ! -f "${RELEASE_DIR}/PrivilegedHelper.app/Contents/MacOS/com.v8en.dualvpnManager.PrivilegedHelper" ]; then
-    echo "错误: 特权助手工具构建失败"
-    exit 1
-fi
-
-echo "特权助手工具构建成功"
-
-# 4. 复制助手工具到主应用bundle的LaunchServices目录
-echo "步骤4: 复制助手工具到主应用bundle的LaunchServices目录..."
-APP_CONTENTS_DIR="${RELEASE_DIR}/dualvpn_manager.app/Contents"
-LAUNCH_SERVICES_DIR="${APP_CONTENTS_DIR}/Library/LaunchServices"
-mkdir -p "${LAUNCH_SERVICES_DIR}"
-cp "${RELEASE_DIR}/PrivilegedHelper.app/Contents/MacOS/com.v8en.dualvpnManager.PrivilegedHelper" "${LAUNCH_SERVICES_DIR}/"
-cp "${RELEASE_DIR}/PrivilegedHelper.app/Contents/com.v8en.dualvpnManager.PrivilegedHelper-Info.plist" "${LAUNCH_SERVICES_DIR}/com.v8en.dualvpnManager.PrivilegedHelper.plist"
-cp "${RELEASE_DIR}/PrivilegedHelper.app/Contents/com.v8en.dualvpnManager.PrivilegedHelper-Launchd.plist" "${LAUNCH_SERVICES_DIR}/com.v8en.dualvpnManager.PrivilegedHelper-Launchd.plist"
-
-
-echo "助手工具复制完成"
-
-# 5. 构建Flutter应用
-echo "步骤5: 构建Flutter应用..."
+# 3. 构建Flutter应用
+echo "步骤3: 构建Flutter应用..."
 cd "${WORKSPACE_DIR}"
 flutter build macos --release
 
@@ -68,8 +44,8 @@ fi
 
 echo "Flutter应用构建成功"
 
-# 6. 复制Go代理核心到应用包中
-echo "步骤6: 复制Go代理核心到应用包中..."
+# 4. 复制Go代理核心到应用包中
+echo "步骤4: 复制Go代理核心到应用包中..."
 APP_CONTENTS_DIR="${WORKSPACE_DIR}/build/macos/Build/Products/Release/dualvpn_manager.app/Contents"
 mkdir -p "${APP_CONTENTS_DIR}/Resources/bin"
 cp "${WORKSPACE_DIR}/go-proxy-core/bin/go-proxy-core" "${APP_CONTENTS_DIR}/Resources/bin/"
@@ -77,8 +53,8 @@ cp "${WORKSPACE_DIR}/go-proxy-core/config.yaml" "${APP_CONTENTS_DIR}/Resources/b
 
 echo "Go代理核心复制完成"
 
-# 7. 创建DMG安装文件
-echo "步骤7: 创建DMG安装文件..."
+# 5. 创建DMG安装文件
+echo "步骤5: 创建DMG安装文件..."
 
 # 创建带Applications链接的DMG文件
 echo "创建带Applications链接的DMG文件..."
@@ -111,7 +87,7 @@ fi
 
 echo "DMG安装文件创建成功: ${WORKSPACE_DIR}/build/macos/Build/Products/Release/dualvpn_manager.dmg"
 
-# 8. 显示构建结果
+# 6. 显示构建结果
 echo ""
 echo "==================== 构建完成 ===================="
 echo "应用包位置: ${WORKSPACE_DIR}/build/macos/Build/Products/Release/dualvpn_manager.app"
