@@ -5,13 +5,30 @@
 
 echo "正在停止Go代理核心服务..."
 
-# 查找并终止go-proxy-core进程
+# 检查是否需要sudo权限来终止进程
+need_sudo=false
+
+# 查找go-proxy-core进程
 PIDS=$(pgrep -f "go-proxy-core")
 if [ ! -z "$PIDS" ]; then
     echo "找到go-proxy-core进程，正在终止..."
     for PID in $PIDS; do
-        echo "  终止进程 PID: $PID"
-        kill $PID
+        # 检查进程所有者
+        PROCESS_OWNER=$(ps -o user= -p $PID)
+        echo "  终止进程 PID: $PID (所有者: $PROCESS_OWNER)"
+        
+        # 如果进程所有者是root，则需要sudo权限
+        if [ "$PROCESS_OWNER" = "root" ]; then
+            need_sudo=true
+            echo "    需要sudo权限来终止root进程"
+        fi
+        
+        # 根据是否需要sudo权限来终止进程
+        if [ "$PROCESS_OWNER" = "root" ]; then
+            sudo kill $PID
+        else
+            kill $PID
+        fi
     done
     
     # 等待进程终止
@@ -21,7 +38,11 @@ if [ ! -z "$PIDS" ]; then
     for PID in $PIDS; do
         if kill -0 $PID 2>/dev/null; then
             echo "  进程 $PID 仍未终止，强制终止..."
-            kill -9 $PID
+            if [ "$PROCESS_OWNER" = "root" ]; then
+                sudo kill -9 $PID
+            else
+                kill -9 $PID
+            fi
         else
             echo "  进程 $PID 已成功终止"
         fi
@@ -35,8 +56,22 @@ GO_RUN_PIDS=$(pgrep -f "go-build.*main")
 if [ ! -z "$GO_RUN_PIDS" ]; then
     echo "找到通过go run启动的进程，正在终止..."
     for PID in $GO_RUN_PIDS; do
-        echo "  终止进程 PID: $PID"
-        kill $PID
+        # 检查进程所有者
+        PROCESS_OWNER=$(ps -o user= -p $PID)
+        echo "  终止进程 PID: $PID (所有者: $PROCESS_OWNER)"
+        
+        # 如果进程所有者是root，则需要sudo权限
+        if [ "$PROCESS_OWNER" = "root" ]; then
+            need_sudo=true
+            echo "    需要sudo权限来终止root进程"
+        fi
+        
+        # 根据是否需要sudo权限来终止进程
+        if [ "$PROCESS_OWNER" = "root" ]; then
+            sudo kill $PID
+        else
+            kill $PID
+        fi
     done
     
     # 等待进程终止
@@ -46,7 +81,11 @@ if [ ! -z "$GO_RUN_PIDS" ]; then
     for PID in $GO_RUN_PIDS; do
         if kill -0 $PID 2>/dev/null; then
             echo "  进程 $PID 仍未终止，强制终止..."
-            kill -9 $PID
+            if [ "$PROCESS_OWNER" = "root" ]; then
+                sudo kill -9 $PID
+            else
+                kill -9 $PID
+            fi
         else
             echo "  进程 $PID 已成功终止"
         fi
@@ -62,8 +101,22 @@ for PORT in 6160 6161 6162; do
     if [ ! -z "$PORT_PIDS" ]; then
         echo "找到占用端口 $PORT 的进程，正在终止..."
         for PID in $PORT_PIDS; do
-            echo "  终止进程 PID: $PID"
-            kill $PID
+            # 检查进程所有者
+            PROCESS_OWNER=$(ps -o user= -p $PID)
+            echo "  终止进程 PID: $PID (所有者: $PROCESS_OWNER)"
+            
+            # 如果进程所有者是root，则需要sudo权限
+            if [ "$PROCESS_OWNER" = "root" ]; then
+                need_sudo=true
+                echo "    需要sudo权限来终止root进程"
+            fi
+            
+            # 根据是否需要sudo权限来终止进程
+            if [ "$PROCESS_OWNER" = "root" ]; then
+                sudo kill $PID
+            else
+                kill $PID
+            fi
         done
     fi
 done
