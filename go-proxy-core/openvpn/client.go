@@ -118,9 +118,13 @@ func (oc *OpenVPNClient) copyRequiredFiles(configPath, tempDir string) error {
 
 // modifyConfigFile 修改配置文件，添加一些必要的选项
 func (oc *OpenVPNClient) modifyConfigFile(configPath, tempConfigPath string) error {
+	log.Printf("4-当前用户 UID: %d", os.Getuid())
+	log.Printf("4-当前工作目录: %s", func() string { p, _ := os.Getwd(); return p }())
+	log.Printf("4-操作的文件路径: %s", configPath)
 	// 读取原始配置文件
 	content, err := os.ReadFile(configPath)
 	if err != nil {
+		log.Printf("4-错误详情: %v", err)
 		return err
 	}
 
@@ -222,20 +226,40 @@ func copyFile(src, dst string) error {
 // getOpenVPNBinaryPath 获取OpenVPN二进制文件路径
 func (oc *OpenVPNClient) getOpenVPNBinaryPath() (string, error) {
 	// 首先检查是否已经提取了嵌入的OpenVPN二进制文件
+	log.Printf("1-当前用户 UID: %d", os.Getuid())
+	log.Printf("1-当前工作目录: %s", func() string { p, _ := os.Getwd(); return p }())
+
 	execPath, err := os.Executable()
+	log.Printf("1-操作的文件路径: %s", execPath)
 	if err != nil {
+		log.Printf("1-错误详情: %v", err)
 		return "", fmt.Errorf("获取可执行文件路径失败: %v", err)
 	}
 
 	// 创建临时目录用于存放OpenVPN二进制文件
-	tempDir := filepath.Join(filepath.Dir(execPath), ".openvpn_cache")
+	// 修改为使用用户目录下的缓存位置，避免在应用包内部创建目录导致权限问题
+	var tempDir string
+	if runtime.GOOS == "darwin" {
+		// 在 macOS 上使用用户 Library 目录
+		homeDir, err := os.UserHomeDir()
+		if err != nil {
+			return "", fmt.Errorf("获取用户主目录失败: %v", err)
+		}
+		tempDir = filepath.Join(homeDir, "Library", "Application Support", "dualvpn_manager", ".openvpn_cache")
+	} else {
+		// 在其他平台上保持原有逻辑
+		tempDir = filepath.Join(filepath.Dir(execPath), ".openvpn_cache")
+	}
+	log.Printf("2-操作的文件路径: %s", tempDir)
+
 	if err := os.MkdirAll(tempDir, 0755); err != nil {
+		log.Printf("2-错误详情: %v", err)
 		return "", fmt.Errorf("创建临时目录失败: %v", err)
 	}
 
 	// OpenVPN二进制文件路径
 	openvpnPath := filepath.Join(tempDir, "openvpn")
-
+	log.Printf("3-操作的文件路径: %s", tempDir)
 	// 检查文件是否存在且是最新的
 	if info, err := os.Stat(openvpnPath); err == nil {
 		// 检查文件大小是否匹配
@@ -247,6 +271,7 @@ func (oc *OpenVPNClient) getOpenVPNBinaryPath() (string, error) {
 
 	// 文件不存在或不匹配，需要重新创建
 	if err := os.WriteFile(openvpnPath, openvpnBinary, 0755); err != nil {
+		log.Printf("3-错误详情: %v", err)
 		return "", fmt.Errorf("写入OpenVPN二进制文件失败: %v", err)
 	}
 
