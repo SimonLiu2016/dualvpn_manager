@@ -6,6 +6,12 @@
 echo "Go代理核心服务启动脚本"
 echo "======================"
 
+# 获取脚本所在目录作为项目根目录
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
+
+echo "项目根目录: $PROJECT_ROOT"
+
 # 检查端口占用情况
 echo "检查端口占用情况..."
 PORTS_USED=false
@@ -30,7 +36,7 @@ fi
 if [ "$PORTS_USED" = true ]; then
     echo ""
     echo "检测到端口被占用，正在停止现有服务..."
-    /Users/simon/Workspace/vsProject/dualvpn_manager/scripts/stop_go_proxy.sh
+    "$PROJECT_ROOT/scripts/stop_go_proxy.sh"
     sleep 2
 else
     echo "  所有端口均未被占用"
@@ -67,7 +73,7 @@ echo "端口检查通过，准备启动服务..."
 # 启动Go代理核心服务
 echo ""
 echo "启动Go代理核心服务..."
-cd /Users/simon/Workspace/vsProject/dualvpn_manager/go-proxy-core
+cd "$PROJECT_ROOT/go-proxy-core"
 
 # 检查go-proxy-core可执行文件是否存在
 if [ -f "./bin/go-proxy-core" ]; then
@@ -170,6 +176,8 @@ else
     echo ""
     echo "错误：服务启动失败，请检查日志文件 /private/var/tmp/go-proxy-core.log"
     echo "显示最近的日志内容："
-    tail -n 20 /private/var/tmp/go-proxy-core.log
+    if [ -f /private/var/tmp/go-proxy-core.log ]; then
+        tail -n 20 /private/var/tmp/go-proxy-core.log
+    fi
     exit 1
 fi

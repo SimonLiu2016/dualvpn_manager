@@ -6,11 +6,17 @@
 echo "Go代理核心完整测试脚本"
 echo "======================"
 
+# 获取脚本所在目录作为项目根目录
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
+
+echo "项目根目录: $PROJECT_ROOT"
+
 # 1. 启动服务
 echo "1. 启动Go代理核心服务..."
 # 设置环境变量，指示需要管理员权限来运行OpenVPN
 export NEEDS_ROOT=true
-cd /Users/simon/Workspace/vsProject/dualvpn_manager
+cd "$PROJECT_ROOT"
 ./scripts/start_go_proxy.sh
 sleep 3
 

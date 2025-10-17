@@ -5,9 +5,6 @@
 
 echo "正在停止Go代理核心服务..."
 
-# 检查是否需要sudo权限来终止进程
-need_sudo=false
-
 # 查找go-proxy-core进程
 PIDS=$(pgrep -f "go-proxy-core")
 if [ ! -z "$PIDS" ]; then
@@ -17,13 +14,7 @@ if [ ! -z "$PIDS" ]; then
         PROCESS_OWNER=$(ps -o user= -p $PID)
         echo "  终止进程 PID: $PID (所有者: $PROCESS_OWNER)"
         
-        # 如果进程所有者是root，则需要sudo权限
-        if [ "$PROCESS_OWNER" = "root" ]; then
-            need_sudo=true
-            echo "    需要sudo权限来终止root进程"
-        fi
-        
-        # 根据是否需要sudo权限来终止进程
+        # 根据进程所有者来终止进程
         if [ "$PROCESS_OWNER" = "root" ]; then
             sudo kill $PID
         else
@@ -38,6 +29,8 @@ if [ ! -z "$PIDS" ]; then
     for PID in $PIDS; do
         if kill -0 $PID 2>/dev/null; then
             echo "  进程 $PID 仍未终止，强制终止..."
+            # 重新检查进程所有者
+            PROCESS_OWNER=$(ps -o user= -p $PID)
             if [ "$PROCESS_OWNER" = "root" ]; then
                 sudo kill -9 $PID
             else
@@ -60,13 +53,7 @@ if [ ! -z "$GO_RUN_PIDS" ]; then
         PROCESS_OWNER=$(ps -o user= -p $PID)
         echo "  终止进程 PID: $PID (所有者: $PROCESS_OWNER)"
         
-        # 如果进程所有者是root，则需要sudo权限
-        if [ "$PROCESS_OWNER" = "root" ]; then
-            need_sudo=true
-            echo "    需要sudo权限来终止root进程"
-        fi
-        
-        # 根据是否需要sudo权限来终止进程
+        # 根据进程所有者来终止进程
         if [ "$PROCESS_OWNER" = "root" ]; then
             sudo kill $PID
         else
@@ -81,6 +68,8 @@ if [ ! -z "$GO_RUN_PIDS" ]; then
     for PID in $GO_RUN_PIDS; do
         if kill -0 $PID 2>/dev/null; then
             echo "  进程 $PID 仍未终止，强制终止..."
+            # 重新检查进程所有者
+            PROCESS_OWNER=$(ps -o user= -p $PID)
             if [ "$PROCESS_OWNER" = "root" ]; then
                 sudo kill -9 $PID
             else
@@ -105,13 +94,7 @@ for PORT in 6160 6161 6162; do
             PROCESS_OWNER=$(ps -o user= -p $PID)
             echo "  终止进程 PID: $PID (所有者: $PROCESS_OWNER)"
             
-            # 如果进程所有者是root，则需要sudo权限
-            if [ "$PROCESS_OWNER" = "root" ]; then
-                need_sudo=true
-                echo "    需要sudo权限来终止root进程"
-            fi
-            
-            # 根据是否需要sudo权限来终止进程
+            # 根据进程所有者来终止进程
             if [ "$PROCESS_OWNER" = "root" ]; then
                 sudo kill $PID
             else
