@@ -117,15 +117,56 @@ class AppState extends ChangeNotifier {
           selectedProxy = proxies.firstWhere(
             (proxy) => proxy['isSelected'] == true,
           );
-          Logger.info('找到选中的代理: ${selectedProxy['name']}');
+          Logger.info('找到选中的代理: ${selectedProxy!['name']}');
         } catch (e) {
-          // 没有找到选中的代理
-          Logger.info('配置 ${config.name} 中没有选中的代理');
+          // 对于OpenVPN类型，即使没有找到选中的代理，也应该处理
+          if (config.type == VPNType.openVPN) {
+            // OpenVPN类型默认选中，使用第一个代理（应该只有一个）
+            if (proxies.isNotEmpty) {
+              selectedProxy = proxies.first;
+              Logger.info('OpenVPN类型使用默认代理: ${selectedProxy['name']}');
+            }
+          } else {
+            // 没有找到选中的代理
+            Logger.info('配置 ${config.name} 中没有选中的代理');
+            continue;
+          }
+        }
+
+        // 确保selectedProxy不为null
+        if (selectedProxy == null) {
+          Logger.warn('未找到有效的代理信息，跳过配置 ${config.name}');
           continue;
         }
 
         // 根据配置类型应用选中的代理
         switch (config.type) {
+          case VPNType.openVPN:
+            Logger.info(
+              '应用OpenVPN配置 ${config.name} 中选中的代理: ${selectedProxy['name']}',
+            );
+            // 设置当前配置为选中状态
+            setSelectedConfig(configId);
+
+            // 确保当前代理列表正确设置
+            _proxies = List<Map<String, dynamic>>.from(proxies);
+            Logger.info('更新当前代理列表，代理数量: ${_proxies.length}');
+
+            // 连接OpenVPN
+            final connected = await connectOpenVPN(config);
+            if (connected) {
+              Logger.info('成功连接OpenVPN配置 ${config.name}');
+
+              // 应用选中的代理到Go代理核心
+              _applySelectedProxyToGoProxy(selectedProxy['name']);
+
+              // 更新OpenVPN连接状态
+              setOpenVPNConnected(true);
+            } else {
+              Logger.error('连接OpenVPN配置 ${config.name} 失败');
+            }
+            break;
+
           case VPNType.clash:
             Logger.info(
               '应用Clash配置 ${config.name} 中选中的代理: ${selectedProxy['name']}',
@@ -884,6 +925,24 @@ class AppState extends ChangeNotifier {
       );
     }
 
+    // 检查是否是OpenVPN类型的代理，如果是则不修改其选中状态
+    Map<String, dynamic>? openVPNProxy;
+    for (var proxy in _proxies) {
+      if (proxy['type'] == 'openvpn') {
+        openVPNProxy = proxy;
+        break;
+      }
+    }
+
+    // 如果是OpenVPN代理，保持其选中状态为true且不修改
+    if (openVPNProxy != null && proxyName == openVPNProxy['name']) {
+      Logger.info('OpenVPN代理选中状态不可修改，保持为选中状态');
+      // 通知监听器但不修改OpenVPN代理的状态
+      notifyListeners();
+      Logger.info('=== 代理选中状态设置完成（OpenVPN代理） ===');
+      return;
+    }
+
     // 创建全新的代理列表
     List<Map<String, dynamic>> newProxies = [];
     bool foundTargetProxy = false;
@@ -904,7 +963,8 @@ class AppState extends ChangeNotifier {
         Logger.info('更新后的代理状态: ${updatedProxy['isSelected']}');
       } else {
         // 对于非目标代理，如果需要选中目标代理，则取消它们的选中状态
-        if (isSelected) {
+        // 但不修改OpenVPN代理的状态
+        if (isSelected && proxy['type'] != 'openvpn') {
           final updatedProxy = Map<String, dynamic>.from(proxy);
           updatedProxy['isSelected'] = false;
           newProxies.add(updatedProxy);
@@ -1196,36 +1256,6 @@ class AppState extends ChangeNotifier {
     _trayManager.updateTrayIcon(_openVPNConnected, _clashConnected);
   }
 
-  // 连接OpenVPN
-  Future<bool> connectOpenVPN(VPNConfig config) async {
-    try {
-      final result = await _vpnManager.connectOpenVPN(config);
-      if (result) {
-        setOpenVPNConnected(true);
-        Logger.info('OpenVPN连接成功');
-      } else {
-        Logger.error('OpenVPN连接失败');
-      }
-      return result;
-    } catch (e) {
-      Logger.error('连接OpenVPN失败: $e');
-      // 通知UI显示错误
-      return false;
-    }
-  }
-
-  // 断开OpenVPN
-  Future<void> disconnectOpenVPN() async {
-    try {
-      await _vpnManager.disconnectOpenVPN();
-      setOpenVPNConnected(false);
-      Logger.info('OpenVPN已断开连接');
-    } catch (e) {
-      Logger.error('断开OpenVPN失败: $e');
-      // 通知UI显示错误
-    }
-  }
-
   // 连接Clash
   Future<bool> connectClash(VPNConfig config) async {
     try {
@@ -1242,6 +1272,24 @@ class AppState extends ChangeNotifier {
       return result;
     } catch (e) {
       Logger.error('连接Clash失败: $e');
+      // 通知UI显示错误
+      return false;
+    }
+  }
+
+  // 连接OpenVPN
+  Future<bool> connectOpenVPN(VPNConfig config) async {
+    try {
+      final result = await _vpnManager.connectOpenVPN(config);
+      if (result) {
+        setOpenVPNConnected(true);
+        Logger.info('OpenVPN连接成功');
+      } else {
+        Logger.error('OpenVPN连接失败');
+      }
+      return result;
+    } catch (e) {
+      Logger.error('连接OpenVPN失败: $e');
       // 通知UI显示错误
       return false;
     }
@@ -1314,6 +1362,18 @@ class AppState extends ChangeNotifier {
     }
   }
 
+  // 断开OpenVPN
+  Future<void> disconnectOpenVPN() async {
+    try {
+      await _vpnManager.disconnectOpenVPN();
+      setOpenVPNConnected(false);
+      Logger.info('OpenVPN已断开连接');
+    } catch (e) {
+      Logger.error('断开OpenVPN失败: $e');
+      // 通知UI显示错误
+    }
+  }
+
   // 连接Shadowsocks
   Future<bool> connectShadowsocks(VPNConfig config) async {
     try {
@@ -1343,7 +1403,6 @@ class AppState extends ChangeNotifier {
       Logger.info('Shadowsocks已断开连接');
     } catch (e) {
       Logger.error('断开Shadowsocks失败: $e');
-      // 通知UI显示错误
     }
   }
 
@@ -1518,6 +1577,28 @@ class AppState extends ChangeNotifier {
     }
   }
 
+  // 更新OpenVPN订阅
+  Future<bool> updateOpenVPNSubscription(VPNConfig config) async {
+    if (config.type != VPNType.openVPN) {
+      Logger.error('配置类型不匹配');
+      throw Exception('配置类型不匹配');
+    }
+
+    try {
+      // 对于OpenVPN，"更新订阅"实际上是重新加载配置文件并刷新代理列表
+      Logger.info('更新OpenVPN配置: ${config.name}');
+
+      // 重新加载代理列表
+      await loadProxies();
+
+      Logger.info('OpenVPN配置更新成功');
+      return true;
+    } catch (e) {
+      Logger.error('更新OpenVPN配置失败: $e');
+      return false;
+    }
+  }
+
   // 通用订阅更新方法
   Future<bool> updateSubscription(VPNConfig config) async {
     try {
@@ -1532,6 +1613,10 @@ class AppState extends ChangeNotifier {
           break;
         case VPNType.v2ray:
           result = await updateV2RaySubscription(config);
+          break;
+        case VPNType.openVPN:
+          // 添加OpenVPN类型的支持
+          result = await updateOpenVPNSubscription(config);
           break;
         default:
           Logger.error('不支持的订阅更新类型: ${config.type}');
@@ -2070,6 +2155,7 @@ class AppState extends ChangeNotifier {
               }
 
               // 构建OpenVPN代理信息
+              // 对于OpenVPN类型，代理默认选中且不可修改
               final proxyInfo = {
                 'name': currentConfig.name,
                 'type': 'openvpn',
@@ -2080,7 +2166,7 @@ class AppState extends ChangeNotifier {
                 'username': currentConfig.settings['username'] ?? '',
                 'password': currentConfig.settings['password'] ?? '',
                 'latency': existingProxy?['latency'] ?? -2, // -2表示未测试
-                'isSelected': existingProxy?['isSelected'] ?? false,
+                'isSelected': true, // OpenVPN代理默认选中
               };
 
               Logger.info('创建OpenVPN代理信息: $proxyInfo');
@@ -2098,7 +2184,7 @@ class AppState extends ChangeNotifier {
                 'username': currentConfig.settings['username'] ?? '',
                 'password': currentConfig.settings['password'] ?? '',
                 'latency': -2, // -2表示未测试
-                'isSelected': false,
+                'isSelected': true, // OpenVPN代理默认选中
               };
 
               proxies.add(proxyInfo);

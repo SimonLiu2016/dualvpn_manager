@@ -39,8 +39,25 @@ func (f *OpenVPNProtocolFactory) CreateProtocol(config map[string]interface{}) (
 	configPath, _ := config["config_path"].(string)
 	name, _ := config["name"].(string)
 
+	// 检查是否有特权助手处理后的配置文件路径
+	processedConfigPath, _ := config["processed_config_path"].(string)
+
 	if name == "" {
 		name = fmt.Sprintf("openvpn-%s:%d", server, port)
+	}
+
+	// 创建OpenVPN客户端
+	var client *openvpn.OpenVPNClient
+	if processedConfigPath != "" {
+		// 使用特权助手处理后的配置文件路径
+		client = openvpn.NewOpenVPNClient(processedConfigPath, server, port, 0)
+		// 设置特权助手处理后的配置文件路径
+		client.SetHelperConfigPath(processedConfigPath)
+		log.Printf("使用特权助手处理后的配置文件: %s", processedConfigPath)
+	} else {
+		// 使用原始配置文件路径
+		client = openvpn.NewOpenVPNClient(configPath, server, port, 0)
+		log.Printf("使用原始配置文件: %s", configPath)
 	}
 
 	protocol := &OpenVPNProtocol{
@@ -53,6 +70,7 @@ func (f *OpenVPNProtocolFactory) CreateProtocol(config map[string]interface{}) (
 		username:   username,
 		password:   password,
 		configPath: configPath,
+		client:     client,
 	}
 
 	return protocol, nil
@@ -64,33 +82,24 @@ func (op *OpenVPNProtocol) Connect(targetAddr string) (net.Conn, error) {
 
 	// 如果OpenVPN客户端尚未启动，则启动它
 	if op.client == nil {
-		log.Printf("创建并启动OpenVPN客户端: configPath=%s, server=%s, port=%d", op.configPath, op.server, op.port)
-		// 创建并启动OpenVPN客户端
-		op.client = openvpn.NewOpenVPNClient(op.configPath, op.server, op.port, 0) // SOCKS端口参数已移除
-		// 设置凭据
+		log.Printf("OpenVPN客户端未正确初始化")
+		return nil, fmt.Errorf("OpenVPN客户端未正确初始化")
+	}
+
+	log.Printf("OpenVPN客户端已存在，检查是否正在运行")
+	// 检查OpenVPN客户端是否正在运行
+	if !op.client.IsRunning() {
+		log.Printf("OpenVPN客户端未运行，重新启动")
+		// 重新设置凭据
 		op.client.SetCredentials(op.username, op.password)
 
 		if err := op.client.Start(); err != nil {
-			log.Printf("启动OpenVPN客户端失败: %v", err)
-			return nil, fmt.Errorf("failed to start OpenVPN client: %v", err)
+			log.Printf("重新启动OpenVPN客户端失败: %v", err)
+			return nil, fmt.Errorf("failed to restart OpenVPN client: %v", err)
 		}
-		log.Printf("OpenVPN客户端启动成功")
+		log.Printf("OpenVPN客户端重新启动成功")
 	} else {
-		log.Printf("OpenVPN客户端已存在，检查是否正在运行")
-		// 检查OpenVPN客户端是否正在运行
-		if !op.client.IsRunning() {
-			log.Printf("OpenVPN客户端未运行，重新启动")
-			// 重新设置凭据
-			op.client.SetCredentials(op.username, op.password)
-
-			if err := op.client.Start(); err != nil {
-				log.Printf("重新启动OpenVPN客户端失败: %v", err)
-				return nil, fmt.Errorf("failed to restart OpenVPN client: %v", err)
-			}
-			log.Printf("OpenVPN客户端重新启动成功")
-		} else {
-			log.Printf("OpenVPN客户端已在运行")
-		}
+		log.Printf("OpenVPN客户端已在运行")
 	}
 
 	// 确保OpenVPN客户端已完全初始化

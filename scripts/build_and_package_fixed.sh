@@ -51,7 +51,17 @@ mkdir -p "${APP_CONTENTS_DIR}/Resources/bin"
 cp "${WORKSPACE_DIR}/go-proxy-core/bin/go-proxy-core" "${APP_CONTENTS_DIR}/Resources/bin/"
 cp "${WORKSPACE_DIR}/go-proxy-core/config.yaml" "${APP_CONTENTS_DIR}/Resources/bin/"
 
-echo "Go代理核心复制完成"
+# 4.1 复制OpenVPN二进制文件到应用包Resources/bin目录
+echo "步骤4.1: 复制OpenVPN二进制文件到应用包Resources/bin目录..."
+cp "${WORKSPACE_DIR}/go-proxy-core/openvpn/openvpn_bin/openvpn" "${APP_CONTENTS_DIR}/Resources/bin/"
+chmod +x "${APP_CONTENTS_DIR}/Resources/bin/openvpn"
+
+# 4.2 复制OpenVPN库文件到应用包Resources目录
+echo "步骤4.2: 复制OpenVPN库文件到应用包Resources目录..."
+mkdir -p "${APP_CONTENTS_DIR}/Resources/openvpn_frameworks"
+cp -R "${WORKSPACE_DIR}/go-proxy-core/openvpn/frameworks/" "${APP_CONTENTS_DIR}/Resources/openvpn_frameworks/"
+
+echo "Go代理核心和OpenVPN文件复制完成"
 
 # 5. 创建DMG安装文件
 echo "步骤5: 创建DMG安装文件..."

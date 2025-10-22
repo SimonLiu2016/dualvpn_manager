@@ -183,8 +183,57 @@ class _ConfigScreenState extends State<ConfigScreen> {
     }
   }
 
-  // 更新订阅(仅适用于支持订阅的代理类型)
+  // 更新订阅(适用于所有代理类型)
   void _updateSubscription(VPNConfig config) async {
+    // 对于OpenVPN类型，我们将其视为重新加载配置文件
+    // 对于其他支持订阅的类型，执行实际的订阅更新
+    if (config.type == VPNType.openVPN) {
+      if (mounted) {
+        // 显示更新中的提示
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('正在重新加载OpenVPN配置...')));
+      }
+
+      try {
+        // 通过AppState调用OpenVPN配置更新功能
+        final appState = Provider.of<AppState>(context, listen: false);
+        final result = await appState.updateOpenVPNSubscription(config);
+
+        if (mounted) {
+          if (result) {
+            ScaffoldMessenger.of(
+              context,
+            ).showSnackBar(const SnackBar(content: Text('OpenVPN配置重新加载成功')));
+
+            // 更新配置列表以显示最新状态
+            _loadConfigs();
+
+            // 清除AppState中的代理列表缓存并重新加载
+            // 这样可以确保代理列表显示最新的配置内容
+            appState.clearProxyCache(config.id); // 清除指定配置的代理列表缓存
+            if (appState.selectedConfig == config.id) {
+              // 如果当前选中的配置就是更新的配置，则重新加载代理列表
+              appState.loadProxies();
+            }
+          } else {
+            ScaffoldMessenger.of(
+              context,
+            ).showSnackBar(const SnackBar(content: Text('OpenVPN配置重新加载失败')));
+          }
+        }
+      } catch (e) {
+        if (mounted) {
+          String errorMessage = 'OpenVPN配置重新加载失败';
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('$errorMessage: ${e.toString()}')),
+          );
+        }
+      }
+      return;
+    }
+
+    // 对于其他类型，保持原有的逻辑
     if (!config.type.supportsSubscription) {
       if (mounted) {
         ScaffoldMessenger.of(
@@ -839,13 +888,18 @@ class _ConfigScreenState extends State<ConfigScreen> {
                               onPressed: () => _testLatency(config),
                               tooltip: '测试延迟',
                             ),
-                            // 订阅更新按钮(仅适用于支持订阅的代理类型)
+                            // 订阅更新按钮(适用于支持更新的代理类型)
+                            // OpenVPN类型显示更新按钮用于重新加载配置文件
+                            // 其他类型如果是订阅链接则显示更新按钮
                             if (config.type.supportsSubscription &&
-                                config.configPath.startsWith('http'))
+                                (config.type == VPNType.openVPN ||
+                                    config.configPath.startsWith('http')))
                               IconButton(
                                 icon: const Icon(Icons.refresh),
                                 onPressed: () => _updateSubscription(config),
-                                tooltip: '更新订阅',
+                                tooltip: config.type == VPNType.openVPN
+                                    ? '重新加载配置'
+                                    : '更新订阅',
                               ),
                             // 编辑按钮
                             IconButton(

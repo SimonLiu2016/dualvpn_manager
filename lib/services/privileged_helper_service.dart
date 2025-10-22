@@ -88,4 +88,41 @@ class HelperService {
       rethrow;
     }
   }
+
+  /// 调用特权助手处理OpenVPN配置文件
+  Future<String?> copyOpenVPNConfigFiles({
+    required String configContent,
+    required Map<String, String> certFiles,
+  }) async {
+    try {
+      Logger.info('Calling privileged helper to copy OpenVPN config files...');
+
+      final result = await platform.invokeMethod('copyOpenVPNConfigFiles', {
+        'configContent': configContent,
+        'certFiles': certFiles,
+      });
+
+      if (result is Map) {
+        final success = result['success'] as bool?;
+        final errorMessage = result['errorMessage'] as String?;
+        final configPath = result['configPath'] as String?;
+
+        if (success == true && configPath != null) {
+          Logger.info(
+            'OpenVPN config files copied successfully to: $configPath',
+          );
+          return configPath;
+        } else {
+          Logger.error('Failed to copy OpenVPN config files: $errorMessage');
+          return null;
+        }
+      } else {
+        Logger.error('Invalid response from privileged helper');
+        return null;
+      }
+    } catch (e) {
+      Logger.error('Failed to call copyOpenVPNConfigFiles: $e');
+      return null;
+    }
+  }
 }

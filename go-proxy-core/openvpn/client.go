@@ -22,27 +22,29 @@ var openvpnBinary []byte
 
 // OpenVPNClient 内部OpenVPN客户端实现
 type OpenVPNClient struct {
-	configPath  string
-	serverAddr  string
-	serverPort  int
-	username    string
-	password    string
-	protocol    string // 添加协议类型字段
-	running     bool
-	mutex       sync.Mutex
-	tunnelReady bool
-	tunnelMutex sync.RWMutex
-	cmd         *exec.Cmd // 用于外部OpenVPN进程
-	tunIP       string    // TUN设备的IP地址
+	configPath       string
+	serverAddr       string
+	serverPort       int
+	username         string
+	password         string
+	protocol         string // 添加协议类型字段
+	running          bool
+	mutex            sync.Mutex
+	tunnelReady      bool
+	tunnelMutex      sync.RWMutex
+	cmd              *exec.Cmd // 用于外部OpenVPN进程
+	tunIP            string    // TUN设备的IP地址
+	helperConfigPath string    // 特权助手处理后的配置文件路径
 }
 
 // NewOpenVPNClient 创建新的OpenVPN客户端
 func NewOpenVPNClient(configPath, serverAddr string, serverPort int, socksPort int) *OpenVPNClient {
 	client := &OpenVPNClient{
-		configPath: configPath,
-		serverAddr: serverAddr,
-		serverPort: serverPort,
-		protocol:   "udp", // 默认使用UDP协议
+		configPath:       configPath,
+		serverAddr:       serverAddr,
+		serverPort:       serverPort,
+		protocol:         "udp", // 默认使用UDP协议
+		helperConfigPath: "",    // 初始化为空
 	}
 
 	// 从配置文件中解析协议类型
@@ -62,6 +64,14 @@ func (oc *OpenVPNClient) SetCredentials(username, password string) {
 	oc.username = username
 	oc.password = password
 	log.Printf("OpenVPN客户端设置凭据: username=%s", username)
+}
+
+// SetHelperConfigPath 设置特权助手处理后的配置文件路径
+func (oc *OpenVPNClient) SetHelperConfigPath(helperConfigPath string) {
+	oc.mutex.Lock()
+	defer oc.mutex.Unlock()
+	oc.helperConfigPath = helperConfigPath
+	log.Printf("设置特权助手处理后的配置文件路径: %s", helperConfigPath)
 }
 
 // IsRunning 检查OpenVPN客户端是否正在运行
@@ -177,11 +187,6 @@ func (oc *OpenVPNClient) Start() error {
 	}
 	oc.mutex.Unlock()
 
-	// 在macOS上使用特权助手工具启动OpenVPN
-	if runtime.GOOS == "darwin" {
-		return oc.startOpenVPNWithHelper()
-	}
-
 	// 在其他平台上使用标准启动流程
 	return oc.startOpenVPNStandard()
 }
@@ -225,7 +230,8 @@ func copyFile(src, dst string) error {
 
 // getOpenVPNBinaryPath 获取OpenVPN二进制文件路径
 func (oc *OpenVPNClient) getOpenVPNBinaryPath() (string, error) {
-	// 首先检查是否已经提取了嵌入的OpenVPN二进制文件
+	// 在新的实现中，我们直接使用应用包中的OpenVPN二进制文件
+	// 而不是提取嵌入的二进制文件到临时目录
 	log.Printf("1-当前用户 UID: %d", os.Getuid())
 	log.Printf("1-当前工作目录: %s", func() string { p, _ := os.Getwd(); return p }())
 
@@ -236,46 +242,35 @@ func (oc *OpenVPNClient) getOpenVPNBinaryPath() (string, error) {
 		return "", fmt.Errorf("获取可执行文件路径失败: %v", err)
 	}
 
-	// 创建临时目录用于存放OpenVPN二进制文件
-	// 修改为使用用户目录下的缓存位置，避免在应用包内部创建目录导致权限问题
-	var tempDir string
-	if runtime.GOOS == "darwin" {
-		// 在 macOS 上使用用户 Library 目录
-		homeDir, err := os.UserHomeDir()
-		if err != nil {
-			return "", fmt.Errorf("获取用户主目录失败: %v", err)
-		}
-		tempDir = filepath.Join(homeDir, "Library", "Application Support", "dualvpn_manager", ".openvpn_cache")
-	} else {
-		// 在其他平台上保持原有逻辑
-		tempDir = filepath.Join(filepath.Dir(execPath), ".openvpn_cache")
-	}
-	log.Printf("2-操作的文件路径: %s", tempDir)
+	// 构建应用包中Resources目录下的OpenVPN二进制文件路径
+	// 路径为: Contents/Resources/bin/openvpn
+	openvpnPath := filepath.Join(filepath.Dir(execPath), "..", "bin", "openvpn")
+	log.Printf("查找OpenVPN二进制文件路径: %s", openvpnPath)
 
-	if err := os.MkdirAll(tempDir, 0755); err != nil {
-		log.Printf("2-错误详情: %v", err)
-		return "", fmt.Errorf("创建临时目录失败: %v", err)
+	// 检查文件是否存在
+	if _, err := os.Stat(openvpnPath); os.IsNotExist(err) {
+		log.Printf("OpenVPN二进制文件不存在: %v", err)
+		return "", fmt.Errorf("OpenVPN二进制文件不存在: %s", openvpnPath)
 	}
 
-	// OpenVPN二进制文件路径
-	openvpnPath := filepath.Join(tempDir, "openvpn")
-	log.Printf("3-操作的文件路径: %s", tempDir)
-	// 检查文件是否存在且是最新的
-	if info, err := os.Stat(openvpnPath); err == nil {
-		// 检查文件大小是否匹配
-		if info.Size() == int64(len(openvpnBinary)) {
-			// 文件已存在且大小匹配，直接返回
-			return openvpnPath, nil
+	// 检查文件是否可执行
+	fileInfo, err := os.Stat(openvpnPath)
+	if err != nil {
+		log.Printf("无法获取OpenVPN二进制文件信息: %v", err)
+		return "", fmt.Errorf("无法获取OpenVPN二进制文件信息: %s", openvpnPath)
+	}
+
+	// 检查执行权限位
+	if fileInfo.Mode()&0111 == 0 {
+		log.Printf("OpenVPN二进制文件不可执行，尝试添加执行权限")
+		// 尝试添加执行权限
+		if err := os.Chmod(openvpnPath, 0755); err != nil {
+			log.Printf("添加执行权限失败: %v", err)
+			return "", fmt.Errorf("OpenVPN二进制文件不可执行且无法添加权限: %s", openvpnPath)
 		}
 	}
 
-	// 文件不存在或不匹配，需要重新创建
-	if err := os.WriteFile(openvpnPath, openvpnBinary, 0755); err != nil {
-		log.Printf("3-错误详情: %v", err)
-		return "", fmt.Errorf("写入OpenVPN二进制文件失败: %v", err)
-	}
-
-	log.Printf("成功提取OpenVPN二进制文件到: %s", openvpnPath)
+	log.Printf("成功找到OpenVPN二进制文件: %s", openvpnPath)
 	return openvpnPath, nil
 }
 
@@ -566,4 +561,127 @@ func (oc *OpenVPNClient) getProtocolFromConfig(configPath string) (string, error
 
 	// 如果没有找到proto指令，默认返回udp
 	return "udp", nil
+}
+
+// startOpenVPNStandard 标准的OpenVPN启动流程
+func (oc *OpenVPNClient) startOpenVPNStandard() error {
+	// 保存必要的参数用于后续启动
+	configPath := oc.configPath
+	serverAddr := oc.serverAddr
+	serverPort := oc.serverPort
+	protocol := oc.protocol
+	username := oc.username
+	password := oc.password
+	helperConfigPath := oc.helperConfigPath
+
+	log.Printf("启动OpenVPN客户端: configPath=%s, server=%s, port=%d, protocol=%s", configPath, serverAddr, serverPort, protocol)
+
+	// 获取OpenVPN二进制文件路径
+	openvpnPath, err := oc.getOpenVPNBinaryPath()
+	if err != nil {
+		return fmt.Errorf("获取OpenVPN二进制文件路径失败: %v", err)
+	}
+
+	// 确定要使用的配置文件路径
+	// 如果特权助手已经处理了配置文件，则使用处理后的路径
+	var finalConfigPath string
+	if helperConfigPath != "" {
+		finalConfigPath = helperConfigPath
+		log.Printf("使用特权助手处理后的配置文件: %s", finalConfigPath)
+	} else {
+		// 否则使用原始配置文件路径
+		finalConfigPath = configPath
+		log.Printf("使用原始配置文件: %s", finalConfigPath)
+	}
+
+	// 确定OpenVPN的工作目录
+	// 如果有特权助手处理后的配置文件，使用其所在目录作为工作目录
+	// 否则使用原始配置文件所在目录
+	var workDir string
+	if helperConfigPath != "" {
+		workDir = filepath.Dir(helperConfigPath)
+	} else {
+		workDir = filepath.Dir(configPath)
+	}
+	log.Printf("使用工作目录: %s", workDir)
+
+	// 在工作目录中创建认证文件
+	tempAuthPath := filepath.Join(workDir, "auth.txt")
+	authContent := fmt.Sprintf("%s\n%s\n", username, password)
+	if err := os.WriteFile(tempAuthPath, []byte(authContent), 0600); err != nil {
+		return fmt.Errorf("创建认证文件失败: %v", err)
+	}
+
+	// 构建OpenVPN命令，使用最终确定的配置文件和认证文件
+	var cmd *exec.Cmd
+	if runtime.GOOS == "darwin" {
+		// 在macOS上，通过特权助手工具启动OpenVPN以确保有足够的权限
+		// 注意：特权助手工具已经确保了权限，所以这里不需要sudo
+		cmd = exec.Command(openvpnPath, "--config", finalConfigPath, "--auth-user-pass", tempAuthPath, "--proto", protocol, "--dev-type", "tun", "--dev", "tun", "--persist-tun", "--pull")
+
+		// 设置DYLD_LIBRARY_PATH环境变量，指向openvpn_frameworks目录以解决动态库加载问题
+		appContentsDir := filepath.Join(filepath.Dir(openvpnPath), "..", "..")
+		frameworksPath := filepath.Join(appContentsDir, "Resources", "openvpn_frameworks")
+		cmd.Env = append(os.Environ(), "DYLD_LIBRARY_PATH="+frameworksPath)
+		log.Printf("设置DYLD_LIBRARY_PATH环境变量: %s", frameworksPath)
+	} else {
+		// 在其他平台上直接运行OpenVPN
+		cmd = exec.Command(openvpnPath, "--config", finalConfigPath, "--auth-user-pass", tempAuthPath, "--proto", protocol, "--dev-type", "tun", "--dev", "tun", "--pull")
+	}
+
+	cmd.Dir = workDir // 设置工作目录
+	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+
+	// 捕获OpenVPN的输出
+	stdout, err := cmd.StdoutPipe()
+	if err != nil {
+		return fmt.Errorf("创建stdout管道失败: %v", err)
+	}
+
+	stderr, err := cmd.StderrPipe()
+	if err != nil {
+		return fmt.Errorf("创建stderr管道失败: %v", err)
+	}
+
+	// 启动OpenVPN进程
+	log.Printf("启动OpenVPN进程: %s, protocol=%s, workdir=%s", openvpnPath, protocol, workDir)
+	if err := cmd.Start(); err != nil {
+		return fmt.Errorf("启动OpenVPN进程失败: %v", err)
+	}
+
+	// 更新客户端状态
+	oc.mutex.Lock()
+	oc.cmd = cmd
+	oc.configPath = configPath
+	oc.serverAddr = serverAddr
+	oc.serverPort = serverPort
+	oc.protocol = protocol
+	oc.username = username
+	oc.password = password
+	oc.mutex.Unlock()
+
+	// 监听OpenVPN输出
+	go oc.monitorOpenVPNOutput(stdout, "stdout")
+	go oc.monitorOpenVPNOutput(stderr, "stderr")
+
+	// 等待OpenVPN连接建立
+	if err := oc.waitForOpenVPNConnection(); err != nil {
+		// 记录详细的错误信息
+		log.Printf("等待OpenVPN连接建立失败: %v", err)
+		// 尝试获取更多错误信息
+		if cmd.Process != nil {
+			log.Printf("OpenVPN进程PID: %d", cmd.Process.Pid)
+		}
+		cmd.Process.Kill()
+		return fmt.Errorf("等待OpenVPN连接建立失败: %v", err)
+	}
+
+	// 更新运行状态
+	oc.mutex.Lock()
+	oc.running = true
+	oc.tunnelReady = true
+	oc.mutex.Unlock()
+
+	log.Printf("OpenVPN客户端已启动: configPath=%s", configPath)
+	return nil
 }

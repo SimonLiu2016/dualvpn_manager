@@ -8,6 +8,9 @@ import ServiceManagement
         executablePath: String, executableDir: String, arguments: [String],
         completion: @escaping (Bool, String?) -> Void)
     func stopGoProxyCore(completion: @escaping (Bool, String?) -> Void)
+    func copyOpenVPNConfigFiles(
+        configContent: String, certFiles: [String: String],
+        completion: @escaping (Bool, String?, String?) -> Void)
 }
 
 // 日志工具类
@@ -163,6 +166,18 @@ class AppDelegate: FlutterAppDelegate {
                                 code: "HELPER_ERROR", message: error ?? "Unknown error",
                                 details: nil))
                     }
+                }
+            case "copyOpenVPNConfigFiles":
+                if let args = call.arguments as? [String: Any],
+                    let configContent = args["configContent"] as? String,
+                    let certFiles = args["certFiles"] as? [String: String]
+                {
+                    self?.copyOpenVPNConfigFiles(
+                        configContent: configContent, certFiles: certFiles, result: result)
+                } else {
+                    result(
+                        FlutterError(
+                            code: "INVALID_ARGS", message: "Invalid arguments", details: nil))
                 }
             default:
                 Logger.shared.writeLog("未实现的方法: \(call.method)", level: "WARN")
@@ -323,5 +338,57 @@ class AppDelegate: FlutterAppDelegate {
 
         Logger.shared.writeLog("调用特权助手停止Go代理核心")
         proxy.stopGoProxyCore(completion: completion)
+    }
+
+    private func copyOpenVPNConfigFiles(
+        configContent: String, certFiles: [String: String], result: @escaping FlutterResult
+    ) {
+        if xpcConnection == nil {
+            Logger.shared.writeLog("创建XPC连接")
+            xpcConnection = NSXPCConnection(
+                machServiceName: "com.v8en.dualvpnManager.PrivilegedHelper")
+            xpcConnection?.remoteObjectInterface = NSXPCInterface(
+                with: PrivilegedHelperProtocol.self)
+            xpcConnection?.resume()
+
+            // 主程序中添加连接中断监听
+            xpcConnection?.interruptionHandler = {
+                Logger.shared.writeLog("XPC连接中断", level: "ERROR")
+                self.xpcConnection = nil
+            }
+
+            xpcConnection?.invalidationHandler = {
+                Logger.shared.writeLog("XPC连接失效", level: "ERROR")
+                self.xpcConnection = nil
+            }
+        }
+
+        guard
+            let proxy = xpcConnection?.remoteObjectProxyWithErrorHandler({ error in
+                Logger.shared.writeLog("创建XPC代理失败: \(error.localizedDescription)", level: "ERROR")
+                result(
+                    FlutterError(
+                        code: "HELPER_ERROR", message: error.localizedDescription,
+                        details: nil))
+                return
+            }) as? PrivilegedHelperProtocol
+        else {
+            Logger.shared.writeLog("无法创建XPC代理", level: "ERROR")
+            result(
+                FlutterError(
+                    code: "HELPER_ERROR", message: "Failed to create XPC proxy",
+                    details: nil))
+            return
+        }
+
+        proxy.copyOpenVPNConfigFiles(configContent: configContent, certFiles: certFiles) {
+            success, error, configPath in
+            let response: [String: Any?] = [
+                "success": success,
+                "errorMessage": error,
+                "configPath": configPath,
+            ]
+            result(response)
+        }
     }
 }

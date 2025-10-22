@@ -61,8 +61,8 @@ class _ProxyListScreenState extends State<ProxyListScreen> {
       }
     });
 
-    // 对于OpenVPN类型，总是重新加载，因为配置文件可能已更改
-    // 对于其他类型，只有在当前配置没有缓存代理列表时才重新加载
+    // 对于所有类型，只有在当前配置没有缓存代理列表时才重新加载
+    // 移除OpenVPN类型的特殊处理，使其与其他类型保持一致
     final configs = await ConfigManager.loadConfigs();
     VPNConfig? currentConfig;
     try {
@@ -78,13 +78,8 @@ class _ProxyListScreenState extends State<ProxyListScreen> {
 
     bool shouldReload = false;
     if (currentConfig != null) {
-      // 对于OpenVPN类型，总是重新加载
-      if (currentConfig.type == VPNType.openVPN) {
-        Logger.info('OpenVPN类型配置，总是重新加载代理列表');
-        shouldReload = true;
-      }
-      // 对于其他类型，只有在没有缓存或缓存为空时才重新加载
-      else if (!appState.proxiesByConfig.containsKey(appState.selectedConfig) ||
+      // 对于所有类型，只有在没有缓存或缓存为空时才重新加载
+      if (!appState.proxiesByConfig.containsKey(appState.selectedConfig) ||
           appState.proxiesByConfig[appState.selectedConfig]!.isEmpty) {
         Logger.info('当前配置没有缓存的代理列表，正在加载...');
         shouldReload = true;

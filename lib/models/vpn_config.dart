@@ -112,8 +112,10 @@ enum VPNType {
 // 添加一个扩展方法来检查是否支持订阅
 extension VPNTypeSubscription on VPNType {
   bool get supportsSubscription {
-    // 目前只有Clash、Shadowsocks和V2Ray支持订阅
-    return this == VPNType.clash ||
+    // 现在OpenVPN、Clash、Shadowsocks和V2Ray都支持某种形式的更新
+    // OpenVPN通过重新加载配置文件实现
+    return this == VPNType.openVPN ||
+        this == VPNType.clash ||
         this == VPNType.shadowsocks ||
         this == VPNType.v2ray;
   }

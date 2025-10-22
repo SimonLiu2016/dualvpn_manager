@@ -46,11 +46,17 @@ class VPNManager {
     try {
       // 如果已经连接，则先断开
       if (_openVPNService.isConnected) {
-        await _openVPNService.disconnect();
+        await _openVPNService.disconnect(sourceId: config.id);
       }
 
-      // 连接OpenVPN
-      final result = await _openVPNService.connect(config.configPath);
+      // 通过OpenVPNService连接，它会处理特权助手相关逻辑
+      // 传递用户名和密码以及sourceId
+      final result = await _openVPNService.connect(
+        config.configPath,
+        sourceId: config.id, // 传递sourceId参数
+        username: config.settings['username'] as String?,
+        password: config.settings['password'] as String?,
+      );
       return result;
     } catch (e) {
       Logger.error('连接OpenVPN失败: $e');
@@ -61,6 +67,8 @@ class VPNManager {
   // 断开OpenVPN
   Future<void> disconnectOpenVPN() async {
     try {
+      // 注意：在这里我们没有config对象，所以无法传递sourceId
+      // 这种情况下会使用默认的sourceId 'openvpn-source'
       await _openVPNService.disconnect();
     } catch (e) {
       Logger.error('断开OpenVPN失败: $e');
@@ -437,6 +445,27 @@ class VPNManager {
     }
   }
 
+  // 更新OpenVPN订阅
+  Future<bool> updateOpenVPNSubscription(VPNConfig config) async {
+    if (config.type != VPNType.openVPN) {
+      Logger.error('配置类型不匹配');
+      throw Exception('配置类型不匹配');
+    }
+
+    try {
+      // 对于OpenVPN，"更新订阅"实际上是重新加载配置文件
+      Logger.info('更新OpenVPN配置: ${config.name}');
+
+      // 这里可以添加任何需要的OpenVPN配置更新逻辑
+      // 目前我们只是返回成功，因为OpenVPN配置通常是本地文件
+      Logger.info('OpenVPN配置更新完成');
+      return true;
+    } catch (e) {
+      Logger.error('更新OpenVPN配置失败: $e');
+      return false;
+    }
+  }
+
   // 更新Clash订阅
   Future<bool> updateClashSubscription(VPNConfig config) async {
     if (config.type != VPNType.clash) {
@@ -560,6 +589,11 @@ class VPNManager {
       return result;
     } catch (e) {
       Logger.error('更新${config.type}订阅失败: $e');
+      if (e.toString().contains('404')) {
+        throw Exception('订阅链接不存在，请检查链接是否正确');
+      } else if (e.toString().contains('timeout')) {
+        throw Exception('连接超时，请稍后重试');
+      }
       return false;
     }
   }

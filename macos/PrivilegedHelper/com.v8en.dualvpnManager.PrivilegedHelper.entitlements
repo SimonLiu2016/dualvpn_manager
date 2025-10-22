@@ -1,35 +1,46 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
-<dict>
-	<key>com.apple.security.app-sandbox</key>
-	<false/>
-    <!-- 允许写入 /private/var/tmp 目录 -->
-    <key>com.apple.security.temporary-exception.files.absolute-path.read-write</key>
-    <array>
-        <string>/private/var/tmp/</string>
-    </array>
-	<key>com.apple.security.cs.allow-dyld-environment-variables</key>
-	<true/>
-	<key>com.apple.security.cs.allow-jit</key>
-	<true/>
-	<key>com.apple.security.cs.allow-unsigned-executable-memory</key>
-	<true/>
-	<key>com.apple.security.cs.disable-executable-page-protection</key>
-	<true/>
-	<key>com.apple.security.cs.disable-library-validation</key>
-	<true/>
-	<key>com.apple.security.network.client</key>
-	<true/>
-	<key>com.apple.security.network.server</key>
-	<true/>
-	<key>com.apple.security.smjobbless</key>
-	<true/>
-	<key>com.apple.security.temporary-exception.mach-lookup.global-name</key>
-	<array>
-		<string>com.apple.SystemAdministrationWrite</string>
-		<string>com.apple.launchd</string>
-		<string>com.v8en.dualvpnManager.PrivilegedHelper</string>
-	</array>
-</dict>
+	<dict>
+		<key>com.apple.security.app-sandbox</key>
+		<false/>
+		<!-- 允许写入 /private/var/tmp 目录 -->
+		<key>com.apple.security.temporary-exception.files.absolute-path.read-write</key>
+		<array>
+			<string>/private/var/tmp/</string>
+		</array>
+		<key>com.apple.security.cs.allow-dyld-environment-variables</key>
+		<true/>
+		<key>com.apple.security.cs.allow-jit</key>
+		<true/>
+		<key>com.apple.security.cs.allow-unsigned-executable-memory</key>
+		<true/>
+		<key>com.apple.security.cs.disable-executable-page-protection</key>
+		<true/>
+		<key>com.apple.security.cs.disable-library-validation</key>
+		<true/>
+		<key>com.apple.security.network.client</key>
+		<true/>
+		<key>com.apple.security.network.server</key>
+		<true/>
+		<key>com.apple.security.smjobbless</key>
+		<true/>
+		<!-- 允许操作网络接口（包括utun） -->
+		<key>com.apple.security.network.control</key>
+		<true/>
+
+		<!-- 允许访问系统网络配置（如路由表、DNS） -->
+		<key>com.apple.security.network.config</key>
+		<true/>
+
+		<!-- 若OpenVPN需要绑定低端口（如1024以下），添加此权限 -->
+		<key>com.apple.security.specialized.networking</key>
+		<true/>
+		<key>com.apple.security.temporary-exception.mach-lookup.global-name</key>
+		<array>
+			<string>com.apple.SystemAdministrationWrite</string>
+			<string>com.apple.launchd</string>
+			<string>com.v8en.dualvpnManager.PrivilegedHelper</string>
+		</array>
+	</dict>
 </plist>

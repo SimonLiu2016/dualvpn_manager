@@ -9,6 +9,9 @@ private var globalHelper: PrivilegedHelper?
         executablePath: String, executableDir: String, arguments: [String],
         completion: @escaping (Bool, String?) -> Void)
     func stopGoProxyCore(completion: @escaping (Bool, String?) -> Void)
+    func copyOpenVPNConfigFiles(
+        configContent: String, certFiles: [String: String],
+        completion: @escaping (Bool, String?, String?) -> Void)
 }
 
 // 日志工具类
@@ -226,6 +229,45 @@ class PrivilegedHelper: NSObject, PrivilegedHelperProtocol, NSXPCListenerDelegat
 
             Logger.shared.writeLog("All go-proxy-core processes stopped")
             completion(true, nil)
+        }
+    }
+
+    func copyOpenVPNConfigFiles(
+        configContent: String, certFiles: [String: String],
+        completion: @escaping (Bool, String?, String?) -> Void
+    ) {
+        Logger.shared.writeLog(
+            "copyOpenVPNConfigFiles called with configContent length: \(configContent.count), certFiles count: \(certFiles.count)"
+        )
+
+        // 定义目标目录
+        let targetDir =
+            "/private/var/root/Library/Containers/com.v8en.dualvpnManager.PrivilegedHelper/Data/openvpn"
+
+        do {
+            // 创建目标目录
+            try FileManager.default.createDirectory(
+                atPath: targetDir, withIntermediateDirectories: true, attributes: nil)
+            Logger.shared.writeLog("Created target directory: \(targetDir)")
+
+            // 写入配置文件
+            let configPath = "\(targetDir)/config.ovpn"
+            try configContent.write(toFile: configPath, atomically: true, encoding: .utf8)
+            Logger.shared.writeLog("Written config file to: \(configPath)")
+
+            // 写入证书文件
+            for (filename, content) in certFiles {
+                let certPath = "\(targetDir)/\(filename)"
+                try content.write(toFile: certPath, atomically: true, encoding: .utf8)
+                Logger.shared.writeLog("Written certificate file to: \(certPath)")
+            }
+
+            // 返回成功和配置文件路径
+            completion(true, nil, configPath)
+        } catch {
+            let errorMsg = "Failed to copy OpenVPN config files: \(error.localizedDescription)"
+            Logger.shared.writeLog(errorMsg)
+            completion(false, errorMsg, nil)
         }
     }
 
