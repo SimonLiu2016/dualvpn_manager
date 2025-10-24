@@ -177,6 +177,58 @@ func (oc *OpenVPNClient) modifyConfigFile(configPath, tempConfigPath string) err
 	return os.WriteFile(tempConfigPath, []byte(strings.Join(newLines, "\n")), 0644)
 }
 
+// killExistingOpenVPNProcesses 查找并终止现有的OpenVPN进程
+func (oc *OpenVPNClient) killExistingOpenVPNProcesses() error {
+	log.Println("检查并终止现有的OpenVPN进程")
+
+	// 在macOS和Linux上使用pgrep和pkill命令
+	var cmd *exec.Cmd
+	if runtime.GOOS == "darwin" || runtime.GOOS == "linux" {
+		// 查找OpenVPN进程
+		cmd = exec.Command("pgrep", "-f", "openvpn")
+		output, err := cmd.Output()
+
+		if err != nil {
+			// 没有找到进程，这是正常的
+			if _, ok := err.(*exec.ExitError); ok {
+				log.Println("未找到正在运行的OpenVPN进程")
+				return nil
+			}
+			// 其他错误
+			log.Printf("检查OpenVPN进程时出错: %v", err)
+			return err
+		}
+
+		// 解析进程ID
+		pids := strings.Fields(string(output))
+		if len(pids) == 0 {
+			log.Println("未找到正在运行的OpenVPN进程")
+			return nil
+		}
+
+		log.Printf("找到 %d 个OpenVPN进程，准备终止", len(pids))
+
+		// 终止所有找到的OpenVPN进程
+		for _, pid := range pids {
+			log.Printf("终止OpenVPN进程 PID: %s", pid)
+			killCmd := exec.Command("kill", "-TERM", pid)
+			if err := killCmd.Run(); err != nil {
+				log.Printf("终止进程 %s 失败: %v", pid, err)
+				// 尝试强制终止
+				forceKillCmd := exec.Command("kill", "-KILL", pid)
+				if err := forceKillCmd.Run(); err != nil {
+					log.Printf("强制终止进程 %s 失败: %v", pid, err)
+				}
+			}
+		}
+
+		// 等待进程终止
+		time.Sleep(2 * time.Second)
+	}
+
+	return nil
+}
+
 // Start 启动OpenVPN客户端
 func (oc *OpenVPNClient) Start() error {
 	oc.mutex.Lock()
@@ -186,6 +238,12 @@ func (oc *OpenVPNClient) Start() error {
 		return nil
 	}
 	oc.mutex.Unlock()
+
+	// 在启动新的OpenVPN进程之前，先终止任何现有的OpenVPN进程
+	if err := oc.killExistingOpenVPNProcesses(); err != nil {
+		log.Printf("终止现有OpenVPN进程时出错: %v", err)
+		// 继续尝试启动，因为可能没有现有进程
+	}
 
 	// 在其他平台上使用标准启动流程
 	return oc.startOpenVPNStandard()
