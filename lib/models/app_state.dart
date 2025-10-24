@@ -306,7 +306,8 @@ class AppState extends ChangeNotifier {
 
       // 首先获取当前Go代理核心中的所有代理源
       final goProxySources = await _vpnManager.getGoProxySources();
-      if (goProxySources != null && goProxySources.containsKey('proxy_sources')) {
+      if (goProxySources != null &&
+          goProxySources.containsKey('proxy_sources')) {
         final existingSources = goProxySources['proxy_sources'] as Map?;
         if (existingSources != null) {
           // 删除Go代理核心中所有现有的代理源
@@ -2757,6 +2758,9 @@ class AppState extends ChangeNotifier {
         notifyListeners();
         // 更新托盘图标
         _updateTrayIcon();
+
+        // 重新初始化代理源和路由规则
+        await _reinitializeGoProxyConfig();
       }
       return result;
     } catch (e) {
@@ -2765,7 +2769,38 @@ class AppState extends ChangeNotifier {
     }
   }
 
-  // 停止Go代理核心
+  // 重新初始化Go代理核心配置
+  Future<void> _reinitializeGoProxyConfig() async {
+    try {
+      Logger.info('重新初始化Go代理核心配置...');
+
+      // 添加延迟确保Go代理核心完全启动
+      await Future.delayed(const Duration(seconds: 3));
+
+      // 初始化所有必要的代理源
+      await _initProxySources();
+
+      // 确保相关的代理已经连接
+      await _ensureProxiesConnected();
+
+      // 添加延迟确保代理连接完成
+      await Future.delayed(const Duration(seconds: 2));
+
+      // 应用已选中的代理go代理核心
+      Logger.info('开始应用启动后已选中的代理...');
+      await _applySelectedProxiesAfterStartup();
+      Logger.info('应用启动后已选中的代理完成');
+
+      // 将路由规则发送到Go代理核心
+      _sendRoutingRulesToGoProxy();
+
+      Logger.info('Go代理核心配置重新初始化完成');
+    } catch (e, stackTrace) {
+      Logger.error('重新初始化Go代理核心配置时出错: $e，Stack trace: $stackTrace');
+    }
+  }
+
+ // 停止Go代理核心
   Future<void> stopGoProxy() async {
     try {
       await _vpnManager.stopGoProxy();
@@ -2778,7 +2813,7 @@ class AppState extends ChangeNotifier {
       rethrow;
     }
   }
-
+  
   // 手动应用启动后已选中的代理（用于调试）
   Future<void> applySelectedProxiesManually() async {
     Logger.info('=== 手动应用选中的代理 ===');

@@ -653,7 +653,7 @@ class GoProxyService {
       final client = HttpClient();
       final request = await client.deleteUrl(url);
       final response = await request.close();
-      
+
       if (response.statusCode == 204) {
         Logger.info('删除代理源成功: $sourceId');
         client.close();
