@@ -34,6 +34,15 @@ type OpenVPNClient struct {
 	cmd              *exec.Cmd // 用于外部OpenVPN进程
 	tunIP            string    // TUN设备的IP地址
 	helperConfigPath string    // 特权助手处理后的配置文件路径
+	// DNS缓存相关字段
+	dnsCache      map[string]dnsCacheEntry // DNS缓存
+	dnsCacheMutex sync.RWMutex             // DNS缓存的读写锁
+}
+
+// DNS缓存条目结构
+type dnsCacheEntry struct {
+	ip     net.IP    // 解析后的IP地址
+	expiry time.Time // 过期时间
 }
 
 // NewOpenVPNClient 创建新的OpenVPN客户端
@@ -422,6 +431,12 @@ func (oc *OpenVPNClient) Stop() error {
 
 	oc.running = false
 	oc.tunnelReady = false
+
+	// 清除DNS缓存
+	oc.dnsCacheMutex.Lock()
+	oc.dnsCache = make(map[string]dnsCacheEntry)
+	oc.dnsCacheMutex.Unlock()
+
 	log.Println("OpenVPN客户端已停止")
 	return nil
 }
@@ -454,26 +469,20 @@ func (oc *OpenVPNClient) ConnectToTarget(targetAddr string) (net.Conn, error) {
 		// 如果host是域名，需要解析DNS
 		log.Printf("需要解析域名: %s", host)
 
-		// 首先尝试从配置文件中获取DNS服务器地址
-		// 注意：DNS服务器地址通常在VPN内部，需要通过VPN连接访问
-		dnsServer, err := oc.getDNSServerFromConfig()
-		if err != nil {
-			log.Printf("从配置文件获取DNS服务器地址失败: %v", err)
-			// 回退到系统默认DNS解析
-			resolvedIPAddr, err := net.ResolveIPAddr("ip4", host)
-			if err != nil {
-				log.Printf("系统DNS解析域名失败: %v", err)
-				return nil, fmt.Errorf("failed to resolve domain %s: %v", host, err)
-			}
-			// 使用解析到的IP地址重新构造目标地址
-			targetAddr = net.JoinHostPort(resolvedIPAddr.IP.String(), port)
-			log.Printf("域名解析结果: %s -> %s", host, targetAddr)
+		// 首先检查DNS缓存
+		if cachedIP := oc.getCachedIP(host); cachedIP != nil {
+			// 使用缓存的IP地址重新构造目标地址
+			targetAddr = net.JoinHostPort(cachedIP.String(), port)
+			log.Printf("使用缓存的IP地址: %s -> %s", host, targetAddr)
 		} else {
-			// 使用OpenVPN配置中的DNS服务器进行解析
-			log.Printf("使用OpenVPN配置的DNS服务器解析域名: %s (DNS服务器: %s)", host, dnsServer)
-			resolvedIP, err := oc.resolveWithDNSServerOverVPN(host, dnsServer)
+			// 缓存中没有找到，进行DNS解析
+			log.Printf("缓存中未找到域名，进行DNS解析: %s", host)
+
+			// 首先尝试从配置文件中获取DNS服务器地址
+			// 注意：DNS服务器地址通常在VPN内部，需要通过VPN连接访问
+			dnsServer, err := oc.getDNSServerFromConfig()
 			if err != nil {
-				log.Printf("使用OpenVPN DNS服务器解析域名失败: %v", err)
+				log.Printf("从配置文件获取DNS服务器地址失败: %v", err)
 				// 回退到系统默认DNS解析
 				resolvedIPAddr, err := net.ResolveIPAddr("ip4", host)
 				if err != nil {
@@ -483,10 +492,32 @@ func (oc *OpenVPNClient) ConnectToTarget(targetAddr string) (net.Conn, error) {
 				// 使用解析到的IP地址重新构造目标地址
 				targetAddr = net.JoinHostPort(resolvedIPAddr.IP.String(), port)
 				log.Printf("域名解析结果: %s -> %s", host, targetAddr)
+				// 将解析结果存入缓存，有效期24小时
+				oc.setCachedIP(host, resolvedIPAddr.IP, 24*time.Hour)
 			} else {
-				// 使用解析到的IP地址重新构造目标地址
-				targetAddr = net.JoinHostPort(resolvedIP.String(), port)
-				log.Printf("域名解析结果: %s -> %s", host, targetAddr)
+				// 使用OpenVPN配置中的DNS服务器进行解析
+				log.Printf("使用OpenVPN配置的DNS服务器解析域名: %s (DNS服务器: %s)", host, dnsServer)
+				resolvedIP, err := oc.resolveWithDNSServerOverVPN(host, dnsServer)
+				if err != nil {
+					log.Printf("使用OpenVPN DNS服务器解析域名失败: %v", err)
+					// 回退到系统默认DNS解析
+					resolvedIPAddr, err := net.ResolveIPAddr("ip4", host)
+					if err != nil {
+						log.Printf("系统DNS解析域名失败: %v", err)
+						return nil, fmt.Errorf("failed to resolve domain %s: %v", host, err)
+					}
+					// 使用解析到的IP地址重新构造目标地址
+					targetAddr = net.JoinHostPort(resolvedIPAddr.IP.String(), port)
+					log.Printf("域名解析结果: %s -> %s", host, targetAddr)
+					// 将解析结果存入缓存，有效期24小时
+					oc.setCachedIP(host, resolvedIPAddr.IP, 24*time.Hour)
+				} else {
+					// 使用解析到的IP地址重新构造目标地址
+					targetAddr = net.JoinHostPort(resolvedIP.String(), port)
+					log.Printf("域名解析结果: %s -> %s", host, targetAddr)
+					// 将解析结果存入缓存，有效期24小时
+					oc.setCachedIP(host, resolvedIP, 24*time.Hour)
+				}
 			}
 		}
 	} else {
@@ -503,6 +534,45 @@ func (oc *OpenVPNClient) ConnectToTarget(targetAddr string) (net.Conn, error) {
 
 	log.Printf("成功通过OpenVPN隧道连接到目标: %s", targetAddr)
 	return conn, nil
+}
+
+// getCachedIP 从缓存中获取域名对应的IP地址
+func (oc *OpenVPNClient) getCachedIP(host string) net.IP {
+	oc.dnsCacheMutex.RLock()
+	defer oc.dnsCacheMutex.RUnlock()
+
+	if entry, exists := oc.dnsCache[host]; exists {
+		// 检查缓存是否过期
+		if time.Now().Before(entry.expiry) {
+			return entry.ip
+		}
+		// 缓存过期，删除该条目
+		oc.dnsCacheMutex.RUnlock()
+		oc.dnsCacheMutex.Lock()
+		delete(oc.dnsCache, host)
+		oc.dnsCacheMutex.Unlock()
+		oc.dnsCacheMutex.RLock()
+	}
+
+	return nil
+}
+
+// setCachedIP 将域名和IP地址存入缓存
+func (oc *OpenVPNClient) setCachedIP(host string, ip net.IP, ttl time.Duration) {
+	oc.dnsCacheMutex.Lock()
+	defer oc.dnsCacheMutex.Unlock()
+
+	// 初始化缓存map（如果尚未初始化）
+	if oc.dnsCache == nil {
+		oc.dnsCache = make(map[string]dnsCacheEntry)
+	}
+
+	// 存储条目，设置过期时间
+	oc.dnsCache[host] = dnsCacheEntry{
+		ip:     ip,
+		expiry: time.Now().Add(ttl),
+	}
+	log.Printf("将域名解析结果存入缓存: %s -> %s (有效期: %v)", host, ip.String(), ttl)
 }
 
 // getDNSServerFromConfig 从OpenVPN配置文件中获取DNS服务器地址
