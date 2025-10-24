@@ -304,6 +304,23 @@ class AppState extends ChangeNotifier {
     try {
       Logger.info('初始化代理源...');
 
+      // 首先获取当前Go代理核心中的所有代理源
+      final goProxySources = await _vpnManager.getGoProxySources();
+      if (goProxySources != null && goProxySources.containsKey('proxy_sources')) {
+        final existingSources = goProxySources['proxy_sources'] as Map?;
+        if (existingSources != null) {
+          // 删除Go代理核心中所有现有的代理源
+          for (final sourceId in existingSources.keys) {
+            Logger.info('删除Go代理核心中的旧代理源: $sourceId');
+            try {
+              await _vpnManager.removeProxySource(sourceId.toString());
+            } catch (e) {
+              Logger.warn('删除代理源 $sourceId 时出错: $e');
+            }
+          }
+        }
+      }
+
       // 初始化常用的代理源
       final List<VPNConfig> proxySources = await ConfigManager.loadConfigs();
 

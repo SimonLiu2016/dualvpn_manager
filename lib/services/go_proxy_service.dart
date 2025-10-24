@@ -624,4 +624,48 @@ class GoProxyService {
       return false;
     }
   }
+
+  /// 获取所有代理源
+  Future<Map<String, dynamic>?> getProxySources() async {
+    try {
+      final url = Uri.parse('http://127.0.0.1:6162/proxy-sources');
+      final response = await HttpClient().getUrl(url);
+      final httpResponse = await response.close();
+      final responseBody = await utf8.decodeStream(httpResponse);
+
+      if (httpResponse.statusCode == 200) {
+        final proxySources = jsonDecode(responseBody) as Map<String, dynamic>;
+        return proxySources;
+      } else {
+        Logger.error('获取代理源列表失败: ${httpResponse.statusCode}, $responseBody');
+        return null;
+      }
+    } catch (e, stackTrace) {
+      Logger.error('获取代理源列表时出错: $e\nStack trace: $stackTrace');
+      return null;
+    }
+  }
+
+  /// 删除代理源
+  Future<bool> removeProxySource(String sourceId) async {
+    try {
+      final url = Uri.parse('http://127.0.0.1:6162/proxy-sources/$sourceId');
+      final client = HttpClient();
+      final request = await client.deleteUrl(url);
+      final response = await request.close();
+      
+      if (response.statusCode == 204) {
+        Logger.info('删除代理源成功: $sourceId');
+        client.close();
+        return true;
+      } else {
+        Logger.error('删除代理源失败: ${response.statusCode}');
+        client.close();
+        return false;
+      }
+    } catch (e, stackTrace) {
+      Logger.error('删除代理源时出错: $e\nStack trace: $stackTrace');
+      return false;
+    }
+  }
 }
