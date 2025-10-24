@@ -477,6 +477,7 @@ func (oc *OpenVPNClient) Stop() error {
 
 	// 停止OpenVPN进程
 	if oc.cmd != nil && oc.cmd.Process != nil {
+		log.Printf("发送SIGTERM信号给OpenVPN进程 PID: %d", oc.cmd.Process.Pid)
 		// 优雅地停止OpenVPN进程
 		oc.cmd.Process.Signal(syscall.SIGTERM)
 
@@ -489,9 +490,15 @@ func (oc *OpenVPNClient) Stop() error {
 		select {
 		case <-time.After(5 * time.Second):
 			// 超时，强制杀死进程
+			log.Printf("OpenVPN进程未在5秒内正常退出，强制终止 PID: %d", oc.cmd.Process.Pid)
 			oc.cmd.Process.Kill()
-		case <-done:
+		case err := <-done:
 			// 进程正常结束
+			if err != nil {
+				log.Printf("OpenVPN进程退出时出错: %v", err)
+			} else {
+				log.Printf("OpenVPN进程正常退出 PID: %d", oc.cmd.Process.Pid)
+			}
 		}
 	}
 

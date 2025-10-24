@@ -229,8 +229,17 @@ func (pc *ProxyCore) Stop() {
 		pc.tunDevice.Stop()
 	}
 
-	// 停止OpenVPN代理（如果正在运行）
-	// 注意：现在OpenVPN实现在协议内部处理，不需要在这里单独停止
+	// 停止所有协议，包括OpenVPN协议
+	if pc.protocolManager != nil {
+		// 获取所有协议并停止它们
+		protocols := pc.protocolManager.GetAllProtocols()
+		for name, protocol := range protocols {
+			log.Printf("停止协议: %s", name)
+			if err := protocol.Close(); err != nil {
+				log.Printf("停止协议 %s 时出错: %v", name, err)
+			}
+		}
+	}
 
 	pc.running = false
 	log.Println("Proxy core stopped")
