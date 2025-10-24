@@ -975,6 +975,28 @@ class VPNManager {
     }
   }
 
+  // 获取所有代理源
+  Future<Map<String, dynamic>?> getGoProxySources() async {
+    try {
+      final sources = await _goProxyService.getProxySources();
+      return sources;
+    } catch (e) {
+      Logger.error('获取Go代理核心代理源列表失败: $e');
+      return null;
+    }
+  }
+
+  // 删除代理源
+  Future<bool> removeProxySource(String sourceId) async {
+    try {
+      final result = await _goProxyService.removeProxySource(sourceId);
+      return result;
+    } catch (e) {
+      Logger.error('删除代理源失败: $e');
+      return false;
+    }
+  }
+
   // 获取当前配置
   VPNConfig? get currentConfig => _currentConfig;
 }

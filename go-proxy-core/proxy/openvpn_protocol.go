@@ -123,9 +123,16 @@ func (op *OpenVPNProtocol) Connect(targetAddr string) (net.Conn, error) {
 
 // Close 关闭连接
 func (op *OpenVPNProtocol) Close() error {
+	log.Printf("关闭OpenVPN协议: %s", op.Name())
 	// 关闭OpenVPN客户端
 	if op.client != nil {
-		return op.client.Stop()
+		log.Printf("停止OpenVPN客户端")
+		if err := op.client.Stop(); err != nil {
+			log.Printf("停止OpenVPN客户端时出错: %v", err)
+			return err
+		}
+		log.Printf("OpenVPN客户端已停止")
+		return nil
 	}
 	return nil
 }
