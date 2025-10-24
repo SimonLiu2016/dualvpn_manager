@@ -15,10 +15,9 @@ import (
 	"sync"
 	"syscall"
 	"time"
-)
 
-//go:embed openvpn_bin/openvpn
-var openvpnBinary []byte
+	"github.com/miekg/dns"
+)
 
 // OpenVPNClient 内部OpenVPN客户端实现
 type OpenVPNClient struct {
@@ -79,102 +78,6 @@ func (oc *OpenVPNClient) IsRunning() bool {
 	oc.mutex.Lock()
 	defer oc.mutex.Unlock()
 	return oc.running
-}
-
-// copyRequiredFiles 解析配置文件并复制所需的证书文件
-func (oc *OpenVPNClient) copyRequiredFiles(configPath, tempDir string) error {
-	file, err := os.Open(configPath)
-	if err != nil {
-		return err
-	}
-	defer file.Close()
-
-	// 获取配置文件所在目录
-	configDir := filepath.Dir(configPath)
-
-	scanner := bufio.NewScanner(file)
-	for scanner.Scan() {
-		line := strings.TrimSpace(scanner.Text())
-		// 忽略注释行
-		if strings.HasPrefix(line, "#") || strings.HasPrefix(line, ";") || line == "" {
-			continue
-		}
-
-		// 解析需要的文件指令
-		for _, directive := range []string{"ca", "cert", "key", "dh", "tls-auth", "pkcs12"} {
-			if strings.HasPrefix(line, directive+" ") {
-				parts := strings.Split(line, " ")
-				if len(parts) >= 2 {
-					filePath := parts[1]
-					// 如果是相对路径，则相对于配置文件目录
-					if !filepath.IsAbs(filePath) {
-						filePath = filepath.Join(configDir, filePath)
-					}
-					// 复制文件到临时目录
-					destPath := filepath.Join(tempDir, filepath.Base(filePath))
-					if err := copyFile(filePath, destPath); err != nil {
-						log.Printf("警告: 复制文件 %s 失败: %v", filePath, err)
-					} else {
-						log.Printf("成功复制文件: %s -> %s", filePath, destPath)
-					}
-				}
-				break
-			}
-		}
-	}
-
-	return scanner.Err()
-}
-
-// modifyConfigFile 修改配置文件，添加一些必要的选项
-func (oc *OpenVPNClient) modifyConfigFile(configPath, tempConfigPath string) error {
-	log.Printf("4-当前用户 UID: %d", os.Getuid())
-	log.Printf("4-当前工作目录: %s", func() string { p, _ := os.Getwd(); return p }())
-	log.Printf("4-操作的文件路径: %s", configPath)
-	// 读取原始配置文件
-	content, err := os.ReadFile(configPath)
-	if err != nil {
-		log.Printf("4-错误详情: %v", err)
-		return err
-	}
-
-	// 将内容转换为字符串并按行分割
-	lines := strings.Split(string(content), "\n")
-
-	// 创建新的配置内容
-	var newLines []string
-	existingOptions := make(map[string]bool)
-
-	// 检查已存在的选项
-	for _, line := range lines {
-		trimmed := strings.TrimSpace(line)
-		if trimmed != "" && !strings.HasPrefix(trimmed, "#") && !strings.HasPrefix(trimmed, ";") {
-			parts := strings.Fields(trimmed)
-			if len(parts) > 0 {
-				existingOptions[parts[0]] = true
-			}
-		}
-		newLines = append(newLines, line)
-	}
-
-	// 添加必要的选项来解决AEAD解密错误
-	if !existingOptions["mute-replay-warnings"] {
-		newLines = append(newLines, "mute-replay-warnings")
-		log.Printf("添加配置选项: mute-replay-warnings")
-	}
-
-	if !existingOptions["reneg-sec"] {
-		newLines = append(newLines, "reneg-sec 0")
-		log.Printf("添加配置选项: reneg-sec 0")
-	}
-
-	if !existingOptions["auth-nocache"] {
-		newLines = append(newLines, "auth-nocache")
-		log.Printf("添加配置选项: auth-nocache")
-	}
-
-	// 写入修改后的配置文件
-	return os.WriteFile(tempConfigPath, []byte(strings.Join(newLines, "\n")), 0644)
 }
 
 // killExistingOpenVPNProcesses 查找并终止现有的OpenVPN进程
@@ -249,43 +152,6 @@ func (oc *OpenVPNClient) Start() error {
 	return oc.startOpenVPNStandard()
 }
 
-// copyFile 复制文件
-func copyFile(src, dst string) error {
-	// 确保目标目录存在
-	dstDir := filepath.Dir(dst)
-	if err := os.MkdirAll(dstDir, 0755); err != nil {
-		return fmt.Errorf("创建目标目录失败: %v", err)
-	}
-
-	// 打开源文件
-	srcFile, err := os.Open(src)
-	if err != nil {
-		return fmt.Errorf("打开源文件失败: %v", err)
-	}
-	defer srcFile.Close()
-
-	// 创建目标文件
-	dstFile, err := os.Create(dst)
-	if err != nil {
-		return fmt.Errorf("创建目标文件失败: %v", err)
-	}
-	defer dstFile.Close()
-
-	// 复制文件内容
-	_, err = io.Copy(dstFile, srcFile)
-	if err != nil {
-		return fmt.Errorf("复制文件内容失败: %v", err)
-	}
-
-	// 同步文件
-	err = dstFile.Sync()
-	if err != nil {
-		return fmt.Errorf("同步文件失败: %v", err)
-	}
-
-	return nil
-}
-
 // getOpenVPNBinaryPath 获取OpenVPN二进制文件路径
 func (oc *OpenVPNClient) getOpenVPNBinaryPath() (string, error) {
 	// 在新的实现中，我们直接使用应用包中的OpenVPN二进制文件
@@ -335,12 +201,6 @@ func (oc *OpenVPNClient) getOpenVPNBinaryPath() (string, error) {
 // GetOpenVPNBinaryPath 公共方法获取OpenVPN二进制文件路径
 func (oc *OpenVPNClient) GetOpenVPNBinaryPath() (string, error) {
 	return oc.getOpenVPNBinaryPath()
-}
-
-// createTempConfig 创建临时配置文件
-func (oc *OpenVPNClient) createTempConfig() (string, error) {
-	// 此方法已弃用，因为我们直接使用原始配置文件
-	return "", fmt.Errorf("此方法已弃用")
 }
 
 // monitorOpenVPNOutput 监听OpenVPN输出
@@ -582,6 +442,57 @@ func (oc *OpenVPNClient) ConnectToTarget(targetAddr string) (net.Conn, error) {
 		return nil, fmt.Errorf("OpenVPN隧道未建立")
 	}
 
+	// 解析目标地址
+	host, port, err := net.SplitHostPort(targetAddr)
+	if err != nil {
+		log.Printf("解析目标地址失败: %v", err)
+		return nil, fmt.Errorf("failed to parse target address: %v", err)
+	}
+
+	// 检查host是否是IP地址
+	if net.ParseIP(host) == nil {
+		// 如果host是域名，需要解析DNS
+		log.Printf("需要解析域名: %s", host)
+
+		// 首先尝试从配置文件中获取DNS服务器地址
+		// 注意：DNS服务器地址通常在VPN内部，需要通过VPN连接访问
+		dnsServer, err := oc.getDNSServerFromConfig()
+		if err != nil {
+			log.Printf("从配置文件获取DNS服务器地址失败: %v", err)
+			// 回退到系统默认DNS解析
+			resolvedIPAddr, err := net.ResolveIPAddr("ip4", host)
+			if err != nil {
+				log.Printf("系统DNS解析域名失败: %v", err)
+				return nil, fmt.Errorf("failed to resolve domain %s: %v", host, err)
+			}
+			// 使用解析到的IP地址重新构造目标地址
+			targetAddr = net.JoinHostPort(resolvedIPAddr.IP.String(), port)
+			log.Printf("域名解析结果: %s -> %s", host, targetAddr)
+		} else {
+			// 使用OpenVPN配置中的DNS服务器进行解析
+			log.Printf("使用OpenVPN配置的DNS服务器解析域名: %s (DNS服务器: %s)", host, dnsServer)
+			resolvedIP, err := oc.resolveWithDNSServerOverVPN(host, dnsServer)
+			if err != nil {
+				log.Printf("使用OpenVPN DNS服务器解析域名失败: %v", err)
+				// 回退到系统默认DNS解析
+				resolvedIPAddr, err := net.ResolveIPAddr("ip4", host)
+				if err != nil {
+					log.Printf("系统DNS解析域名失败: %v", err)
+					return nil, fmt.Errorf("failed to resolve domain %s: %v", host, err)
+				}
+				// 使用解析到的IP地址重新构造目标地址
+				targetAddr = net.JoinHostPort(resolvedIPAddr.IP.String(), port)
+				log.Printf("域名解析结果: %s -> %s", host, targetAddr)
+			} else {
+				// 使用解析到的IP地址重新构造目标地址
+				targetAddr = net.JoinHostPort(resolvedIP.String(), port)
+				log.Printf("域名解析结果: %s -> %s", host, targetAddr)
+			}
+		}
+	} else {
+		log.Printf("目标地址已经是IP地址: %s", targetAddr)
+	}
+
 	// 直接通过系统网络栈连接到目标地址（流量会自动通过TUN设备传输）
 	log.Printf("通过OpenVPN隧道连接到目标: %s", targetAddr)
 	conn, err := net.DialTimeout("tcp", targetAddr, 30*time.Second)
@@ -592,6 +503,85 @@ func (oc *OpenVPNClient) ConnectToTarget(targetAddr string) (net.Conn, error) {
 
 	log.Printf("成功通过OpenVPN隧道连接到目标: %s", targetAddr)
 	return conn, nil
+}
+
+// getDNSServerFromConfig 从OpenVPN配置文件中获取DNS服务器地址
+func (oc *OpenVPNClient) getDNSServerFromConfig() (string, error) {
+	// 确定要使用的配置文件路径
+	var configPath string
+	if oc.helperConfigPath != "" {
+		configPath = oc.helperConfigPath
+	} else {
+		configPath = oc.configPath
+	}
+
+	// 如果没有配置文件路径，返回错误
+	if configPath == "" {
+		return "", fmt.Errorf("没有可用的配置文件路径")
+	}
+
+	// 读取配置文件
+	content, err := os.ReadFile(configPath)
+	if err != nil {
+		return "", fmt.Errorf("读取配置文件失败: %v", err)
+	}
+
+	// 解析配置文件内容
+	lines := strings.Split(string(content), "\n")
+	for _, line := range lines {
+		trimmed := strings.TrimSpace(line)
+		// 忽略注释行
+		if trimmed != "" && !strings.HasPrefix(trimmed, "#") && !strings.HasPrefix(trimmed, ";") {
+			// 查找dhcp-option DNS指令
+			if strings.HasPrefix(trimmed, "dhcp-option DNS ") {
+				parts := strings.Fields(trimmed)
+				if len(parts) >= 3 {
+					return parts[2], nil
+				}
+			}
+		}
+	}
+
+	return "", fmt.Errorf("在配置文件中未找到DNS服务器地址")
+}
+
+// resolveWithDNSServerOverVPN 通过已建立的OpenVPN连接解析域名
+func (oc *OpenVPNClient) resolveWithDNSServerOverVPN(domain, dnsServer string) (net.IP, error) {
+	log.Printf("通过OpenVPN连接解析域名: %s (DNS服务器: %s)", domain, dnsServer)
+
+	// 创建到DNS服务器的连接（通过OpenVPN隧道）
+	conn, err := net.DialTimeout("udp", net.JoinHostPort(dnsServer, "53"), 5*time.Second)
+	if err != nil {
+		return nil, fmt.Errorf("无法连接到DNS服务器 %s: %v", dnsServer, err)
+	}
+	defer conn.Close()
+
+	// 创建DNS查询消息
+	m := new(dns.Msg)
+	m.SetQuestion(dns.Fqdn(domain), dns.TypeA)
+
+	// 发送DNS查询
+	dnsConn := &dns.Conn{Conn: conn}
+	err = dnsConn.WriteMsg(m)
+	if err != nil {
+		return nil, fmt.Errorf("向DNS服务器 %s 发送查询失败: %v", dnsServer, err)
+	}
+
+	// 读取DNS响应
+	response, err := dnsConn.ReadMsg()
+	if err != nil {
+		return nil, fmt.Errorf("从DNS服务器 %s 读取响应失败: %v", dnsServer, err)
+	}
+
+	// 解析DNS响应
+	for _, answer := range response.Answer {
+		if a, ok := answer.(*dns.A); ok {
+			log.Printf("成功解析域名 %s -> %s (使用DNS服务器 %s)", domain, a.A.String(), dnsServer)
+			return a.A, nil
+		}
+	}
+
+	return nil, fmt.Errorf("DNS服务器 %s 未能解析域名 %s", dnsServer, domain)
 }
 
 // getProtocolFromConfig 从配置文件中解析协议类型
