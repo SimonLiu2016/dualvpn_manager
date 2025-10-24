@@ -479,9 +479,9 @@ func (as *APIServer) handleStats(w http.ResponseWriter, r *http.Request) {
 		// 获取所有代理源的当前代理的统计信息
 		currentProxies := as.proxyCore.GetAllCurrentProxies()
 
-		// 计算总上传和下载速度
-		var totalUpload uint64 = 0
-		var totalDownload uint64 = 0
+		// 计算总的上传和下载速率（通过累加各代理源的速率）
+		var totalUploadRate uint64 = 0
+		var totalDownloadRate uint64 = 0
 
 		// 构建响应数据
 		response := make(map[string]interface{})
@@ -494,38 +494,56 @@ func (as *APIServer) handleStats(w http.ResponseWriter, r *http.Request) {
 		for sourceId := range allProxySources {
 			// 获取该代理源的当前代理
 			if currentProxy, exists := currentProxies[sourceId]; exists && currentProxy.Stats != nil {
+				// 获取该代理源的统计收集器以获取实时速率
+				var uploadRate, downloadRate uint64
+				if collector := as.proxyCore.GetProxySourceStatsCollector(sourceId); collector != nil {
+					uploadRate = collector.GetUploadRate()
+					downloadRate = collector.GetDownloadRate()
+				}
+
+				// 累加到总速率
+				totalUploadRate += uploadRate
+				totalDownloadRate += downloadRate
+
 				proxyStats := map[string]interface{}{
-					"source_id":  sourceId,
-					"proxy_id":   currentProxy.ID,
-					"proxy_name": currentProxy.Name,
-					"upload":     currentProxy.Stats.Upload,
-					"download":   currentProxy.Stats.Download,
+					"source_id":     sourceId,
+					"proxy_id":      currentProxy.ID,
+					"proxy_name":    currentProxy.Name,
+					"upload":        currentProxy.Stats.Upload,   // 累计上传流量
+					"download":      currentProxy.Stats.Download, // 累计下载流量
+					"upload_rate":   uploadRate,                  // 实时上传速率（字节/秒）
+					"download_rate": downloadRate,                // 实时下载速率（字节/秒）
 				}
 				statsData[sourceId] = proxyStats
-
-				// 累加总流量
-				totalUpload += currentProxy.Stats.Upload
-				totalDownload += currentProxy.Stats.Download
 			} else if sourceId == "DIRECT" {
 				// 处理直连情况
-				proxyStats := map[string]interface{}{
-					"source_id":  "DIRECT",
-					"proxy_id":   "DIRECT",
-					"proxy_name": "Direct Connection",
-					"upload":     uint64(0),
-					"download":   uint64(0),
+				var uploadRate, downloadRate uint64
+				if collector := as.proxyCore.GetProxySourceStatsCollector("DIRECT"); collector != nil {
+					uploadRate = collector.GetUploadRate()
+					downloadRate = collector.GetDownloadRate()
 				}
 
-				// 如果有直连的统计信息，需要从某个地方获取
-				// 这里暂时设置为0，后续可以考虑实现直连统计
+				// 累加到总速率
+				totalUploadRate += uploadRate
+				totalDownloadRate += downloadRate
+
+				proxyStats := map[string]interface{}{
+					"source_id":     "DIRECT",
+					"proxy_id":      "DIRECT",
+					"proxy_name":    "Direct Connection",
+					"upload":        uint64(0),
+					"download":      uint64(0),
+					"upload_rate":   uploadRate,
+					"download_rate": downloadRate,
+				}
 				statsData["DIRECT"] = proxyStats
 			}
 		}
 
-		// 添加总的上传和下载速度字段，以满足Flutter端的期望格式
+		// 添加总的上传和下载速率字段，以满足Flutter端的期望格式
 		response["stats"] = statsData
-		response["upload_speed"] = formatSpeed(totalUpload)             // 格式化为字符串，如 "↑ 10 KB/s"
-		response["download_speed"] = formatDownloadSpeed(totalDownload) // 格式化为字符串，如 "↓ 20 KB/s"
+		response["upload_speed"] = formatSpeed(totalUploadRate)             // 格式化为字符串，如 "↑ 10 KB/s"
+		response["download_speed"] = formatDownloadSpeed(totalDownloadRate) // 格式化为字符串，如 "↓ 20 KB/s"
 
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(response)

@@ -5,7 +5,9 @@ import (
 	"io"
 	"log"
 	"net"
+	"sync"
 	"sync/atomic"
+	"time"
 
 	"github.com/dualvpn/go-proxy-core/routing"
 )
@@ -22,6 +24,13 @@ type SOCKS5Server struct {
 	totalUpload   uint64
 	totalDownload uint64
 	connections   int64
+	// 实时速率计算
+	lastUpload   uint64
+	lastDownload uint64
+	uploadRate   uint64
+	downloadRate uint64
+	lastUpdate   time.Time
+	rateMutex    sync.RWMutex
 }
 
 // NewSOCKS5Server 创建新的SOCKS5服务器
@@ -46,6 +55,9 @@ func (ss *SOCKS5Server) Start() error {
 
 	ss.listener = listener
 	ss.running = true
+
+	// 启动速率更新协程
+	go ss.updateRates()
 
 	log.Printf("SOCKS5 proxy server listening on %s", addr)
 	log.Printf("SOCKS5服务器配置: port=%d", ss.port)
@@ -78,6 +90,60 @@ func (ss *SOCKS5Server) GetStats() (upload, download uint64, connections int64) 
 	return atomic.LoadUint64(&ss.totalUpload),
 		atomic.LoadUint64(&ss.totalDownload),
 		atomic.LoadInt64(&ss.connections)
+}
+
+// GetDetailedStats 获取SOCKS5服务器详细统计信息（包括实时速率）
+func (ss *SOCKS5Server) GetDetailedStats() (upload, download, uploadRate, downloadRate uint64) {
+	upload = atomic.LoadUint64(&ss.totalUpload)
+	download = atomic.LoadUint64(&ss.totalDownload)
+
+	// 获取实时速率
+	ss.rateMutex.RLock()
+	uploadRate = ss.uploadRate
+	downloadRate = ss.downloadRate
+	ss.rateMutex.RUnlock()
+
+	return
+}
+
+// updateRates 定期更新速率计算
+func (ss *SOCKS5Server) updateRates() {
+	ticker := time.NewTicker(1 * time.Second)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ticker.C:
+			currentUpload := atomic.LoadUint64(&ss.totalUpload)
+			currentDownload := atomic.LoadUint64(&ss.totalDownload)
+
+			// 原子地获取并更新lastUpload和lastDownload
+			oldLastUpload := atomic.LoadUint64(&ss.lastUpload)
+			oldLastDownload := atomic.LoadUint64(&ss.lastDownload)
+
+			// 尝试原子更新lastUpload和lastDownload
+			if !atomic.CompareAndSwapUint64(&ss.lastUpload, oldLastUpload, currentUpload) {
+				// 如果更新失败，重新获取当前值
+				oldLastUpload = atomic.LoadUint64(&ss.lastUpload)
+			}
+
+			if !atomic.CompareAndSwapUint64(&ss.lastDownload, oldLastDownload, currentDownload) {
+				// 如果更新失败，重新获取当前值
+				oldLastDownload = atomic.LoadUint64(&ss.lastDownload)
+			}
+
+			// 计算每秒速率
+			uploadDiff := currentUpload - oldLastUpload
+			downloadDiff := currentDownload - oldLastDownload
+
+			ss.rateMutex.Lock()
+			ss.uploadRate = uploadDiff
+			ss.downloadRate = downloadDiff
+			ss.rateMutex.Unlock()
+
+			ss.lastUpdate = time.Now()
+		}
+	}
 }
 
 // handleConnection 处理连接
@@ -189,7 +255,7 @@ func (ss *SOCKS5Server) handleProxyConnection(clientConn net.Conn, targetAddr st
 	clientConn.Write([]byte{0x05, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00})
 
 	// 创建按代理源维度的统计收集器
-	proxySourceStatsCollector := NewProxySourceStatsCollector(proxySource, ss.proxyCore)
+	proxySourceStatsCollector := ss.proxyCore.CreateOrGetProxySourceStatsCollector(proxySource)
 
 	// 创建自定义的流量统计连接，正确区分上传和下载
 	// 客户端连接：isClientSide=true
@@ -239,7 +305,7 @@ func (ss *SOCKS5Server) handleDirectConnection(clientConn net.Conn, targetAddr s
 	clientConn.Write([]byte{0x05, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00})
 
 	// 创建按代理源维度的统计收集器（直连使用"DIRECT"作为代理源ID）
-	proxySourceStatsCollector := NewProxySourceStatsCollector("DIRECT", ss.proxyCore)
+	proxySourceStatsCollector := ss.proxyCore.CreateOrGetProxySourceStatsCollector("DIRECT")
 
 	// 创建自定义的流量统计连接，正确区分上传和下载
 	// 客户端连接：isClientSide=true
