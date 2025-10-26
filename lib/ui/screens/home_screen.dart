@@ -1,7 +1,6 @@
 import 'dart:developer' as developer;
 import 'dart:io' show Platform;
 
-import 'package:dualvpn_manager/debug_screen.dart';
 import 'package:dualvpn_manager/models/app_state.dart';
 import 'package:dualvpn_manager/models/vpn_config.dart';
 import 'package:dualvpn_manager/ui/screens/config_screen.dart';
@@ -122,7 +121,6 @@ class _HomeScreenState extends State<HomeScreen> with WindowListener {
             BottomNavigationBarItem(icon: Icon(Icons.list), label: '代理源'),
             BottomNavigationBarItem(icon: Icon(Icons.link), label: '代理列表'),
             BottomNavigationBarItem(icon: Icon(Icons.route), label: '路由'),
-            BottomNavigationBarItem(icon: Icon(Icons.bug_report), label: '调试'),
           ],
         ),
       ),
@@ -139,8 +137,6 @@ class _HomeScreenState extends State<HomeScreen> with WindowListener {
         return const ProxyListScreen(); // 添加代理列表屏幕
       case 3:
         return const RoutingScreen(); // 使用完整的路由配置界面
-      case 4:
-        return const DebugScreen(); // 添加调试页面
       default:
         return const HomeContent();
     }
