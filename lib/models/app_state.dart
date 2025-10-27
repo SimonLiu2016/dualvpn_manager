@@ -2739,6 +2739,29 @@ class AppState extends ChangeNotifier {
             _goProxyUploadSpeed = uploadSpeed;
             _goProxyDownloadSpeed = downloadSpeed;
 
+            // 更新各个代理源的速率信息
+            final statsData = stats['stats'] as Map<String, dynamic>?;
+            if (statsData != null) {
+              // 遍历所有代理源的统计信息
+              statsData.forEach((sourceId, proxyStatsObj) {
+                if (proxyStatsObj is Map<String, dynamic>) {
+                  final proxyStats = proxyStatsObj;
+                  final uploadRate = proxyStats['upload_rate'] as int? ?? 0;
+                  final downloadRate = proxyStats['download_rate'] as int? ?? 0;
+
+                  // 格式化速率显示
+                  final formattedUploadRate = _formatRate(uploadRate);
+                  final formattedDownloadRate = _formatRate(downloadRate);
+                  final rateInfo =
+                      '$formattedUploadRate $formattedDownloadRate';
+
+                  // 根据sourceId更新对应的代理源速率信息
+                  // 注意：这里的sourceId需要与配置ID匹配
+                  _updateProxySourceRateInfo(sourceId, rateInfo);
+                }
+              });
+            }
+
             // 通知UI更新
             notifyListeners();
           }
@@ -2747,6 +2770,71 @@ class AppState extends ChangeNotifier {
         }
       }
     });
+  }
+
+  // 格式化速率显示
+  String _formatRate(int bytesPerSecond) {
+    if (bytesPerSecond < 1024) {
+      return '${bytesPerSecond > 0 ? '↑' : ''} ${bytesPerSecond} B/s';
+    } else if (bytesPerSecond < 1024 * 1024) {
+      return '${bytesPerSecond > 0 ? '↑' : ''} ${(bytesPerSecond / 1024).toStringAsFixed(2)} KB/s';
+    } else {
+      return '${bytesPerSecond > 0 ? '↑' : ''} ${(bytesPerSecond / (1024 * 1024)).toStringAsFixed(2)} MB/s';
+    }
+  }
+
+  // 更新代理源速率信息
+  void _updateProxySourceRateInfo(String sourceId, String rateInfo) {
+    // 根据sourceId确定对应的代理类型并更新速率信息
+    // 这里需要根据实际的配置ID与代理类型映射关系来更新
+    // 由于我们无法直接从sourceId确定代理类型，我们需要维护一个映射关系
+    // 或者在设置代理源时保存这个映射关系
+
+    // 临时实现：根据当前选中的配置来更新速率信息
+    // 在实际应用中，应该维护一个sourceId到配置类型的映射
+    final configs = ConfigManager.loadConfigsSync(); // 同步方法获取配置
+    if (configs != null) {
+      final config = configs.firstWhere(
+        (c) => c.id == sourceId,
+        orElse: () => configs.firstWhere(
+          (c) => c.id == _selectedConfig,
+          orElse: () => VPNConfig(
+            id: '',
+            name: '',
+            type: VPNType.openVPN,
+            configPath: '',
+            settings: {},
+            isActive: false,
+          ),
+        ),
+      );
+
+      if (config.id == sourceId || _selectedConfig == sourceId) {
+        switch (config.type) {
+          case VPNType.openVPN:
+            _openVPNRateInfo = rateInfo;
+            break;
+          case VPNType.clash:
+            _clashRateInfo = rateInfo;
+            break;
+          case VPNType.shadowsocks:
+            _shadowsocksRateInfo = rateInfo;
+            break;
+          case VPNType.v2ray:
+            _v2rayRateInfo = rateInfo;
+            break;
+          case VPNType.httpProxy:
+            _httpProxyRateInfo = rateInfo;
+            break;
+          case VPNType.socks5:
+            _socks5ProxyRateInfo = rateInfo;
+            break;
+          default:
+            // 默认不处理
+            break;
+        }
+      }
+    }
   }
 
   // 启动Go代理核心
@@ -2800,7 +2888,7 @@ class AppState extends ChangeNotifier {
     }
   }
 
- // 停止Go代理核心
+  // 停止Go代理核心
   Future<void> stopGoProxy() async {
     try {
       await _vpnManager.stopGoProxy();
@@ -2813,7 +2901,7 @@ class AppState extends ChangeNotifier {
       rethrow;
     }
   }
-  
+
   // 手动应用启动后已选中的代理（用于调试）
   Future<void> applySelectedProxiesManually() async {
     Logger.info('=== 手动应用选中的代理 ===');

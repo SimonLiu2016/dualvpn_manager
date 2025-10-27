@@ -37,7 +37,7 @@ echo "步骤3: 构建Flutter应用..."
 cd "${WORKSPACE_DIR}"
 flutter build macos --release
 
-if [ ! -f "${WORKSPACE_DIR}/build/macos/Build/Products/Release/dualvpn_manager.app/Contents/MacOS/dualvpn_manager" ]; then
+if [ ! -f "${WORKSPACE_DIR}/build/macos/Build/Products/Release/Dualvpn Manager.app/Contents/MacOS/Dualvpn Manager" ]; then
     echo "错误: Flutter应用构建失败"
     exit 1
 fi
@@ -46,7 +46,7 @@ echo "Flutter应用构建成功"
 
 # 4. 复制Go代理核心到应用包中
 echo "步骤4: 复制Go代理核心到应用包中..."
-APP_CONTENTS_DIR="${WORKSPACE_DIR}/build/macos/Build/Products/Release/dualvpn_manager.app/Contents"
+APP_CONTENTS_DIR="${WORKSPACE_DIR}/build/macos/Build/Products/Release/Dualvpn Manager.app/Contents"
 mkdir -p "${APP_CONTENTS_DIR}/Resources/bin"
 cp "${WORKSPACE_DIR}/go-proxy-core/bin/go-proxy-core" "${APP_CONTENTS_DIR}/Resources/bin/"
 cp "${WORKSPACE_DIR}/go-proxy-core/config.yaml" "${APP_CONTENTS_DIR}/Resources/bin/"
@@ -77,35 +77,35 @@ fi
 
 # 创建临时目录并复制应用
 mkdir -p "${DMG_DIR}"
-cp -R "${WORKSPACE_DIR}/build/macos/Build/Products/Release/dualvpn_manager.app" "${DMG_DIR}/"
+cp -R "${WORKSPACE_DIR}/build/macos/Build/Products/Release/Dualvpn Manager.app" "${DMG_DIR}/"
 
 # 创建Applications链接
 ln -s /Applications "${DMG_DIR}/Applications"
 
 # 创建DMG文件
 cd /tmp
-rm -f "${WORKSPACE_DIR}/build/macos/Build/Products/Release/dualvpn_manager.dmg"
-hdiutil create -volname "DualVPN Manager" -srcfolder "${DMG_DIR}" -ov -format UDZO "${WORKSPACE_DIR}/build/macos/Build/Products/Release/dualvpn_manager.dmg"
+rm -f "${WORKSPACE_DIR}/build/macos/Build/Products/Release/Dualvpn Manager.dmg"
+hdiutil create -volname "DualVPN Manager" -srcfolder "${DMG_DIR}" -ov -format UDZO "${WORKSPACE_DIR}/build/macos/Build/Products/Release/Dualvpn Manager.dmg"
 
 # 清理临时目录
 rm -rf "${DMG_DIR}"
 
-if [ ! -f "${WORKSPACE_DIR}/build/macos/Build/Products/Release/dualvpn_manager.dmg" ]; then
+if [ ! -f "${WORKSPACE_DIR}/build/macos/Build/Products/Release/Dualvpn Manager.dmg" ]; then
     echo "错误: DMG文件创建失败"
     exit 1
 fi
 
-echo "DMG安装文件创建成功: ${WORKSPACE_DIR}/build/macos/Build/Products/Release/dualvpn_manager.dmg"
+echo "DMG安装文件创建成功: ${WORKSPACE_DIR}/build/macos/Build/Products/Release/Dualvpn Manager.dmg"
 
 # 6. 显示构建结果
 echo ""
 echo "==================== 构建完成 ===================="
-echo "应用包位置: ${WORKSPACE_DIR}/build/macos/Build/Products/Release/dualvpn_manager.app"
-echo "安装文件位置: ${WORKSPACE_DIR}/build/macos/Build/Products/Release/dualvpn_manager.dmg"
+echo "应用包位置: ${WORKSPACE_DIR}/build/macos/Build/Products/Release/Dualvpn Manager.app"
+echo "安装文件位置: ${WORKSPACE_DIR}/build/macos/Build/Products/Release/Dualvpn Manager.dmg"
 echo "=================================================="
 echo ""
 echo "要测试安装效果，请执行以下步骤："
-echo "1. 双击dualvpn_manager.dmg文件"
+echo "1. 双击Dualvpn Manager.dmg文件"
 echo "2. 将应用拖拽到Applications文件夹"
 echo "3. 从Applications文件夹启动应用"
 echo ""

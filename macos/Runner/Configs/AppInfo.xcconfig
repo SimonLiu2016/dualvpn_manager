@@ -10,7 +10,7 @@
 #include "Pods/Target Support Files/Pods-Runner/Pods-Runner.profile.xcconfig"
 
 // The application's name. By default this is also the title of the Flutter window.
-PRODUCT_NAME = dualvpn_manager
+PRODUCT_NAME = Dualvpn Manager
 
 // The application's bundle identifier
 PRODUCT_BUNDLE_IDENTIFIER = com.v8en.dualvpnManager

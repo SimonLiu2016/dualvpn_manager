@@ -26,6 +26,10 @@ type ProxyCore struct {
 	currentProxies map[string]*ProxyInfo   // key: proxySourceId, value: current proxy for that source
 	proxySourceMu  sync.RWMutex
 
+	// 代理源统计收集器管理
+	proxySourceStatsCollectors map[string]*ProxySourceStatsCollector // key: proxySourceId
+	statsCollectorMu           sync.RWMutex
+
 	mu      sync.RWMutex
 	running bool
 }
@@ -143,12 +147,13 @@ func NewProxyCore(cfg *config.Config) *ProxyCore {
 	}
 
 	return &ProxyCore{
-		config:          cfg,
-		rulesEngine:     rulesEngine,
-		protocolManager: protocolManager,
-		tunDevice:       tunDevice,
-		proxySources:    make(map[string]*ProxySource),
-		currentProxies:  make(map[string]*ProxyInfo),
+		config:                     cfg,
+		rulesEngine:                rulesEngine,
+		protocolManager:            protocolManager,
+		tunDevice:                  tunDevice,
+		proxySources:               make(map[string]*ProxySource),
+		currentProxies:             make(map[string]*ProxyInfo),
+		proxySourceStatsCollectors: make(map[string]*ProxySourceStatsCollector),
 		// 其他组件将在后续实现
 	}
 }
@@ -418,6 +423,41 @@ func (pc *ProxyCore) GetAllCurrentProxies() map[string]*ProxyInfo {
 		result[id] = proxy
 	}
 	return result
+}
+
+// GetHTTPServer 获取HTTP服务器实例
+func (pc *ProxyCore) GetHTTPServer() *HTTPServer {
+	pc.mu.RLock()
+	defer pc.mu.RUnlock()
+	return pc.httpServer
+}
+
+// GetSOCKS5Server 获取SOCKS5服务器实例
+func (pc *ProxyCore) GetSOCKS5Server() *SOCKS5Server {
+	pc.mu.RLock()
+	defer pc.mu.RUnlock()
+	return pc.socks5Server
+}
+
+// GetProxySourceStatsCollector 获取代理源统计收集器
+func (pc *ProxyCore) GetProxySourceStatsCollector(sourceId string) *ProxySourceStatsCollector {
+	pc.statsCollectorMu.RLock()
+	defer pc.statsCollectorMu.RUnlock()
+	return pc.proxySourceStatsCollectors[sourceId]
+}
+
+// CreateOrGetProxySourceStatsCollector 创建或获取代理源统计收集器
+func (pc *ProxyCore) CreateOrGetProxySourceStatsCollector(sourceId string) *ProxySourceStatsCollector {
+	pc.statsCollectorMu.Lock()
+	defer pc.statsCollectorMu.Unlock()
+
+	if collector, exists := pc.proxySourceStatsCollectors[sourceId]; exists {
+		return collector
+	}
+
+	collector := NewProxySourceStatsCollector(sourceId, pc)
+	pc.proxySourceStatsCollectors[sourceId] = collector
+	return collector
 }
 
 // updateStats 定期更新代理统计信息

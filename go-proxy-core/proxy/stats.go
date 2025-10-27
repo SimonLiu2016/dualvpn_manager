@@ -3,6 +3,7 @@ package proxy
 import (
 	"net"
 	"sync/atomic"
+	"time"
 )
 
 // StatsCollector 统计信息收集器接口
@@ -112,14 +113,26 @@ type ProxySourceStatsCollector struct {
 	core          *ProxyCore
 	upload        uint64
 	download      uint64
+	// 实时速率跟踪
+	lastUpload   uint64
+	lastDownload uint64
+	uploadRate   uint64
+	downloadRate uint64
+	lastUpdate   time.Time
 }
 
 // NewProxySourceStatsCollector 创建新的代理源统计信息收集器
 func NewProxySourceStatsCollector(proxySourceId string, core *ProxyCore) *ProxySourceStatsCollector {
-	return &ProxySourceStatsCollector{
+	collector := &ProxySourceStatsCollector{
 		proxySourceId: proxySourceId,
 		core:          core,
+		lastUpdate:    time.Now(),
 	}
+
+	// 启动速率更新协程
+	go collector.updateRates()
+
+	return collector
 }
 
 // AddUpload 增加上传字节数
@@ -134,11 +147,11 @@ func (pssc *ProxySourceStatsCollector) AddUpload(bytes uint64) {
 	pssc.core.proxySourceMu.Unlock()
 
 	// 同时更新服务器总统计
-	if pssc.core.httpServer != nil {
-		atomic.AddUint64(&pssc.core.httpServer.totalUpload, bytes)
+	if httpServer := pssc.core.GetHTTPServer(); httpServer != nil {
+		atomic.AddUint64(&httpServer.totalUpload, bytes)
 	}
-	if pssc.core.socks5Server != nil {
-		atomic.AddUint64(&pssc.core.socks5Server.totalUpload, bytes)
+	if socks5Server := pssc.core.GetSOCKS5Server(); socks5Server != nil {
+		atomic.AddUint64(&socks5Server.totalUpload, bytes)
 	}
 }
 
@@ -154,11 +167,11 @@ func (pssc *ProxySourceStatsCollector) AddDownload(bytes uint64) {
 	pssc.core.proxySourceMu.Unlock()
 
 	// 同时更新服务器总统计
-	if pssc.core.httpServer != nil {
-		atomic.AddUint64(&pssc.core.httpServer.totalDownload, bytes)
+	if httpServer := pssc.core.GetHTTPServer(); httpServer != nil {
+		atomic.AddUint64(&httpServer.totalDownload, bytes)
 	}
-	if pssc.core.socks5Server != nil {
-		atomic.AddUint64(&pssc.core.socks5Server.totalDownload, bytes)
+	if socks5Server := pssc.core.GetSOCKS5Server(); socks5Server != nil {
+		atomic.AddUint64(&socks5Server.totalDownload, bytes)
 	}
 }
 
@@ -170,4 +183,52 @@ func (pssc *ProxySourceStatsCollector) GetUpload() uint64 {
 // GetDownload 获取下载字节数
 func (pssc *ProxySourceStatsCollector) GetDownload() uint64 {
 	return atomic.LoadUint64(&pssc.download)
+}
+
+// GetUploadRate 获取上传速率（字节/秒）
+func (pssc *ProxySourceStatsCollector) GetUploadRate() uint64 {
+	return atomic.LoadUint64(&pssc.uploadRate)
+}
+
+// GetDownloadRate 获取下载速率（字节/秒）
+func (pssc *ProxySourceStatsCollector) GetDownloadRate() uint64 {
+	return atomic.LoadUint64(&pssc.downloadRate)
+}
+
+// updateRates 定期更新速率计算
+func (pssc *ProxySourceStatsCollector) updateRates() {
+	ticker := time.NewTicker(1 * time.Second)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ticker.C:
+			currentUpload := atomic.LoadUint64(&pssc.upload)
+			currentDownload := atomic.LoadUint64(&pssc.download)
+
+			// 原子地获取并更新lastUpload和lastDownload
+			oldLastUpload := atomic.LoadUint64(&pssc.lastUpload)
+			oldLastDownload := atomic.LoadUint64(&pssc.lastDownload)
+
+			// 尝试原子更新lastUpload和lastDownload
+			if !atomic.CompareAndSwapUint64(&pssc.lastUpload, oldLastUpload, currentUpload) {
+				// 如果更新失败，重新获取当前值
+				oldLastUpload = atomic.LoadUint64(&pssc.lastUpload)
+			}
+
+			if !atomic.CompareAndSwapUint64(&pssc.lastDownload, oldLastDownload, currentDownload) {
+				// 如果更新失败，重新获取当前值
+				oldLastDownload = atomic.LoadUint64(&pssc.lastDownload)
+			}
+
+			// 计算每秒速率
+			uploadDiff := currentUpload - oldLastUpload
+			downloadDiff := currentDownload - oldLastDownload
+
+			atomic.StoreUint64(&pssc.uploadRate, uploadDiff)
+			atomic.StoreUint64(&pssc.downloadRate, downloadDiff)
+
+			pssc.lastUpdate = time.Now()
+		}
+	}
 }

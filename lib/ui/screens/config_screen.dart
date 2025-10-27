@@ -575,27 +575,6 @@ class _ConfigScreenState extends State<ConfigScreen> {
         title: const Text('代理源管理'),
         backgroundColor: Colors.blue,
         foregroundColor: Colors.white,
-        actions: [
-          // 添加测试按钮
-          IconButton(
-            icon: const Icon(Icons.bug_report),
-            onPressed: () {
-              // 显示所有配置的调试信息
-              String debugInfo = '配置数量: ${configs.length}\n';
-              for (var i = 0; i < configs.length; i++) {
-                final config = configs[i];
-                debugInfo +=
-                    '配置 $i: ${config.name}, 类型: ${config.type}, 路径: ${config.configPath}\n';
-                debugInfo +=
-                    '  是否显示更新按钮: ${config.type == VPNType.clash && config.configPath.startsWith('http')}\n';
-              }
-              ScaffoldMessenger.of(
-                context,
-              ).showSnackBar(SnackBar(content: Text(debugInfo)));
-            },
-            tooltip: '调试信息',
-          ),
-        ],
       ),
       body: Padding(
         padding: const EdgeInsets.all(16.0),

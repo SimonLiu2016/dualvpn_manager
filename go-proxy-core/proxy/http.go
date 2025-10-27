@@ -8,7 +8,9 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"sync"
 	"sync/atomic"
+	"time"
 
 	"github.com/dualvpn/go-proxy-core/routing"
 )
@@ -25,6 +27,13 @@ type HTTPServer struct {
 	totalUpload   uint64
 	totalDownload uint64
 	connections   int64
+	// 实时速率计算
+	lastUpload   uint64
+	lastDownload uint64
+	uploadRate   uint64
+	downloadRate uint64
+	lastUpdate   time.Time
+	rateMutex    sync.RWMutex
 }
 
 // NewHTTPServer 创建新的HTTP服务器
@@ -49,6 +58,9 @@ func (hs *HTTPServer) Start() error {
 
 	hs.listener = listener
 	hs.running = true
+
+	// 启动速率更新协程
+	go hs.updateRates()
 
 	log.Printf("HTTP proxy server listening on %s", addr)
 
@@ -80,6 +92,60 @@ func (hs *HTTPServer) GetStats() (upload, download uint64, connections int64) {
 	return atomic.LoadUint64(&hs.totalUpload),
 		atomic.LoadUint64(&hs.totalDownload),
 		atomic.LoadInt64(&hs.connections)
+}
+
+// GetDetailedStats 获取HTTP服务器详细统计信息（包括实时速率）
+func (hs *HTTPServer) GetDetailedStats() (upload, download, uploadRate, downloadRate uint64) {
+	upload = atomic.LoadUint64(&hs.totalUpload)
+	download = atomic.LoadUint64(&hs.totalDownload)
+
+	// 获取实时速率
+	hs.rateMutex.RLock()
+	uploadRate = hs.uploadRate
+	downloadRate = hs.downloadRate
+	hs.rateMutex.RUnlock()
+
+	return
+}
+
+// updateRates 定期更新速率计算
+func (hs *HTTPServer) updateRates() {
+	ticker := time.NewTicker(1 * time.Second)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ticker.C:
+			currentUpload := atomic.LoadUint64(&hs.totalUpload)
+			currentDownload := atomic.LoadUint64(&hs.totalDownload)
+
+			// 原子地获取并更新lastUpload和lastDownload
+			oldLastUpload := atomic.LoadUint64(&hs.lastUpload)
+			oldLastDownload := atomic.LoadUint64(&hs.lastDownload)
+
+			// 尝试原子更新lastUpload和lastDownload
+			if !atomic.CompareAndSwapUint64(&hs.lastUpload, oldLastUpload, currentUpload) {
+				// 如果更新失败，重新获取当前值
+				oldLastUpload = atomic.LoadUint64(&hs.lastUpload)
+			}
+
+			if !atomic.CompareAndSwapUint64(&hs.lastDownload, oldLastDownload, currentDownload) {
+				// 如果更新失败，重新获取当前值
+				oldLastDownload = atomic.LoadUint64(&hs.lastDownload)
+			}
+
+			// 计算每秒速率
+			uploadDiff := currentUpload - oldLastUpload
+			downloadDiff := currentDownload - oldLastDownload
+
+			hs.rateMutex.Lock()
+			hs.uploadRate = uploadDiff
+			hs.downloadRate = downloadDiff
+			hs.rateMutex.Unlock()
+
+			hs.lastUpdate = time.Now()
+		}
+	}
 }
 
 // handleConnection 处理连接
@@ -159,7 +225,7 @@ func (hs *HTTPServer) handleProxyConnection(clientConn net.Conn, req *http.Reque
 		clientConn.Write([]byte("HTTP/1.1 200 Connection Established\r\n\r\n"))
 
 		// 创建按代理源维度的统计收集器
-		proxySourceStatsCollector := NewProxySourceStatsCollector(proxySource, hs.proxyCore)
+		proxySourceStatsCollector := hs.proxyCore.CreateOrGetProxySourceStatsCollector(proxySource)
 
 		// 创建自定义的流量统计连接，正确区分上传和下载
 		// 客户端连接：isClientSide=true
@@ -192,7 +258,7 @@ func (hs *HTTPServer) handleProxyConnection(clientConn net.Conn, req *http.Reque
 	} else {
 		// 对于普通HTTP请求，转发请求到目标服务器
 		// 创建按代理源维度的统计收集器
-		proxySourceStatsCollector := NewProxySourceStatsCollector(proxySource, hs.proxyCore)
+		proxySourceStatsCollector := hs.proxyCore.CreateOrGetProxySourceStatsCollector(proxySource)
 
 		// 创建自定义的流量统计连接，正确区分上传和下载
 		// 客户端连接：isClientSide=true
@@ -247,7 +313,7 @@ func (hs *HTTPServer) handleDirectConnection(clientConn net.Conn, req *http.Requ
 		clientConn.Write([]byte("HTTP/1.1 200 Connection Established\r\n\r\n"))
 
 		// 创建按代理源维度的统计收集器（直连使用"DIRECT"作为代理源ID）
-		proxySourceStatsCollector := NewProxySourceStatsCollector("DIRECT", hs.proxyCore)
+		proxySourceStatsCollector := hs.proxyCore.CreateOrGetProxySourceStatsCollector("DIRECT")
 
 		// 创建自定义的流量统计连接，正确区分上传和下载
 		// 客户端连接：isClientSide=true
@@ -280,7 +346,7 @@ func (hs *HTTPServer) handleDirectConnection(clientConn net.Conn, req *http.Requ
 	} else {
 		// 对于普通HTTP请求，转发请求到目标服务器
 		// 创建按代理源维度的统计收集器（直连使用"DIRECT"作为代理源ID）
-		proxySourceStatsCollector := NewProxySourceStatsCollector("DIRECT", hs.proxyCore)
+		proxySourceStatsCollector := hs.proxyCore.CreateOrGetProxySourceStatsCollector("DIRECT")
 
 		// 创建自定义的流量统计连接，正确区分上传和下载
 		// 客户端连接：isClientSide=true
