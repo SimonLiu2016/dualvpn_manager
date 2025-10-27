@@ -852,35 +852,50 @@ class VPNStatusPanel extends StatelessWidget {
               Selector<AppState, bool>(
                 selector: (context, appState) => appState.isGoProxyRunning,
                 builder: (context, isGoProxyRunning, child) {
-                  return Container(
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: isGoProxyRunning
-                          ? Colors.green.withOpacity(0.1)
-                          : Colors.grey.withOpacity(0.1),
-                      borderRadius: BorderRadius.circular(8),
-                      border: Border.all(
-                        color: isGoProxyRunning ? Colors.green : Colors.grey,
-                        width: 1,
-                      ),
-                    ),
-                    child: Row(
-                      children: [
-                        Icon(
-                          isGoProxyRunning ? Icons.check_circle : Icons.cancel,
-                          color: isGoProxyRunning ? Colors.green : Colors.grey,
+                  return Selector<AppState, bool>(
+                    selector: (context, appState) => appState.isStarting,
+                    builder: (context, isStarting, child) {
+                      return Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: isStarting
+                              ? Colors.orange.withOpacity(0.1)
+                              : isGoProxyRunning
+                              ? Colors.green.withOpacity(0.1)
+                              : Colors.grey.withOpacity(0.1),
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(
+                            color: isStarting
+                                ? Colors.orange
+                                : isGoProxyRunning
+                                ? Colors.green
+                                : Colors.grey,
+                            width: 1,
+                          ),
                         ),
-                        const SizedBox(width: 8),
-                        const Text('Go代理核心'),
-                        const Spacer(),
-                        // 显示实时上传下载速率
-                        const GoProxyStatsWidget(),
-                        Selector<AppState, bool>(
-                          selector: (context, appState) =>
-                              appState.isGoProxyRunning,
-                          builder: (context, isRunning, child) {
-                            return ElevatedButton(
-                              onPressed: isRunning
+                        child: Row(
+                          children: [
+                            Icon(
+                              isStarting
+                                  ? Icons.hourglass_bottom
+                                  : isGoProxyRunning
+                                  ? Icons.check_circle
+                                  : Icons.cancel,
+                              color: isStarting
+                                  ? Colors.orange
+                                  : isGoProxyRunning
+                                  ? Colors.green
+                                  : Colors.grey,
+                            ),
+                            const SizedBox(width: 8),
+                            const Text('Go代理核心'),
+                            const Spacer(),
+                            // 显示实时上传下载速率
+                            const GoProxyStatsWidget(),
+                            ElevatedButton(
+                              onPressed: isStarting
+                                  ? null // 启动中状态时禁用按钮
+                                  : isGoProxyRunning
                                   ? () async {
                                       final appState = context.read<AppState>();
                                       await appState.stopGoProxy();
@@ -919,17 +934,25 @@ class VPNStatusPanel extends StatelessWidget {
                                       }
                                     },
                               style: ElevatedButton.styleFrom(
-                                backgroundColor: isRunning
+                                backgroundColor: isStarting
+                                    ? Colors.orange
+                                    : isGoProxyRunning
                                     ? Colors.red
                                     : Colors.green,
                                 foregroundColor: Colors.white,
                               ),
-                              child: Text(isRunning ? '停止' : '启动'),
-                            );
-                          },
+                              child: Text(
+                                isStarting
+                                    ? '启动中...'
+                                    : isGoProxyRunning
+                                    ? '停止'
+                                    : '启动',
+                              ),
+                            ),
+                          ],
                         ),
-                      ],
-                    ),
+                      );
+                    },
                   );
                 },
               ),

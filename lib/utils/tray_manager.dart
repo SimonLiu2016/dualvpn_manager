@@ -186,14 +186,18 @@ class DualVPNTrayManager with TrayListener {
 
   Future<void> updateTrayIcon(
     bool openVPNConnected,
-    bool clashConnected,
-  ) async {
+    bool clashConnected, {
+    bool starting = false,
+  }) async {
     // 根据连接状态更新托盘图标
-    String iconPath = 'assets/icons/app_icon.png'; // 默认图标
+    String iconPath = 'assets/icons/app_icon_32.png'; // 默认图标
 
-    // 检查Go代理核心是否运行，如果运行则使用特殊的图标
-    if (_appState != null && _appState!.isGoProxyRunning) {
-      // 如果Go代理核心运行，根据其他连接状态使用不同的图标
+    // 检查是否处于启动中状态
+    if (starting) {
+      // 启动中状态，使用启动中图标
+      iconPath = 'assets/icons/starting.png';
+    } else if (_appState != null && _appState!.isGoProxyRunning) {
+      // 检查Go代理核心是否运行，如果运行则使用特殊的图标
       if (openVPNConnected && clashConnected) {
         iconPath = 'assets/icons/go_both_connected.png';
       } else if (openVPNConnected) {
@@ -222,17 +226,18 @@ class DualVPNTrayManager with TrayListener {
         await trayManager.setIcon(iconPath);
       } else {
         // 如果特定图标不存在，使用默认图标
-        await trayManager.setIcon('assets/icons/app_icon.png');
+        await trayManager.setIcon('assets/icons/app_icon_32.png');
       }
 
-      // 添加一个短暂的动画效果
-      if (openVPNConnected ||
-          clashConnected ||
-          (_appState != null && _appState!.isGoProxyRunning)) {
+      // 添加一个短暂的动画效果（仅在连接成功时）
+      if (!starting &&
+          (openVPNConnected ||
+              clashConnected ||
+              (_appState != null && _appState!.isGoProxyRunning))) {
         // 模拟连接动画
         for (int i = 0; i < 3; i++) {
           await Future.delayed(const Duration(milliseconds: 200));
-          await trayManager.setIcon('assets/icons/app_icon.png');
+          await trayManager.setIcon('assets/icons/app_icon_32.png');
           await Future.delayed(const Duration(milliseconds: 200));
           await trayManager.setIcon(iconPath);
         }
