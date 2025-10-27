@@ -1,5 +1,5 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
-    <!-- 背景圆形 -->
+    <!-- 背景圆形 - 蓝色表示OpenVPN连接 -->
     <circle cx="50" cy="50" r="45" fill="#2196F3"/>
 
     <!-- Dual 字母 D -->
@@ -9,7 +9,9 @@
     <!-- VPN 文字 -->
     <text x="50" y="90" font-family="Arial, sans-serif" font-weight="bold" font-size="14" fill="white" text-anchor="middle">VPN</text>
 
-    <!-- 双重连接的两个对勾 -->
-    <path d="M30 45 L38 53 L55 35" fill="none" stroke="white" stroke-width="3"/>
-    <path d="M45 55 L53 63 L70 45" fill="none" stroke="white" stroke-width="3"/>
+    <!-- 运行状态的对勾标记 -->
+    <path d="M35 50 L45 60 L65 40" fill="none" stroke="white" stroke-width="5"/>
+
+    <!-- OpenVPN连接指示器 - 左上角的小圆点 -->
+    <circle cx="25" cy="25" r="5" fill="#FFFFFF"/>
 </svg>

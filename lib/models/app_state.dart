@@ -33,6 +33,10 @@ class AppState extends ChangeNotifier {
   // 添加防抖定时器，用于优化代理状态保存
   Timer? _proxySaveDebounceTimer;
 
+  // 添加启动中状态字段
+  bool _isStarting = false;
+  bool get isStarting => _isStarting;
+
   AppState({required DualVPNTrayManager trayManager})
     : _trayManager = trayManager {
     Logger.info('=== 开始初始化AppState ===');
@@ -1269,9 +1273,13 @@ class AppState extends ChangeNotifier {
   }
 
   // 更新托盘图标
-  void _updateTrayIcon() {
-    // 更新托盘图标，考虑Go代理核心的运行状态
-    _trayManager.updateTrayIcon(_openVPNConnected, _clashConnected);
+  void _updateTrayIcon({bool starting = false}) {
+    // 更新托盘图标，考虑Go代理核心的运行状态和启动中状态
+    _trayManager.updateTrayIcon(
+      _openVPNConnected,
+      _clashConnected,
+      starting: starting || _isStarting,
+    );
   }
 
   // 连接Clash
@@ -2840,18 +2848,43 @@ class AppState extends ChangeNotifier {
   // 启动Go代理核心
   Future<bool> startGoProxy() async {
     try {
+      // 设置启动中状态
+      _isRunning = false; // 重置运行状态
+      _isStarting = true; // 设置启动中状态
+      notifyListeners();
+
+      // 更新托盘图标为启动中状态（闪烁效果）
+      _updateTrayIcon(starting: true);
+
       final result = await _vpnManager.startGoProxy();
+
       if (result) {
         _isRunning = true;
+        _isStarting = false;
         notifyListeners();
-        // 更新托盘图标
+        // 更新托盘图标为已启动状态
         _updateTrayIcon();
 
         // 重新初始化代理源和路由规则
         await _reinitializeGoProxyConfig();
+
+        // 更新托盘图标为Go代理核心已启动状态
+        _updateTrayIcon();
+      } else {
+        _isRunning = false;
+        _isStarting = false;
+        notifyListeners();
+        // 更新托盘图标为未启动状态
+        _updateTrayIcon();
       }
       return result;
     } catch (e) {
+      // 出现异常时重置状态
+      _isRunning = false;
+      _isStarting = false;
+      notifyListeners();
+      // 更新托盘图标为未启动状态
+      _updateTrayIcon();
       Logger.error('启动Go代理核心失败: $e');
       return false;
     }
