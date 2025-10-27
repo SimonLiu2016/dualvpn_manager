@@ -114,7 +114,7 @@ class PrivilegedHelper: NSObject, PrivilegedHelperProtocol, NSXPCListenerDelegat
         )
 
         // 验证路径安全性
-        let allowedPathPrefix = "/Applications/dualvpn_manager.app/Contents/Resources/bin"
+        let allowedPathPrefix = "/Applications/Dualvpn Manager.app/Contents/Resources/bin"
         guard executablePath.hasPrefix(allowedPathPrefix) else {
             let errorMsg =
                 "Invalid executable path prefix: \(executablePath) (expected prefix: \(allowedPathPrefix))"
