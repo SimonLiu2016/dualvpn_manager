@@ -1,5 +1,4 @@
 import 'dart:io';
-import 'dart:convert';
 import 'package:path/path.dart' as path;
 import 'package:dualvpn_manager/utils/logger.dart';
 import 'package:dualvpn_manager/utils/openvpn_config_parser.dart';
@@ -145,19 +144,6 @@ class OpenVPNService {
     } catch (e, stackTrace) {
       Logger.error('断开OpenVPN连接时出错: $e\nStack trace: $stackTrace');
       rethrow;
-    }
-  }
-
-  // 检查OpenVPN是否正在运行
-  Future<bool> checkStatus() async {
-    try {
-      // 通过GoProxyService检查OpenVPN状态
-      final goProxyService = GoProxyService();
-      // 这里需要实现一个检查状态的方法，暂时返回 isConnected 状态
-      return _isConnected;
-    } catch (e, stackTrace) {
-      Logger.error('检查OpenVPN状态时出错: $e\nStack trace: $stackTrace');
-      return false;
     }
   }
 

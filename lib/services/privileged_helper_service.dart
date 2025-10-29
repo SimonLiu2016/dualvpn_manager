@@ -1,7 +1,6 @@
 import 'dart:async';
 import 'package:dualvpn_manager/utils/logger.dart';
 import 'package:flutter/services.dart';
-import 'package:flutter/foundation.dart';
 
 class PrivilegedProcess {
   final StreamController<List<int>> _stdoutController =

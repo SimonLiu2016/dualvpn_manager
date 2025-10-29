@@ -2,8 +2,6 @@ import 'package:dualvpn_manager/models/vpn_config.dart' hide RoutingRule;
 import 'package:dualvpn_manager/services/smart_routing_engine.dart'
     as smart_routing_engine;
 import 'package:dualvpn_manager/utils/logger.dart';
-import 'dart:io';
-import 'dart:convert';
 import 'dart:async';
 import 'package:dualvpn_manager/services/socks5_proxy_server.dart';
 
@@ -14,7 +12,7 @@ class ProxyManager {
       smart_routing_engine.SmartRoutingEngine();
   final SOCKS5ProxyServer _proxyServer = SOCKS5ProxyServer();
   bool _isRunning = false;
-  int _proxyPort = 1080; // 默认SOCKS5代理端口
+  int _proxyPort = 6161; // 默认SOCKS5代理端口
 
   // 更新活动代理配置（公共方法）
   void updateActiveProxies(Map<String, VPNConfig> proxies) {

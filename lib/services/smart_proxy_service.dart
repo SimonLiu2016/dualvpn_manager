@@ -63,7 +63,7 @@ class SmartProxyService {
 
       // 根据路由规则决定如何处理请求
       if (_routeHandler != null) {
-        _routeHandler!(request.uri.host, request.uri.port ?? 80);
+        _routeHandler!(request.uri.host, request.uri.port);
       }
 
       // 实现实际的请求转发逻辑
@@ -83,7 +83,7 @@ class SmartProxyService {
       // 创建到目标服务器的连接
       final targetSocket = await Socket.connect(
         request.uri.host,
-        request.uri.port ?? 80,
+        request.uri.port,
       );
 
       // 构建HTTP请求
