@@ -1,7 +1,56 @@
 import 'package:flutter/material.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 class SettingsScreen extends StatelessWidget {
   const SettingsScreen({super.key});
+
+  // 显示版权信息对话框
+  void _showCopyrightDialog(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: const Text('版权信息'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text('Dualvpn Manager'),
+              const SizedBox(height: 16),
+              const Text('作者：Simon'),
+              const Text('邮箱：582883825@qq.com'),
+              GestureDetector(
+                onTap: () async {
+                  final Uri url = Uri.parse('https://www.v8en.com');
+                  if (await canLaunchUrl(url)) {
+                    await launchUrl(url);
+                  }
+                },
+                child: const Text(
+                  '网址：www.v8en.com',
+                  style: TextStyle(
+                    color: Colors.blue,
+                    decoration: TextDecoration.underline,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 16),
+              const Text('版权所有 © 2025 Simon'),
+              const Text('保留所有权利'),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () {
+                Navigator.of(context).pop();
+              },
+              child: const Text('确定'),
+            ),
+          ],
+        );
+      },
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -104,10 +153,8 @@ class SettingsScreen extends StatelessWidget {
                   title: const Text('版权信息'),
                   subtitle: const Text('软件版本和授权信息'),
                   onTap: () {
-                    // TODO: 实现版权信息功能
-                    ScaffoldMessenger.of(
-                      context,
-                    ).showSnackBar(const SnackBar(content: Text('版权信息功能待实现')));
+                    // 实现版权信息功能
+                    _showCopyrightDialog(context);
                   },
                 ),
               ),

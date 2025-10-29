@@ -29,6 +29,8 @@ dependencies:
   crypto: ^3.0.0
   # 窗口管理
   window_manager: ^0.5.1
+  # URL启动器
+  url_launcher: ^6.3.0
 
 dev_dependencies:
   flutter_test:
