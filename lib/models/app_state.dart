@@ -13,6 +13,7 @@ import 'package:window_manager/window_manager.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:async';
 import 'dart:io';
+import 'package:flutter/services.dart';
 
 class AppState extends ChangeNotifier {
   final VPNManager _vpnManager = VPNManager();
@@ -37,6 +38,13 @@ class AppState extends ChangeNotifier {
   bool _isStarting = false;
   bool get isStarting => _isStarting;
 
+  // 添加特权助手安装状态字段
+  bool _isHelperInstalled = false;
+  bool get isHelperInstalled => _isHelperInstalled;
+
+  // 添加等待特权助手安装完成的Completer
+  Completer<void>? _helperInstallationCompleter;
+
   AppState({required DualVPNTrayManager trayManager})
     : _trayManager = trayManager {
     Logger.info('=== 开始初始化AppState ===');
@@ -50,6 +58,8 @@ class AppState extends ChangeNotifier {
     Logger.info('开始加载代理列表状态...');
     _loadProxyStates();
     Logger.info('代理列表状态加载完成');
+    // 监听特权助手安装完成的通知
+    _listenForHelperInstallation();
     // 初始化时启动Go代理核心
     Logger.info('开始初始化Go代理核心...');
     _initGoProxyCore();
@@ -58,11 +68,75 @@ class AppState extends ChangeNotifier {
     Logger.info('=== AppState初始化完成 ===');
   }
 
+  // 监听特权助手安装完成的通知
+  void _listenForHelperInstallation() {
+    Logger.info('开始监听特权助手安装完成的通知');
+    // 添加方法通道监听器
+    const platform = MethodChannel('dualvpn_manager/macos');
+    platform.setMethodCallHandler((call) async {
+      if (call.method == 'helperInstalled') {
+        Logger.info('收到特权助手安装完成的通知');
+        _markHelperInstalled();
+      }
+    });
+  }
+
   // 显示主窗口
   void _showWindow() {
     // 使用window_manager显示窗口
     windowManager.show();
     windowManager.focus();
+  }
+
+  // 初始化Go代理核心
+  void _initGoProxyCore() async {
+    try {
+      Logger.info('初始化Go代理核心...');
+
+      // 等待特权助手安装完成
+      if (!_isHelperInstalled) {
+        Logger.info('等待特权助手安装完成...');
+        _helperInstallationCompleter = Completer<void>();
+        await _helperInstallationCompleter!.future;
+        Logger.info('特权助手安装完成，继续初始化Go代理核心');
+      }
+
+      // 延迟一段时间确保应用完全启动后再启动Go代理核心
+      await Future.delayed(const Duration(seconds: 3));
+      final result = await startGoProxy();
+      if (result) {
+        Logger.info('Go代理核心初始化成功');
+
+        // 初始化所有必要的代理源
+        await _initProxySources();
+
+        // 确保相关的代理已经连接
+        await _ensureProxiesConnected();
+
+        // 添加延迟确保代理连接完成
+        await Future.delayed(const Duration(seconds: 2));
+
+        // 应用已选中的代理go代理核心
+        Logger.info('开始应用启动后已选中的代理...');
+        await _applySelectedProxiesAfterStartup();
+        Logger.info('应用启动后已选中的代理完成');
+
+        // 将路由规则发送到Go代理核心
+        _sendRoutingRulesToGoProxy();
+      } else {
+        Logger.error('Go代理核心初始化失败');
+      }
+    } catch (e, stackTrace) {
+      Logger.error('初始化Go代理核心时出错: $e，Stack trace: $stackTrace');
+    }
+  }
+
+  // 标记特权助手已安装完成
+  void _markHelperInstalled() {
+    _isHelperInstalled = true;
+    _helperInstallationCompleter?.complete();
+    _helperInstallationCompleter = null;
+    Logger.info('标记特权助手安装完成');
   }
 
   // 应用启动后已选中的代理
@@ -266,40 +340,6 @@ class AppState extends ChangeNotifier {
     } catch (e, stackTrace) {
       Logger.error('应用启动后已选中的代理时出错: $e');
       Logger.error('Stack trace: $stackTrace');
-    }
-  }
-
-  // 初始化Go代理核心
-  void _initGoProxyCore() async {
-    try {
-      Logger.info('初始化Go代理核心...');
-      // 延迟一段时间确保应用完全启动后再启动Go代理核心
-      await Future.delayed(const Duration(seconds: 3));
-      final result = await startGoProxy();
-      if (result) {
-        Logger.info('Go代理核心初始化成功');
-
-        // 初始化所有必要的代理源
-        await _initProxySources();
-
-        // 确保相关的代理已经连接
-        await _ensureProxiesConnected();
-
-        // 添加延迟确保代理连接完成
-        await Future.delayed(const Duration(seconds: 2));
-
-        // 应用已选中的代理go代理核心
-        Logger.info('开始应用启动后已选中的代理...');
-        await _applySelectedProxiesAfterStartup();
-        Logger.info('应用启动后已选中的代理完成');
-
-        // 将路由规则发送到Go代理核心
-        _sendRoutingRulesToGoProxy();
-      } else {
-        Logger.error('Go代理核心初始化失败');
-      }
-    } catch (e, stackTrace) {
-      Logger.error('初始化Go代理核心时出错: $e，Stack trace: $stackTrace');
     }
   }
 

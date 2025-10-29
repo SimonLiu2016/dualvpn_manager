@@ -97,8 +97,33 @@ class AppDelegate: FlutterAppDelegate {
         Logger.shared.writeLog("应用启动完成")
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
             self.setupMethodChannel()
+            // 延迟检查和安装助手工具，确保窗口已经显示
+            self.deferHelperInstallation()
         }
-        self.checkAndInstallHelperTool()
+    }
+
+    // 延迟特权助手工具的安装，确保主窗口已经显示
+    private func deferHelperInstallation() {
+        Logger.shared.writeLog("延迟安装助手工具，等待窗口显示")
+        // 使用多个延迟检查确保窗口确实已经显示
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+            guard let window = NSApp.windows.first else {
+                Logger.shared.writeLog("窗口尚未初始化，继续等待", level: "WARN")
+                self.deferHelperInstallation()
+                return
+            }
+
+            if !window.isVisible {
+                Logger.shared.writeLog("窗口不可见，继续等待", level: "WARN")
+                self.deferHelperInstallation()
+                return
+            }
+
+            Logger.shared.writeLog("窗口已显示，开始安装助手工具")
+            DispatchQueue.global(qos: .background).async {
+                self.checkAndInstallHelperTool()
+            }
+        }
     }
 
     private func setupMethodChannel() {
@@ -179,6 +204,12 @@ class AppDelegate: FlutterAppDelegate {
                         FlutterError(
                             code: "INVALID_ARGS", message: "Invalid arguments", details: nil))
                 }
+            case "helperInstalled":
+                Logger.shared.writeLog("收到特权助手安装完成通知")
+                // 发送通知给Flutter应用
+                NotificationCenter.default.post(
+                    name: Notification.Name("HelperInstalled"), object: nil)
+                result(true)
             default:
                 Logger.shared.writeLog("未实现的方法: \(call.method)", level: "WARN")
                 result(FlutterMethodNotImplemented)
@@ -258,6 +289,30 @@ class AppDelegate: FlutterAppDelegate {
             }
         } else {
             Logger.shared.writeLog("助手工具安装成功")
+            // 通知Flutter应用特权助手安装完成
+            self.notifyHelperInstalled()
+        }
+    }
+
+    // 通知Flutter应用特权助手安装完成
+    private func notifyHelperInstalled() {
+        Logger.shared.writeLog("通知Flutter应用特权助手安装完成")
+        DispatchQueue.main.async {
+            guard
+                let controller = NSApp.windows.first?.contentViewController
+                    as? FlutterViewController
+            else {
+                Logger.shared.writeLog("无法获取FlutterViewController", level: "ERROR")
+                return
+            }
+
+            let channel = FlutterMethodChannel(
+                name: "dualvpn_manager/macos",
+                binaryMessenger: controller.engine.binaryMessenger)
+
+            channel.invokeMethod("helperInstalled", arguments: nil) { result in
+                Logger.shared.writeLog("通知Flutter应用特权助手安装完成结果: \(result ?? "nil")")
+            }
         }
     }
 
