@@ -1577,6 +1577,11 @@ class AppState extends ChangeNotifier {
       final result = await _vpnManager.updateClashSubscription(config);
       if (result) {
         Logger.info('Clash订阅更新成功');
+        // 清除代理列表缓存并重新加载，确保UI显示最新的订阅内容
+        clearProxyCache(config.id);
+        if (_selectedConfig == config.id) {
+          await loadProxies();
+        }
       } else {
         Logger.error('Clash订阅更新失败');
       }
@@ -1601,6 +1606,11 @@ class AppState extends ChangeNotifier {
       final result = await _vpnManager.updateShadowsocksSubscription(config);
       if (result) {
         Logger.info('Shadowsocks订阅更新成功');
+        // 清除代理列表缓存并重新加载，确保UI显示最新的订阅内容
+        clearProxyCache(config.id);
+        if (_selectedConfig == config.id) {
+          await loadProxies();
+        }
       } else {
         Logger.error('Shadowsocks订阅更新失败');
       }
@@ -1625,6 +1635,11 @@ class AppState extends ChangeNotifier {
       final result = await _vpnManager.updateV2RaySubscription(config);
       if (result) {
         Logger.info('V2Ray订阅更新成功');
+        // 清除代理列表缓存并重新加载，确保UI显示最新的订阅内容
+        clearProxyCache(config.id);
+        if (_selectedConfig == config.id) {
+          await loadProxies();
+        }
       } else {
         Logger.error('V2Ray订阅更新失败');
       }

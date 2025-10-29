@@ -30,6 +30,7 @@ class DualVPNTrayManager with TrayListener {
       // 创建托盘菜单
       Menu menu = Menu(
         items: [
+          MenuItem(key: 'toggle_proxy', label: '启动/停止'),
           MenuItem(key: 'show_window', label: '显示主窗口'),
           MenuItem(key: 'separator1', label: ''),
           MenuItem(key: 'exit_app', label: '退出应用'),
@@ -59,6 +60,10 @@ class DualVPNTrayManager with TrayListener {
   @override
   void onMenuItemClick(MenuItem menuItem) {
     switch (menuItem.key) {
+      case 'toggle_proxy':
+        // 启动/停止Go代理核心
+        _toggleProxy();
+        break;
       case 'show_window':
         // 显示主窗口
         _showWindow();
@@ -67,6 +72,23 @@ class DualVPNTrayManager with TrayListener {
         // 退出应用前关闭Go代理核心服务并清除系统代理设置
         _exitApp();
         break;
+    }
+  }
+
+  // 启动/停止Go代理核心
+  void _toggleProxy() async {
+    if (_appState != null) {
+      try {
+        if (_appState!.isGoProxyRunning) {
+          // 停止Go代理核心
+          await _appState!.stopGoProxy();
+        } else {
+          // 启动Go代理核心
+          await _appState!.startGoProxy();
+        }
+      } catch (e) {
+        print('切换代理核心状态失败: $e');
+      }
     }
   }
 
