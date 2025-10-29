@@ -160,6 +160,8 @@ flutter build linux
 - [ ] 测试和优化
 - [ ] 发布准备
 
+有关更详细的未来发展规划，请参阅 [FUTURE_PLANS.md](docs/FUTURE_PLANS.md) 文件。
+
 ## 许可证
 
 MIT License
