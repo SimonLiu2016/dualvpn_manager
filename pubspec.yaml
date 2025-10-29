@@ -39,10 +39,5 @@ flutter:
   uses-material-design: true
   # 添加资源文件
   assets:
-    - assets/icons/app_icon_32.png
-    - assets/icons/starting.png
-    - assets/icons/disconnected.png
-    - assets/icons/openvpn_connected.png
-    - assets/icons/clash_connected.png
-    - assets/icons/both_connected.png
+    - assets/icons/
     - macos/Runner/Assets/PrivilegedHelper.app/

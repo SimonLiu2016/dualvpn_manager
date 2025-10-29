@@ -474,14 +474,12 @@ class GoProxyService {
   Future<Map<String, dynamic>?> getStats() async {
     try {
       final url = Uri.parse('http://127.0.0.1:6162/stats');
-      Logger.info('获取Go代理核心统计信息: $url');
       final response = await HttpClient().getUrl(url);
       final httpResponse = await response.close();
       final responseBody = await utf8.decodeStream(httpResponse);
 
       if (httpResponse.statusCode == 200) {
         final stats = jsonDecode(responseBody) as Map<String, dynamic>;
-        Logger.info('获取统计信息成功: $stats');
         return stats;
       } else {
         Logger.error('获取统计信息失败: ${httpResponse.statusCode}, $responseBody');
