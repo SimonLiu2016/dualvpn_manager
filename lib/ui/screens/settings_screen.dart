@@ -16,7 +16,9 @@ class SettingsScreen extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               const Text('Dualvpn Manager'),
-              const SizedBox(height: 16),
+              const SizedBox(height: 8),
+              const Text('版本：v0.1.0'),
+              const SizedBox(height: 8),
               const Text('作者：Simon'),
               const Text('邮箱：582883825@qq.com'),
               GestureDetector(
