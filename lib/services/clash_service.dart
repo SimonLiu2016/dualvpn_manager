@@ -2,10 +2,8 @@ import 'dart:io';
 import 'dart:async';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
-import 'dart:async';
 import 'package:path/path.dart' as path;
 import '../utils/logger.dart';
-import '../models/vpn_config.dart';
 
 class ClashService {
   static final ClashService _instance = ClashService._internal();
@@ -71,21 +69,6 @@ class ClashService {
         content.contains(':') ||
         content.contains('\n');
   }
-
-  // 启动Clash核心
-  Future<bool> _startClash(String config) async {
-    try {
-      Logger.info('发送配置到Clash核心');
-
-      // 这里应该实现与Clash核心的通信逻辑
-      // 暂时返回true模拟成功
-      return true;
-    } catch (e) {
-      Logger.error('启动Clash核心失败: $e');
-      return false;
-    }
-  }
-
   // 停止Clash
   Future<void> stop() async {
     Logger.info('停止Clash服务');
@@ -224,16 +207,6 @@ class ClashService {
           await Future.delayed(retryDelay);
         } else {
           throw Exception('TLS/SSL连接错误，请检查服务器证书');
-        }
-      } on HandshakeException catch (e) {
-        Logger.error('TLS握手错误: $e');
-        retryCount++;
-
-        if (retryCount <= maxRetries) {
-          Logger.info('等待${retryDelay.inSeconds}秒后重试...');
-          await Future.delayed(retryDelay);
-        } else {
-          throw Exception('TLS握手失败，请检查服务器配置');
         }
       } catch (e, stackTrace) {
         Logger.error('更新Clash订阅失败: $e\nStack trace: $stackTrace');
