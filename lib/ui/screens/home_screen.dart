@@ -1,25 +1,25 @@
 import 'dart:developer' as developer;
 import 'dart:io' show Platform;
-
-import 'package:dualvpn_manager/models/app_state.dart';
-import 'package:dualvpn_manager/models/vpn_config.dart';
+import 'package:flutter/material.dart';
+import 'package:window_manager/window_manager.dart';
+import 'package:flutter/services.dart' show MethodChannel;
 import 'package:dualvpn_manager/ui/screens/config_screen.dart';
 import 'package:dualvpn_manager/ui/screens/proxy_list_screen.dart';
 import 'package:dualvpn_manager/ui/screens/routing_screen.dart';
 import 'package:dualvpn_manager/ui/screens/settings_screen.dart';
-import 'package:dualvpn_manager/ui/widgets/go_proxy_stats_widget.dart';
 import 'package:dualvpn_manager/ui/widgets/selected_proxies_widget.dart';
+import 'package:dualvpn_manager/ui/widgets/go_proxy_stats_widget.dart';
+import 'package:dualvpn_manager/l10n/app_localizations_delegate.dart';
+import 'package:dualvpn_manager/models/app_state.dart';
+import 'package:dualvpn_manager/models/vpn_config.dart';
 import 'package:dualvpn_manager/utils/config_manager.dart';
-import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
-import 'package:window_manager/window_manager.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
 
   @override
-  State<HomeScreen> createState() => _HomeScreenState();
+  _HomeScreenState createState() => _HomeScreenState();
 }
 
 class _HomeScreenState extends State<HomeScreen> with WindowListener {
@@ -31,42 +31,19 @@ class _HomeScreenState extends State<HomeScreen> with WindowListener {
   @override
   void initState() {
     super.initState();
-    // 确保窗口管理器已初始化
-    _initWindowManager();
-  }
-
-  Future<void> _initWindowManager() async {
-    try {
-      WidgetsFlutterBinding.ensureInitialized();
-      // 确保窗口管理器已初始化
-      await windowManager.ensureInitialized();
-
-      // 设置窗口关闭时的行为 - 防止窗口真正关闭
-      await windowManager.setPreventClose(true);
-
-      // 设置窗口标题
-      await windowManager.setTitle('双捷VPN管理器');
-
-      // 添加窗口监听器（在初始化完成后添加）
-      windowManager.addListener(this);
-    } catch (e) {
-      print('窗口管理器初始化失败: $e');
-    }
+    windowManager.addListener(this);
   }
 
   @override
   void dispose() {
-    // 移除窗口监听器
-    try {
-      windowManager.removeListener(this);
-    } catch (e) {
-      print('移除窗口监听器失败: $e');
-    }
+    windowManager.removeListener(this);
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
+    final localizations = AppLocalizations.of(context);
+
     return WillPopScope(
       onWillPop: () async {
         print('WillPopScope触发');
@@ -81,9 +58,9 @@ class _HomeScreenState extends State<HomeScreen> with WindowListener {
           // 显示提示信息
           if (context.mounted) {
             ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(
+              SnackBar(
                 content: Text('应用已最小化到系统托盘，点击托盘图标可重新打开'),
-                duration: Duration(seconds: 2),
+                duration: const Duration(seconds: 2),
               ),
             );
             print('提示信息已显示');
@@ -117,12 +94,27 @@ class _HomeScreenState extends State<HomeScreen> with WindowListener {
               _currentIndex = index;
             });
           },
-          items: const [
-            BottomNavigationBarItem(icon: Icon(Icons.home), label: '主页'),
-            BottomNavigationBarItem(icon: Icon(Icons.list), label: '代理源'),
-            BottomNavigationBarItem(icon: Icon(Icons.link), label: '代理列表'),
-            BottomNavigationBarItem(icon: Icon(Icons.route), label: '路由'),
-            BottomNavigationBarItem(icon: Icon(Icons.settings), label: '设置'),
+          items: [
+            BottomNavigationBarItem(
+              icon: const Icon(Icons.home),
+              label: localizations.get('home_tab'),
+            ),
+            BottomNavigationBarItem(
+              icon: const Icon(Icons.list),
+              label: localizations.get('config_tab'),
+            ),
+            BottomNavigationBarItem(
+              icon: const Icon(Icons.link),
+              label: localizations.get('proxy_list_tab'),
+            ),
+            BottomNavigationBarItem(
+              icon: const Icon(Icons.route),
+              label: localizations.get('routing_tab'),
+            ),
+            BottomNavigationBarItem(
+              icon: const Icon(Icons.settings),
+              label: localizations.get('settings_tab'),
+            ),
           ],
         ),
       ),
@@ -163,9 +155,9 @@ class _HomeScreenState extends State<HomeScreen> with WindowListener {
       // 显示提示信息
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
+          SnackBar(
             content: Text('应用已最小化到系统托盘，点击托盘图标可重新打开'),
-            duration: Duration(seconds: 2),
+            duration: const Duration(seconds: 2),
           ),
         );
       }
@@ -203,7 +195,8 @@ class _HomeScreenState extends State<HomeScreen> with WindowListener {
               print('调用隐藏程序坞图标方法失败: $error');
             });
       } catch (e) {
-        developer.log('调用隐藏程序坞图标方法失败: $e');
+        // ignore: avoid_print
+        print('调用隐藏程序坞图标方法失败: $e');
       }
     }
   }
@@ -222,7 +215,8 @@ class _HomeScreenState extends State<HomeScreen> with WindowListener {
               print('调用显示程序坞图标方法失败: $error');
             });
       } catch (e) {
-        developer.log('调用显示程序坞图标方法失败: $e');
+        // ignore: avoid_print
+        print('调用显示程序坞图标方法失败: $e');
       }
     }
   }
@@ -239,6 +233,8 @@ class CustomTitleBar extends StatelessWidget implements PreferredSizeWidget {
 
   @override
   Widget build(BuildContext context) {
+    final localizations = AppLocalizations.of(context);
+
     // 根据当前主题模式选择合适的背景色
     final isDarkMode = Theme.of(context).brightness == Brightness.dark;
     final backgroundColor = isDarkMode
@@ -263,7 +259,7 @@ class CustomTitleBar extends StatelessWidget implements PreferredSizeWidget {
       ),
       child: Center(
         child: Text(
-          '双捷VPN管理器',
+          localizations.get('app_title'),
           style: TextStyle(
             color: Colors.white,
             fontSize: 18,
@@ -427,6 +423,8 @@ class VPNStatusPanel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final localizations = AppLocalizations.of(context);
+
     return SingleChildScrollView(
       child: Card(
         margin: const EdgeInsets.all(16),
@@ -435,7 +433,10 @@ class VPNStatusPanel extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text('连接状态', style: Theme.of(context).textTheme.headlineSmall),
+              Text(
+                localizations.get('connection_status'),
+                style: Theme.of(context).textTheme.headlineSmall,
+              ),
               const SizedBox(height: 16),
               // 使用说明
               Container(
@@ -455,7 +456,7 @@ class VPNStatusPanel extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      '使用说明：',
+                      localizations.get('usage_instructions'),
                       style: TextStyle(
                         fontSize: 14,
                         fontWeight: FontWeight.bold,
@@ -463,17 +464,17 @@ class VPNStatusPanel extends StatelessWidget {
                       ),
                     ),
                     const SizedBox(height: 4),
-                    const Text(
-                      '1. 在"代理源"页面添加并启用代理配置',
-                      style: TextStyle(fontSize: 12),
+                    Text(
+                      localizations.get('instruction_1'),
+                      style: const TextStyle(fontSize: 12),
                     ),
-                    const Text(
-                      '2. 在"代理列表"页面选择具体的代理服务器',
-                      style: TextStyle(fontSize: 12),
+                    Text(
+                      localizations.get('instruction_2'),
+                      style: const TextStyle(fontSize: 12),
                     ),
-                    const Text(
-                      '3. 在本页面查看已启用的代理源和选中的代理',
-                      style: TextStyle(fontSize: 12),
+                    Text(
+                      localizations.get('instruction_3'),
+                      style: const TextStyle(fontSize: 12),
                     ),
                   ],
                 ),
@@ -481,7 +482,10 @@ class VPNStatusPanel extends StatelessWidget {
               const SizedBox(height: 16),
               // 显示已启用的代理源（仅作展示，不可交互）
               // 代理源的启用/禁用应在"代理源"页面中操作
-              Text('已启用代理源', style: Theme.of(context).textTheme.headlineSmall),
+              Text(
+                localizations.get('enabled_proxy_sources'),
+                style: Theme.of(context).textTheme.headlineSmall,
+              ),
               const SizedBox(height: 8),
               FutureBuilder<List<VPNConfig>>(
                 future: ConfigManager.loadConfigs(),
@@ -533,7 +537,7 @@ class VPNStatusPanel extends StatelessWidget {
                         ),
                       ),
                       child: Text(
-                        '暂无启用的代理源',
+                        localizations.get('no_enabled_proxy_sources'),
                         style: TextStyle(
                           color: Theme.of(context).hintColor,
                           fontStyle: FontStyle.italic,
@@ -547,7 +551,10 @@ class VPNStatusPanel extends StatelessWidget {
                     children: [
                       // OpenVPN代理源
                       if (openVPNConfigs.isNotEmpty) ...[
-                        const Text('OpenVPN:', style: TextStyle(fontSize: 14)),
+                        Text(
+                          localizations.get('openvpn_label'),
+                          style: const TextStyle(fontSize: 14),
+                        ),
                         const SizedBox(height: 4),
                         Wrap(
                           spacing: 8,
@@ -597,7 +604,10 @@ class VPNStatusPanel extends StatelessWidget {
 
                       // Clash代理源
                       if (clashConfigs.isNotEmpty) ...[
-                        const Text('Clash:', style: TextStyle(fontSize: 14)),
+                        Text(
+                          localizations.get('clash_label'),
+                          style: const TextStyle(fontSize: 14),
+                        ),
                         const SizedBox(height: 4),
                         Wrap(
                           spacing: 8,
@@ -647,9 +657,9 @@ class VPNStatusPanel extends StatelessWidget {
 
                       // Shadowsocks代理源
                       if (shadowsocksConfigs.isNotEmpty) ...[
-                        const Text(
-                          'Shadowsocks:',
-                          style: TextStyle(fontSize: 14),
+                        Text(
+                          localizations.get('shadowsocks_label'),
+                          style: const TextStyle(fontSize: 14),
                         ),
                         const SizedBox(height: 4),
                         Wrap(
@@ -701,7 +711,10 @@ class VPNStatusPanel extends StatelessWidget {
 
                       // V2Ray代理源
                       if (v2rayConfigs.isNotEmpty) ...[
-                        const Text('V2Ray:', style: TextStyle(fontSize: 14)),
+                        Text(
+                          localizations.get('v2ray_label'),
+                          style: const TextStyle(fontSize: 14),
+                        ),
                         const SizedBox(height: 4),
                         Wrap(
                           spacing: 8,
@@ -751,7 +764,10 @@ class VPNStatusPanel extends StatelessWidget {
 
                       // HTTP代理源
                       if (httpProxyConfigs.isNotEmpty) ...[
-                        const Text('HTTP代理:', style: TextStyle(fontSize: 14)),
+                        Text(
+                          localizations.get('http_proxy_label'),
+                          style: const TextStyle(fontSize: 14),
+                        ),
                         const SizedBox(height: 4),
                         Wrap(
                           spacing: 8,
@@ -802,7 +818,10 @@ class VPNStatusPanel extends StatelessWidget {
 
                       // SOCKS5代理源
                       if (socks5ProxyConfigs.isNotEmpty) ...[
-                        const Text('SOCKS5代理:', style: TextStyle(fontSize: 14)),
+                        Text(
+                          localizations.get('socks5_proxy_label'),
+                          style: const TextStyle(fontSize: 14),
+                        ),
                         const SizedBox(height: 4),
                         Wrap(
                           spacing: 8,
@@ -854,12 +873,18 @@ class VPNStatusPanel extends StatelessWidget {
               ),
               const SizedBox(height: 16),
               // 显示启用的代理源对应的代理列表中被选中的代理
-              Text('已选中代理', style: Theme.of(context).textTheme.headlineSmall),
+              Text(
+                localizations.get('selected_proxies'),
+                style: Theme.of(context).textTheme.headlineSmall,
+              ),
               const SizedBox(height: 8),
               const SelectedProxiesWidget(),
               const SizedBox(height: 16),
               // Go代理核心控制
-              Text('Go代理核心', style: Theme.of(context).textTheme.headlineSmall),
+              Text(
+                localizations.get('go_proxy_core'),
+                style: Theme.of(context).textTheme.headlineSmall,
+              ),
               const SizedBox(height: 8),
               Selector<AppState, bool>(
                 selector: (context, appState) => appState.isGoProxyRunning,
@@ -900,7 +925,7 @@ class VPNStatusPanel extends StatelessWidget {
                                   : Theme.of(context).hintColor,
                             ),
                             const SizedBox(width: 8),
-                            const Text('Go代理核心'),
+                            Text(localizations.get('go_proxy_core')),
                             const Spacer(),
                             // 显示实时上传下载速率
                             const GoProxyStatsWidget(),
@@ -915,8 +940,12 @@ class VPNStatusPanel extends StatelessWidget {
                                         ScaffoldMessenger.of(
                                           context,
                                         ).showSnackBar(
-                                          const SnackBar(
-                                            content: Text('Go代理核心已停止'),
+                                          SnackBar(
+                                            content: Text(
+                                              localizations.get(
+                                                'go_proxy_core_stopped',
+                                              ),
+                                            ),
                                           ),
                                         );
                                       }
@@ -930,16 +959,24 @@ class VPNStatusPanel extends StatelessWidget {
                                           ScaffoldMessenger.of(
                                             context,
                                           ).showSnackBar(
-                                            const SnackBar(
-                                              content: Text('Go代理核心启动成功'),
+                                            SnackBar(
+                                              content: Text(
+                                                localizations.get(
+                                                  'go_proxy_core_started',
+                                                ),
+                                              ),
                                             ),
                                           );
                                         } else {
                                           ScaffoldMessenger.of(
                                             context,
                                           ).showSnackBar(
-                                            const SnackBar(
-                                              content: Text('Go代理核心启动失败'),
+                                            SnackBar(
+                                              content: Text(
+                                                localizations.get(
+                                                  'go_proxy_core_start_failed',
+                                                ),
+                                              ),
                                             ),
                                           );
                                         }
@@ -955,10 +992,10 @@ class VPNStatusPanel extends StatelessWidget {
                               ),
                               child: Text(
                                 isStarting
-                                    ? '启动中...'
+                                    ? localizations.get('starting')
                                     : isGoProxyRunning
-                                    ? '停止'
-                                    : '启动',
+                                    ? localizations.get('stop')
+                                    : localizations.get('start'),
                               ),
                             ),
                           ],

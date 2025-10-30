@@ -3,6 +3,7 @@ import 'package:dualvpn_manager/models/vpn_config.dart';
 import 'package:dualvpn_manager/utils/config_manager.dart';
 import 'package:provider/provider.dart';
 import 'package:dualvpn_manager/models/app_state.dart';
+import 'package:dualvpn_manager/l10n/app_localizations_delegate.dart';
 import 'dart:math' as dart_math;
 
 class ConfigScreen extends StatefulWidget {
@@ -52,11 +53,13 @@ class _ConfigScreenState extends State<ConfigScreen> {
 
   // 添加新配置
   void _addConfig() async {
+    final localizations = AppLocalizations.of(context);
+
     if (_nameController.text.isEmpty) {
       if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(const SnackBar(content: Text('请填写配置名称')));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(localizations.get('please_fill_config_name'))),
+        );
       }
       return;
     }
@@ -71,9 +74,13 @@ class _ConfigScreenState extends State<ConfigScreen> {
       // 对于OpenVPN、Clash和支持订阅的类型，使用路径或订阅链接
       if (_pathController.text.isEmpty) {
         if (mounted) {
-          ScaffoldMessenger.of(
-            context,
-          ).showSnackBar(const SnackBar(content: Text('请填写配置路径或订阅链接')));
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                localizations.get('please_fill_config_path_or_subscription'),
+              ),
+            ),
+          );
         }
         return;
       }
@@ -88,9 +95,13 @@ class _ConfigScreenState extends State<ConfigScreen> {
       // 对于其他类型，使用服务器地址和端口
       if (_serverController.text.isEmpty || _portController.text.isEmpty) {
         if (mounted) {
-          ScaffoldMessenger.of(
-            context,
-          ).showSnackBar(const SnackBar(content: Text('请填写服务器地址和端口')));
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                localizations.get('please_fill_server_address_and_port'),
+              ),
+            ),
+          );
         }
         return;
       }
@@ -121,26 +132,30 @@ class _ConfigScreenState extends State<ConfigScreen> {
     _passwordController.clear();
 
     if (mounted) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('配置已添加')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(localizations.get('config_added'))),
+      );
     }
   }
 
   // 删除配置
   void _deleteConfig(String id) async {
+    final localizations = AppLocalizations.of(context);
+
     await ConfigManager.deleteConfig(id);
     _loadConfigs();
 
     if (mounted) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('配置已删除')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(localizations.get('config_deleted'))),
+      );
     }
   }
 
   // 测试连接延迟
   void _testLatency(VPNConfig config) async {
+    final localizations = AppLocalizations.of(context);
+
     // 模拟延迟测试
     if (mounted) {
       // 更新配置状态为测试中
@@ -177,22 +192,30 @@ class _ConfigScreenState extends State<ConfigScreen> {
         configs = finalConfigs;
       });
 
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('延迟测试完成: ${latency}ms')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            '${localizations.get('latency_test_completed')}: ${latency}ms',
+          ),
+        ),
+      );
     }
   }
 
   // 更新订阅(适用于所有代理类型)
   void _updateSubscription(VPNConfig config) async {
+    final localizations = AppLocalizations.of(context);
+
     // 对于OpenVPN类型，我们将其视为重新加载配置文件
     // 对于其他支持订阅的类型，执行实际的订阅更新
     if (config.type == VPNType.openVPN) {
       if (mounted) {
         // 显示更新中的提示
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(const SnackBar(content: Text('正在重新加载OpenVPN配置...')));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(localizations.get('reloading_openvpn_config')),
+          ),
+        );
       }
 
       try {
@@ -202,9 +225,13 @@ class _ConfigScreenState extends State<ConfigScreen> {
 
         if (mounted) {
           if (result) {
-            ScaffoldMessenger.of(
-              context,
-            ).showSnackBar(const SnackBar(content: Text('OpenVPN配置重新加载成功')));
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text(
+                  localizations.get('openvpn_config_reload_success'),
+                ),
+              ),
+            );
 
             // 更新配置列表以显示最新状态
             _loadConfigs();
@@ -217,14 +244,20 @@ class _ConfigScreenState extends State<ConfigScreen> {
               appState.loadProxies();
             }
           } else {
-            ScaffoldMessenger.of(
-              context,
-            ).showSnackBar(const SnackBar(content: Text('OpenVPN配置重新加载失败')));
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text(
+                  localizations.get('openvpn_config_reload_failed'),
+                ),
+              ),
+            );
           }
         }
       } catch (e) {
         if (mounted) {
-          String errorMessage = 'OpenVPN配置重新加载失败';
+          String errorMessage = localizations.get(
+            'openvpn_config_reload_failed',
+          );
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(content: Text('$errorMessage: ${e.toString()}')),
           );
@@ -236,27 +269,33 @@ class _ConfigScreenState extends State<ConfigScreen> {
     // 对于其他类型，保持原有的逻辑
     if (!config.type.supportsSubscription) {
       if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(const SnackBar(content: Text('该配置类型不支持订阅更新')));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              localizations.get('config_type_not_support_subscription'),
+            ),
+          ),
+        );
       }
       return;
     }
 
     if (!config.configPath.startsWith('http')) {
       if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(const SnackBar(content: Text('配置不是订阅链接')));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(localizations.get('config_not_subscription_link')),
+          ),
+        );
       }
       return;
     }
 
     if (mounted) {
       // 显示更新中的提示
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('正在更新订阅...')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(localizations.get('updating_subscription'))),
+      );
     }
 
     try {
@@ -266,9 +305,11 @@ class _ConfigScreenState extends State<ConfigScreen> {
 
       if (mounted) {
         if (result) {
-          ScaffoldMessenger.of(
-            context,
-          ).showSnackBar(const SnackBar(content: Text('订阅更新成功')));
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(localizations.get('subscription_update_success')),
+            ),
+          );
 
           // 更新配置列表以显示最新状态
           _loadConfigs();
@@ -281,30 +322,34 @@ class _ConfigScreenState extends State<ConfigScreen> {
             appState.loadProxies();
           }
         } else {
-          ScaffoldMessenger.of(
-            context,
-          ).showSnackBar(const SnackBar(content: Text('订阅更新失败，请检查网络连接和订阅链接')));
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                localizations.get('subscription_update_failed_check_network'),
+              ),
+            ),
+          );
         }
       }
     } catch (e) {
       if (mounted) {
-        String errorMessage = '订阅更新失败';
+        String errorMessage = localizations.get('subscription_update_failed');
         if (e.toString().contains('网络连接错误')) {
-          errorMessage = '网络连接错误，请检查网络连接';
+          errorMessage = localizations.get('network_connection_error');
         } else if (e.toString().contains('TLS/SSL')) {
-          errorMessage = 'SSL证书错误，请检查服务器证书';
+          errorMessage = localizations.get('ssl_certificate_error');
         } else if (e.toString().contains('TLS握手')) {
-          errorMessage = 'TLS握手失败，请检查服务器配置';
+          errorMessage = localizations.get('tls_handshake_failed');
         } else if (e.toString().contains('404')) {
-          errorMessage = '订阅链接不存在，请检查链接是否正确';
+          errorMessage = localizations.get('subscription_link_not_exist');
         } else if (e.toString().contains('超时')) {
-          errorMessage = '连接超时，请稍后重试';
+          errorMessage = localizations.get('connection_timeout');
         } else if (e.toString().contains('配置不是有效的YAML格式')) {
-          errorMessage = '配置格式错误，请检查订阅链接内容';
+          errorMessage = localizations.get('config_format_error');
         } else if (e.toString().contains('配置内容无效')) {
-          errorMessage = '配置内容无效，请检查订阅链接内容';
+          errorMessage = localizations.get('config_content_invalid');
         } else if (e.toString().contains('访问被拒绝')) {
-          errorMessage = '访问被拒绝，请检查订阅链接权限';
+          errorMessage = localizations.get('access_denied');
         }
 
         ScaffoldMessenger.of(context).showSnackBar(
@@ -348,47 +393,55 @@ class _ConfigScreenState extends State<ConfigScreen> {
     showDialog(
       context: context,
       builder: (BuildContext context) {
+        final localizations = AppLocalizations.of(context);
+
         return AlertDialog(
-          title: const Text('编辑代理源'),
+          title: Text(localizations.get('edit_proxy_source')),
           content: SingleChildScrollView(
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
                 TextField(
                   controller: _editNameController,
-                  decoration: const InputDecoration(labelText: '代理源名称'),
+                  decoration: InputDecoration(
+                    labelText: localizations.get('proxy_source_name'),
+                  ),
                 ),
                 const SizedBox(height: 16),
                 DropdownButtonFormField<VPNType>(
                   value: _editSelectedType,
-                  decoration: const InputDecoration(labelText: '代理类型'),
+                  decoration: InputDecoration(
+                    labelText: localizations.get('proxy_type'),
+                  ),
                   items: VPNType.values.map((type) {
                     String label;
                     switch (type) {
                       case VPNType.openVPN:
-                        label = 'OpenVPN (.ovpn/.conf/.tblk)';
+                        label = localizations.get('openvpn_config_file');
                         break;
                       case VPNType.clash:
-                        label = 'Clash (配置文件/订阅链接)';
+                        label = localizations.get('clash_config_subscription');
                         break;
                       case VPNType.shadowsocks:
                         label = type.supportsSubscription
-                            ? 'Shadowsocks (配置文件/订阅链接)'
-                            : 'Shadowsocks';
+                            ? localizations.get(
+                                'shadowsocks_config_subscription',
+                              )
+                            : localizations.get('shadowsocks');
                         break;
                       case VPNType.v2ray:
                         label = type.supportsSubscription
-                            ? 'V2Ray (配置文件/订阅链接)'
-                            : 'V2Ray';
+                            ? localizations.get('v2ray_config_subscription')
+                            : localizations.get('v2ray');
                         break;
                       case VPNType.httpProxy:
-                        label = 'HTTP代理';
+                        label = localizations.get('http_proxy');
                         break;
                       case VPNType.socks5:
-                        label = 'SOCKS5代理';
+                        label = localizations.get('socks5_proxy');
                         break;
                       case VPNType.custom:
-                        label = '自定义代理';
+                        label = localizations.get('custom_proxy');
                         break;
                     }
                     return DropdownMenuItem(value: type, child: Text(label));
@@ -412,10 +465,12 @@ class _ConfigScreenState extends State<ConfigScreen> {
                         controller: _editPathController,
                         decoration: InputDecoration(
                           labelText: _editSelectedType == VPNType.openVPN
-                              ? '配置文件路径'
+                              ? localizations.get('config_file_path')
                               : _editSelectedType.supportsSubscription
-                              ? '配置文件路径或订阅链接'
-                              : '配置文件路径',
+                              ? localizations.get(
+                                  'config_file_path_or_subscription',
+                                )
+                              : localizations.get('config_file_path'),
                         ),
                       ),
                       const SizedBox(height: 16),
@@ -423,15 +478,15 @@ class _ConfigScreenState extends State<ConfigScreen> {
                       if (_editSelectedType == VPNType.openVPN) ...[
                         TextField(
                           controller: _editUsernameController,
-                          decoration: const InputDecoration(
-                            labelText: '用户名(可选)',
+                          decoration: InputDecoration(
+                            labelText: localizations.get('username_optional'),
                           ),
                         ),
                         const SizedBox(height: 16),
                         TextField(
                           controller: _editPasswordController,
-                          decoration: const InputDecoration(
-                            labelText: '密码(可选)',
+                          decoration: InputDecoration(
+                            labelText: localizations.get('password_optional'),
                           ),
                           obscureText: true,
                         ),
@@ -444,23 +499,31 @@ class _ConfigScreenState extends State<ConfigScreen> {
                     children: [
                       TextField(
                         controller: _editServerController,
-                        decoration: const InputDecoration(labelText: '服务器地址'),
+                        decoration: InputDecoration(
+                          labelText: localizations.get('server_address'),
+                        ),
                       ),
                       const SizedBox(height: 16),
                       TextField(
                         controller: _editPortController,
-                        decoration: const InputDecoration(labelText: '端口'),
+                        decoration: InputDecoration(
+                          labelText: localizations.get('port'),
+                        ),
                         keyboardType: TextInputType.number,
                       ),
                       const SizedBox(height: 16),
                       TextField(
                         controller: _editUsernameController,
-                        decoration: const InputDecoration(labelText: '用户名(可选)'),
+                        decoration: InputDecoration(
+                          labelText: localizations.get('username_optional'),
+                        ),
                       ),
                       const SizedBox(height: 16),
                       TextField(
                         controller: _editPasswordController,
-                        decoration: const InputDecoration(labelText: '密码(可选)'),
+                        decoration: InputDecoration(
+                          labelText: localizations.get('password_optional'),
+                        ),
                         obscureText: true,
                       ),
                     ],
@@ -476,14 +539,14 @@ class _ConfigScreenState extends State<ConfigScreen> {
                   _editingConfig = null;
                 });
               },
-              child: const Text('取消'),
+              child: Text(localizations.get('cancel')),
             ),
             ElevatedButton(
               onPressed: () {
                 _saveEditedConfig();
                 Navigator.of(context).pop();
               },
-              child: const Text('保存'),
+              child: Text(localizations.get('save')),
             ),
           ],
         );
@@ -493,6 +556,8 @@ class _ConfigScreenState extends State<ConfigScreen> {
 
   // 保存编辑后的配置
   void _saveEditedConfig() async {
+    final localizations = AppLocalizations.of(context);
+
     if (_editNameController.text.isEmpty || _editingConfig == null) {
       return;
     }
@@ -507,9 +572,13 @@ class _ConfigScreenState extends State<ConfigScreen> {
       // 对于OpenVPN、Clash和支持订阅的类型，使用路径或订阅链接
       if (_editPathController.text.isEmpty) {
         if (mounted) {
-          ScaffoldMessenger.of(
-            context,
-          ).showSnackBar(const SnackBar(content: Text('请填写配置路径或订阅链接')));
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                localizations.get('please_fill_config_path_or_subscription'),
+              ),
+            ),
+          );
         }
         return;
       }
@@ -525,9 +594,13 @@ class _ConfigScreenState extends State<ConfigScreen> {
       if (_editServerController.text.isEmpty ||
           _editPortController.text.isEmpty) {
         if (mounted) {
-          ScaffoldMessenger.of(
-            context,
-          ).showSnackBar(const SnackBar(content: Text('请填写服务器地址和端口')));
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                localizations.get('please_fill_server_address_and_port'),
+              ),
+            ),
+          );
         }
         return;
       }
@@ -562,14 +635,16 @@ class _ConfigScreenState extends State<ConfigScreen> {
     });
 
     if (mounted) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('配置已更新')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(localizations.get('config_updated'))),
+      );
     }
   }
 
   @override
   Widget build(BuildContext context) {
+    final localizations = AppLocalizations.of(context);
+
     return Scaffold(
       body: Padding(
         padding: const EdgeInsets.all(16.0),
@@ -589,51 +664,57 @@ class _ConfigScreenState extends State<ConfigScreen> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        '添加新代理源',
+                        localizations.get('add_new_proxy_source'),
                         style: Theme.of(context).textTheme.headlineSmall,
                       ),
                       const SizedBox(height: 16),
                       TextField(
                         controller: _nameController,
-                        decoration: const InputDecoration(
-                          labelText: '代理源名称',
-                          prefixIcon: Icon(Icons.label),
+                        decoration: InputDecoration(
+                          labelText: localizations.get('proxy_source_name'),
+                          prefixIcon: const Icon(Icons.label),
                         ),
                       ),
                       const SizedBox(height: 16),
                       DropdownButtonFormField<VPNType>(
                         value: _selectedType,
-                        decoration: const InputDecoration(
-                          labelText: '代理类型',
-                          prefixIcon: Icon(Icons.category),
+                        decoration: InputDecoration(
+                          labelText: localizations.get('proxy_type'),
+                          prefixIcon: const Icon(Icons.category),
                         ),
                         items: VPNType.values.map((type) {
                           String label;
                           switch (type) {
                             case VPNType.openVPN:
-                              label = 'OpenVPN (.ovpn/.conf/.tblk)';
+                              label = localizations.get('openvpn_config_file');
                               break;
                             case VPNType.clash:
-                              label = 'Clash (配置文件/订阅链接)';
+                              label = localizations.get(
+                                'clash_config_subscription',
+                              );
                               break;
                             case VPNType.shadowsocks:
                               label = type.supportsSubscription
-                                  ? 'Shadowsocks (配置文件/订阅链接)'
-                                  : 'Shadowsocks';
+                                  ? localizations.get(
+                                      'shadowsocks_config_subscription',
+                                    )
+                                  : localizations.get('shadowsocks');
                               break;
                             case VPNType.v2ray:
                               label = type.supportsSubscription
-                                  ? 'V2Ray (配置文件/订阅链接)'
-                                  : 'V2Ray';
+                                  ? localizations.get(
+                                      'v2ray_config_subscription',
+                                    )
+                                  : localizations.get('v2ray');
                               break;
                             case VPNType.httpProxy:
-                              label = 'HTTP代理';
+                              label = localizations.get('http_proxy');
                               break;
                             case VPNType.socks5:
-                              label = 'SOCKS5代理';
+                              label = localizations.get('socks5_proxy');
                               break;
                             case VPNType.custom:
-                              label = '自定义代理';
+                              label = localizations.get('custom_proxy');
                               break;
                           }
                           return DropdownMenuItem(
@@ -660,10 +741,12 @@ class _ConfigScreenState extends State<ConfigScreen> {
                               controller: _pathController,
                               decoration: InputDecoration(
                                 labelText: _selectedType == VPNType.openVPN
-                                    ? '配置文件路径'
+                                    ? localizations.get('config_file_path')
                                     : _selectedType.supportsSubscription
-                                    ? '配置文件路径或订阅链接'
-                                    : '配置文件路径',
+                                    ? localizations.get(
+                                        'config_file_path_or_subscription',
+                                      )
+                                    : localizations.get('config_file_path'),
                                 prefixIcon: const Icon(Icons.file_present),
                               ),
                             ),
@@ -672,17 +755,21 @@ class _ConfigScreenState extends State<ConfigScreen> {
                             if (_selectedType == VPNType.openVPN) ...[
                               TextField(
                                 controller: _usernameController,
-                                decoration: const InputDecoration(
-                                  labelText: '用户名(可选)',
-                                  prefixIcon: Icon(Icons.person),
+                                decoration: InputDecoration(
+                                  labelText: localizations.get(
+                                    'username_optional',
+                                  ),
+                                  prefixIcon: const Icon(Icons.person),
                                 ),
                               ),
                               const SizedBox(height: 16),
                               TextField(
                                 controller: _passwordController,
-                                decoration: const InputDecoration(
-                                  labelText: '密码(可选)',
-                                  prefixIcon: Icon(Icons.lock),
+                                decoration: InputDecoration(
+                                  labelText: localizations.get(
+                                    'password_optional',
+                                  ),
+                                  prefixIcon: const Icon(Icons.lock),
                                 ),
                                 obscureText: true,
                               ),
@@ -695,34 +782,38 @@ class _ConfigScreenState extends State<ConfigScreen> {
                           children: [
                             TextField(
                               controller: _serverController,
-                              decoration: const InputDecoration(
-                                labelText: '服务器地址',
-                                prefixIcon: Icon(Icons.dns),
+                              decoration: InputDecoration(
+                                labelText: localizations.get('server_address'),
+                                prefixIcon: const Icon(Icons.dns),
                               ),
                             ),
                             const SizedBox(height: 16),
                             TextField(
                               controller: _portController,
-                              decoration: const InputDecoration(
-                                labelText: '端口',
-                                prefixIcon: Icon(Icons.portrait),
+                              decoration: InputDecoration(
+                                labelText: localizations.get('port'),
+                                prefixIcon: const Icon(Icons.portrait),
                               ),
                               keyboardType: TextInputType.number,
                             ),
                             const SizedBox(height: 16),
                             TextField(
                               controller: _usernameController,
-                              decoration: const InputDecoration(
-                                labelText: '用户名(可选)',
-                                prefixIcon: Icon(Icons.person),
+                              decoration: InputDecoration(
+                                labelText: localizations.get(
+                                  'username_optional',
+                                ),
+                                prefixIcon: const Icon(Icons.person),
                               ),
                             ),
                             const SizedBox(height: 16),
                             TextField(
                               controller: _passwordController,
-                              decoration: const InputDecoration(
-                                labelText: '密码(可选)',
-                                prefixIcon: Icon(Icons.lock),
+                              decoration: InputDecoration(
+                                labelText: localizations.get(
+                                  'password_optional',
+                                ),
+                                prefixIcon: const Icon(Icons.lock),
                               ),
                               obscureText: true,
                             ),
@@ -734,7 +825,7 @@ class _ConfigScreenState extends State<ConfigScreen> {
                         child: ElevatedButton.icon(
                           onPressed: _addConfig,
                           icon: const Icon(Icons.add),
-                          label: const Text('添加代理源'),
+                          label: Text(localizations.get('add_proxy_source')),
                           style: ElevatedButton.styleFrom(
                             padding: const EdgeInsets.symmetric(
                               horizontal: 24,
@@ -752,7 +843,10 @@ class _ConfigScreenState extends State<ConfigScreen> {
               ),
               const SizedBox(height: 20),
               // 配置列表
-              Text('代理源列表', style: Theme.of(context).textTheme.headlineSmall),
+              Text(
+                localizations.get('proxy_source_list'),
+                style: Theme.of(context).textTheme.headlineSmall,
+              ),
               const SizedBox(height: 10),
               ListView.builder(
                 shrinkWrap: true,
@@ -810,7 +904,7 @@ class _ConfigScreenState extends State<ConfigScreen> {
                             Text(_getTypeLabel(config.type)),
                             if (config.latency >= 0)
                               Text(
-                                '延迟: ${config.latency}ms',
+                                '${localizations.get('latency')}: ${config.latency}ms',
                                 style: TextStyle(
                                   fontSize: 12,
                                   color: config.latency < 300
@@ -822,7 +916,7 @@ class _ConfigScreenState extends State<ConfigScreen> {
                               ),
                             // 调试信息：显示配置路径
                             Text(
-                              '路径: ${config.configPath}',
+                              '${localizations.get('path')}: ${config.configPath}',
                               style: const TextStyle(
                                 fontSize: 10,
                                 color: Colors.grey,
@@ -830,7 +924,7 @@ class _ConfigScreenState extends State<ConfigScreen> {
                             ),
                             // 显示启用状态
                             Text(
-                              config.isActive ? '状态: 已启用' : '状态: 已禁用',
+                              '${localizations.get('status')}: ${config.isActive ? localizations.get('enabled') : localizations.get('disabled')}',
                               style: TextStyle(
                                 fontSize: 12,
                                 color: config.isActive
@@ -847,7 +941,7 @@ class _ConfigScreenState extends State<ConfigScreen> {
                             IconButton(
                               icon: const Icon(Icons.speed),
                               onPressed: () => _testLatency(config),
-                              tooltip: '测试延迟',
+                              tooltip: localizations.get('test_latency'),
                             ),
                             // 订阅更新按钮(适用于支持更新的代理类型)
                             // OpenVPN类型显示更新按钮用于重新加载配置文件
@@ -859,14 +953,14 @@ class _ConfigScreenState extends State<ConfigScreen> {
                                 icon: const Icon(Icons.refresh),
                                 onPressed: () => _updateSubscription(config),
                                 tooltip: config.type == VPNType.openVPN
-                                    ? '重新加载配置'
-                                    : '更新订阅',
+                                    ? localizations.get('reload_config')
+                                    : localizations.get('update_subscription'),
                               ),
                             // 编辑按钮
                             IconButton(
                               icon: const Icon(Icons.edit),
                               onPressed: () => _editConfig(config),
-                              tooltip: '编辑配置',
+                              tooltip: localizations.get('edit_config'),
                             ),
                             // 使用Switch并正确设置value参数
                             Switch(
@@ -949,6 +1043,8 @@ class _ConfigScreenState extends State<ConfigScreen> {
 
   // 更新配置状态
   void _updateConfigStatus(VPNConfig config, bool isActive) async {
+    final localizations = AppLocalizations.of(context);
+
     // 创建更新后的配置对象
     final updatedConfig = config.copyWith(isActive: isActive);
 
@@ -957,9 +1053,13 @@ class _ConfigScreenState extends State<ConfigScreen> {
     _loadConfigs();
 
     if (mounted) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('配置已${isActive ? '启用' : '禁用'}')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            '${localizations.get('config')} ${isActive ? localizations.get('enabled') : localizations.get('disabled')}',
+          ),
+        ),
+      );
     }
   }
 }

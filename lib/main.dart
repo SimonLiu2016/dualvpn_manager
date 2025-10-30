@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:provider/provider.dart';
 import 'package:window_manager/window_manager.dart';
 import 'models/app_state.dart';
@@ -6,6 +7,8 @@ import 'ui/screens/home_screen.dart';
 import 'utils/tray_manager.dart';
 import 'utils/logger.dart';
 import 'utils/app_theme.dart';
+import 'l10n/app_localizations_delegate.dart';
+import 'package:flutter/foundation.dart';
 
 void main() async {
   // 确保Flutter绑定已初始化
@@ -108,8 +111,60 @@ class DualVPNApp extends StatelessWidget {
           themeMode: appState.themeMode,
           navigatorKey: appState.navigatorKey,
           home: HomeScreen(),
+          // 添加国际化支持
+          locale: appState.language == 'en'
+              ? const Locale('en', '')
+              : appState.language == 'fr'
+              ? const Locale('fr', '')
+              : const Locale('zh', ''),
+          supportedLocales: AppLocalizations.supportedLocales,
+          localizationsDelegates: [
+            // 自定义本地化代理
+            _AppLocalizationsDelegate(),
+            // Flutter内置的本地化代理
+            GlobalMaterialLocalizations.delegate,
+            GlobalWidgetsLocalizations.delegate,
+            GlobalCupertinoLocalizations.delegate,
+          ],
+          // 如果设备语言不支持，则使用中文
+          localeResolutionCallback: (locale, supportedLocales) {
+            if (locale != null) {
+              for (var supportedLocale in supportedLocales) {
+                if (supportedLocale.languageCode == locale.languageCode) {
+                  return supportedLocale;
+                }
+              }
+            }
+            return const Locale('zh', ''); // 默认使用中文
+          },
         );
       },
     );
   }
+}
+
+// 自定义本地化代理
+class _AppLocalizationsDelegate
+    extends LocalizationsDelegate<AppLocalizations> {
+  const _AppLocalizationsDelegate();
+
+  @override
+  bool isSupported(Locale locale) {
+    return ['zh', 'en', 'fr'].contains(locale.languageCode);
+  }
+
+  @override
+  Future<AppLocalizations> load(Locale locale) {
+    return SynchronousFuture<AppLocalizations>(AppLocalizations(locale));
+  }
+
+  @override
+  bool shouldReload(_AppLocalizationsDelegate old) => false;
+
+  @override
+  List<Locale> get supportedLocales => const [
+    Locale('zh', ''), // 简体中文
+    Locale('en', ''), // 英文
+    Locale('fr', ''), // 法文
+  ];
 }

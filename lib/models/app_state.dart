@@ -30,6 +30,12 @@ class AppState extends ChangeNotifier {
   // 添加主题模式存储键
   static const String _themeModeKey = 'theme_mode';
 
+  // 语言设置相关
+  static const String _languageKey = 'selected_language';
+  String _language = 'zh'; // 默认中文
+
+  String get language => _language;
+
   // 添加路由规则更新队列和锁
   bool _isUpdatingRules = false;
   final List<Future<void> Function()> _pendingRuleUpdates = [];
@@ -68,6 +74,10 @@ class AppState extends ChangeNotifier {
     Logger.info('开始加载主题模式...');
     _loadThemeMode();
     Logger.info('主题模式加载完成');
+    // 初始化时加载语言设置
+    Logger.info('开始加载语言设置...');
+    _loadLanguage();
+    Logger.info('语言设置加载完成');
     // 监听特权助手安装完成的通知
     _listenForHelperInstallation();
     // 初始化时启动Go代理核心
@@ -3069,5 +3079,24 @@ class AppState extends ChangeNotifier {
     _themeMode = mode;
     _saveThemeMode();
     notifyListeners();
+  }
+
+  // 加载语言设置
+  Future<void> _loadLanguage() async {
+    final prefs = await SharedPreferences.getInstance();
+    _language = prefs.getString(_languageKey) ?? 'zh';
+  }
+
+  // 设置语言
+  Future<void> setLanguage(String languageCode) async {
+    _language = languageCode;
+    await _saveLanguage();
+    notifyListeners();
+  }
+
+  // 保存语言设置
+  Future<void> _saveLanguage() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_languageKey, _language);
   }
 }

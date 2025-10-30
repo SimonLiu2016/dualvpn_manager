@@ -5,6 +5,7 @@ import 'package:dualvpn_manager/models/vpn_config.dart';
 import 'package:dualvpn_manager/utils/config_manager.dart';
 import 'package:dualvpn_manager/utils/logger.dart';
 import 'package:dualvpn_manager/ui/widgets/proxy_list_widget.dart';
+import 'package:dualvpn_manager/l10n/app_localizations_delegate.dart';
 import 'dart:math' as dart_math;
 
 class ProxyListScreen extends StatefulWidget {
@@ -103,6 +104,7 @@ class _ProxyListScreenState extends State<ProxyListScreen> {
   // 测试单个代理延迟
   void _testLatency(String proxyName) async {
     final appState = Provider.of<AppState>(context, listen: false);
+    final localizations = AppLocalizations.of(context);
 
     // 显示测试中状态
     appState.updateProxyLatency(proxyName, -1); // -1表示测试中
@@ -118,20 +120,25 @@ class _ProxyListScreenState extends State<ProxyListScreen> {
     appState.updateProxyLatency(proxyName, latency);
 
     if (mounted) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('$proxyName 延迟: ${latency}ms')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            '$proxyName ${localizations.get('latency')}: ${latency}ms',
+          ),
+        ),
+      );
     }
   }
 
   // 刷新所有代理延迟
   void _refreshAllLatencies() async {
     final appState = Provider.of<AppState>(context, listen: false);
+    final localizations = AppLocalizations.of(context);
 
     if (mounted) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('正在测试所有代理延迟...')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(localizations.get('refresh_all_latency'))),
+      );
     }
 
     // 更新所有代理为测试中状态
@@ -150,9 +157,13 @@ class _ProxyListScreenState extends State<ProxyListScreen> {
     }
 
     if (mounted) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('所有代理延迟测试完成')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            localizations.get('all_proxies_latency_test_completed'),
+          ),
+        ),
+      );
     }
   }
 
@@ -170,6 +181,8 @@ class _ProxyListScreenState extends State<ProxyListScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final localizations = AppLocalizations.of(context);
+
     return Scaffold(
       body: Padding(
         padding: const EdgeInsets.all(16.0),
@@ -188,10 +201,10 @@ class _ProxyListScreenState extends State<ProxyListScreen> {
                     Expanded(
                       child: DropdownButtonFormField<VPNConfig>(
                         value: _selectedConfig,
-                        decoration: const InputDecoration(
-                          labelText: '选择代理源',
+                        decoration: InputDecoration(
+                          labelText: localizations.get('proxy_source_label'),
                           border: InputBorder.none,
-                          prefixIcon: Icon(Icons.source),
+                          prefixIcon: const Icon(Icons.source),
                         ),
                         items: _configs.map((config) {
                           return DropdownMenuItem<VPNConfig>(
@@ -209,7 +222,7 @@ class _ProxyListScreenState extends State<ProxyListScreen> {
                     IconButton(
                       icon: const Icon(Icons.refresh),
                       onPressed: _refreshAllLatencies,
-                      tooltip: '刷新所有延迟',
+                      tooltip: localizations.get('refresh_all_latency'),
                     ),
                   ],
                 ),
