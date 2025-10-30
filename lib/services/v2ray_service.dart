@@ -94,7 +94,13 @@ class V2RayService {
   Future<bool> startWithSubscription(String subscriptionUrl) async {
     try {
       // 下载配置文件
-      final response = await http.get(Uri.parse(subscriptionUrl));
+      final response = await http.get(
+        Uri.parse(subscriptionUrl),
+        headers: {
+          'User-Agent':
+              'ClashX/1.116.0 (com.west2online.ClashX; build:1.116.0; macOS 15.7.1) Alamofire/5.7.1',
+        },
+      );
       if (response.statusCode != 200) {
         Logger.error('下载V2Ray订阅配置失败: ${response.statusCode}');
         throw Exception('下载V2Ray订阅配置失败: ${response.statusCode}');
@@ -143,7 +149,13 @@ class V2RayService {
 
         // 下载新的配置文件
         final response = await http
-            .get(Uri.parse(subscriptionUrl))
+            .get(
+              Uri.parse(subscriptionUrl),
+              headers: {
+                'User-Agent':
+                    'ClashX/1.116.0 (com.west2online.ClashX; build:1.116.0; macOS 15.7.1) Alamofire/5.7.1',
+              },
+            )
             .timeout(
               const Duration(seconds: 30),
               onTimeout: () {
@@ -184,74 +196,33 @@ class V2RayService {
 
         // 验证配置内容是否有效
         if (configContent.trim().isEmpty) {
-          Logger.error('V2Ray订阅配置内容为空');
-          throw Exception('V2Ray订阅配置内容为空');
+          Logger.error('V2Ray订阅内容为空');
+          throw Exception('V2Ray订阅内容为空');
         }
 
-        // 检查配置内容是否看起来像有效的JSON或V2Ray配置
-        bool isValidConfig = false;
-        try {
-          // 尝试解析为JSON来验证是否是有效的配置
-          final jsonConfig = json.decode(configContent);
-          // 检查是否包含V2Ray配置的关键字段
-          if (jsonConfig is Map &&
-              (jsonConfig.containsKey('inbounds') ||
-                  jsonConfig.containsKey('outbounds') ||
-                  jsonConfig.containsKey('routing'))) {
-            isValidConfig = true;
-          }
-        } catch (e) {
-          // 如果不是JSON，检查是否包含V2Ray URL格式
-          if (configContent.contains('vmess://') ||
-              configContent.contains('vless://') ||
-              configContent.contains('trojan://')) {
-            isValidConfig = true;
-          }
-        }
-
-        // 如果配置无效，抛出异常
-        if (!isValidConfig) {
-          Logger.error('V2Ray订阅配置内容无效');
-          throw Exception('V2Ray订阅配置内容无效');
-        }
-
-        // 检查是否有现有的配置文件路径
-        if (_configPath == null) {
-          Logger.info('没有找到现有的配置文件路径，创建临时配置文件');
-          // 创建临时目录和配置文件
+        // 保存配置到现有配置文件或创建新文件
+        if (_configPath != null) {
+          // 保存到现有配置文件
+          final configFile = File(_configPath!);
+          await configFile.writeAsString(configContent);
+          Logger.info('V2Ray配置已更新到: ${_configPath!}');
+        } else {
+          // 创建临时配置文件
           final tempDir = await Directory.systemTemp.createTemp('v2ray_config');
           final configFile = File(path.join(tempDir.path, 'config.json'));
           await configFile.writeAsString(configContent);
-
-          // 保存配置文件路径
           _configPath = configFile.path;
-
-          // 如果V2Ray正在运行，重新启动它
-          if (_isConnected && _process != null) {
-            await stop();
-            final result = await startWithConfig(_configPath!);
-            if (!result) {
-              Logger.error('V2Ray启动失败');
-              throw Exception('V2Ray启动失败');
-            }
-            return result;
-          }
-
-          Logger.info('V2Ray订阅更新成功（保存到临时文件）');
-          return true;
+          Logger.info('V2Ray配置已保存到临时文件: ${_configPath!}');
         }
 
-        // 保存新的配置到现有文件
-        final configFile = File(_configPath!);
-        await configFile.writeAsString(configContent);
-
-        // 重新启动V2Ray以应用新配置
+        // 如果V2Ray正在运行，重新启动它以应用新配置
         if (_isConnected && _process != null) {
+          Logger.info('V2Ray正在运行，重新启动以应用新配置');
           await stop();
           final result = await startWithConfig(_configPath!);
           if (!result) {
-            Logger.error('V2Ray启动失败');
-            throw Exception('V2Ray启动失败');
+            Logger.error('V2Ray重新启动失败');
+            throw Exception('V2Ray重新启动失败');
           }
           return result;
         }
@@ -268,8 +239,19 @@ class V2RayService {
         } else {
           throw Exception('网络连接错误，请检查网络连接');
         }
+      } on TlsException catch (e) {
+        Logger.error('TLS/SSL错误: $e');
+        retryCount++;
+
+        if (retryCount <= maxRetries) {
+          Logger.info('等待${retryDelay.inSeconds}秒后重试...');
+          await Future.delayed(retryDelay);
+        } else {
+          throw Exception('TLS/SSL连接错误，请检查服务器证书');
+        }
       } catch (e, stackTrace) {
         Logger.error('更新V2Ray订阅失败: $e\nStack trace: $stackTrace');
+        // 修复：确保返回false而不是重新抛出异常，以避免UI层处理复杂化
         if (e.toString().contains('404')) {
           throw Exception('订阅链接不存在，请检查链接是否正确');
         } else if (e.toString().contains('timeout')) {
@@ -283,7 +265,7 @@ class V2RayService {
             throw Exception('连接超时，请稍后重试');
           }
         }
-        rethrow;
+        return false;
       }
     }
 
@@ -396,7 +378,13 @@ class V2RayService {
       Logger.info('开始从订阅链接解析V2Ray代理列表: $subscriptionUrl');
 
       // 下载订阅内容
-      final response = await http.get(Uri.parse(subscriptionUrl));
+      final response = await http.get(
+        Uri.parse(subscriptionUrl),
+        headers: {
+          'User-Agent':
+              'ClashX/1.116.0 (com.west2online.ClashX; build:1.116.0; macOS 15.7.1) Alamofire/5.7.1',
+        },
+      );
 
       // 检查HTTP响应状态码
       if (response.statusCode >= 300) {
@@ -433,135 +421,50 @@ class V2RayService {
         // 尝试解析JSON格式的配置
         final jsonConfig = json.decode(configContent);
 
-        // 处理V2Ray配置格式
-        if (jsonConfig is Map<String, dynamic>) {
-          // 处理outbounds配置
-          if (jsonConfig.containsKey('outbounds') &&
-              jsonConfig['outbounds'] is List) {
-            final outboundsList = jsonConfig['outbounds'] as List;
-            for (var i = 0; i < outboundsList.length; i++) {
-              final outbound = outboundsList[i];
+        // 检查是否存在outbounds字段
+        if (jsonConfig is Map<String, dynamic> &&
+            jsonConfig.containsKey('outbounds')) {
+          final outbounds = jsonConfig['outbounds'] as List?;
+          if (outbounds != null) {
+            for (int i = 0; i < outbounds.length; i++) {
+              final outbound = outbounds[i];
               if (outbound is Map<String, dynamic>) {
                 final name =
                     outbound['tag'] ??
                     outbound['name'] ??
                     'V2Ray Outbound ${i + 1}';
                 final protocol = outbound['protocol'] ?? 'unknown';
-                
-                // 构建代理信息
-                final proxyInfo = {
+                proxies.add({
                   'name': name,
                   'type': 'v2ray',
                   'protocol': protocol,
                   'latency': -2, // -2表示未测试
                   'isSelected': false,
-                };
-                
-                // 添加协议特定的配置信息
-                if (outbound.containsKey('settings')) {
-                  proxyInfo['settings'] = outbound['settings'];
-                }
-                if (outbound.containsKey('streamSettings')) {
-                  proxyInfo['streamSettings'] = outbound['streamSettings'];
-                }
-                
-                proxies.add(proxyInfo);
+                });
               }
             }
           }
         }
       } catch (e) {
-        // 如果JSON解析失败，尝试按行解析（可能是一行一个vmess://链接的格式）
-        final lines = configContent.split('\n');
-        for (var i = 0; i < lines.length; i++) {
-          final line = lines[i].trim();
-          if (line.isNotEmpty &&
-              (line.startsWith('vmess://') ||
-                  line.startsWith('vless://') ||
-                  line.startsWith('trojan://'))) {
-            // 简单解析URL格式的V2Ray配置
-            try {
-              // V2Ray链接通常是base64编码的JSON
-              final uri = Uri.parse(line);
-              final name =
-                  (uri.fragment.isNotEmpty
-                      ? Uri.decodeComponent(uri.fragment)
-                      : null) ??
-                  uri.queryParameters['remarks'] ??
-                  'V2Ray Server ${i + 1}';
-              
-              // 解析Vmess链接
-              if (line.startsWith('vmess://')) {
-                try {
-                  // 解码base64部分
-                  final base64Part = line.substring(8); // 移除 "vmess://" 前缀
-                  String paddedBase64 = base64Part;
-                  final padding = 4 - (base64Part.length % 4);
-                  if (padding != 4) {
-                    paddedBase64 += '=' * padding;
-                  }
-                  final jsonStr = utf8.decode(base64Decode(paddedBase64));
-                  final data = json.decode(jsonStr) as Map<String, dynamic>;
-                  
-                  proxies.add({
-                    'name': name,
-                    'type': 'v2ray',
-                    'protocol': 'vmess',
-                    'server': data['add'],
-                    'port': data['port'],
-                    'uuid': data['id'],
-                    'alterId': data['aid'] ?? 0,
-                    'security': data['scy'] ?? 'auto',
-                    'network': data['net'] ?? 'tcp',
-                    'tls': data['tls'] == 'tls',
-                    'latency': -2, // -2表示未测试
-                    'isSelected': false,
-                  });
-                } catch (decodeError) {
-                  proxies.add({
-                    'name': name,
-                    'type': 'v2ray',
-                    'latency': -2, // -2表示未测试
-                    'isSelected': false,
-                  });
-                }
-              } else {
-                proxies.add({
-                  'name': name,
-                  'type': 'v2ray',
-                  'latency': -2, // -2表示未测试
-                  'isSelected': false,
-                });
-              }
-            } catch (uriError) {
-              // URL解析失败，使用默认名称
-              proxies.add({
-                'name': 'V2Ray Server ${i + 1}',
-                'type': 'v2ray',
-                'latency': -2, // -2表示未测试
-                'isSelected': false,
-              });
-            }
-          }
-        }
+        // 如果JSON解析失败，返回空列表
+        Logger.warn('解析V2Ray配置文件时出错: $e');
       }
 
-      Logger.info('成功解析到 ${proxies.length} 个V2Ray代理');
       return proxies;
     } catch (e, stackTrace) {
-      Logger.error('从订阅链接解析V2Ray代理列表失败: $e\nStack trace: $stackTrace');
-      rethrow;
+      Logger.error('获取V2Ray代理列表时出错: $e\nStack trace: $stackTrace');
+      return [];
     }
   }
-  
+
   // 获取指定代理的详细配置信息
   Future<Map<String, dynamic>?> getProxyDetails(String proxyName) async {
     try {
       Logger.info('获取V2Ray代理详细配置信息: $proxyName');
-      
+
       // 获取代理列表
       final proxies = await getProxies();
-      
+
       // 查找指定代理
       for (var proxy in proxies) {
         if (proxy['name'] == proxyName) {
@@ -572,7 +475,7 @@ class V2RayService {
             'server': proxy['server'] ?? '127.0.0.1',
             'port': proxy['port'] ?? 1080,
           };
-          
+
           // 添加V2Ray特有的配置
           if (proxy.containsKey('uuid')) {
             protocolConfig['user_id'] = proxy['uuid'];
@@ -589,12 +492,12 @@ class V2RayService {
           if (proxy.containsKey('tls')) {
             protocolConfig['tls'] = proxy['tls'];
           }
-          
+
           Logger.info('构建的协议配置: $protocolConfig');
           return protocolConfig;
         }
       }
-      
+
       Logger.warn('未找到代理的详细配置信息: $proxyName');
       return null;
     } catch (e) {

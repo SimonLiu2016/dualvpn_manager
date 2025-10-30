@@ -16,19 +16,48 @@ void main() async {
   // 初始化窗口管理器
   await _initWindowManager();
 
-  // 初始化系统托盘
-  final trayManager = DualVPNTrayManager();
-  await trayManager.initTray();
+  runApp(const DualVPNAppWrapper());
+}
 
-  // 记录初始化完成
-  Logger.info('系统托盘初始化完成');
+class DualVPNAppWrapper extends StatefulWidget {
+  const DualVPNAppWrapper({super.key});
 
-  runApp(
-    ChangeNotifierProvider(
-      create: (context) => AppState(trayManager: trayManager),
+  @override
+  State<DualVPNAppWrapper> createState() => _DualVPNAppWrapperState();
+}
+
+class _DualVPNAppWrapperState extends State<DualVPNAppWrapper> {
+  late final DualVPNTrayManager trayManager;
+  late final AppState appState;
+
+  @override
+  void initState() {
+    super.initState();
+    trayManager = DualVPNTrayManager();
+    appState = AppState(trayManager: trayManager);
+
+    // 延迟初始化托盘，确保所有依赖都已准备好
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _initTray();
+    });
+  }
+
+  Future<void> _initTray() async {
+    try {
+      await trayManager.initTray();
+      Logger.info('系统托盘初始化完成');
+    } catch (e) {
+      Logger.error('系统托盘初始化失败: $e');
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return ChangeNotifierProvider.value(
+      value: appState,
       child: DualVPNApp(trayManager: trayManager),
-    ),
-  );
+    );
+  }
 }
 
 // 初始化窗口管理器
@@ -62,6 +91,14 @@ class DualVPNApp extends StatelessWidget {
       builder: (context, appState, child) {
         // 设置AppState到托盘管理器
         trayManager.setAppState(appState);
+
+        // 设置显示窗口的回调函数
+        trayManager.setShowWindowCallback(() {
+          Logger.info('通过回调函数显示窗口');
+          // 使用window_manager显示窗口
+          windowManager.show();
+          windowManager.focus();
+        });
 
         return MaterialApp(
           title: '双捷VPN管理器',
