@@ -1,10 +1,14 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:provider/provider.dart';
 import 'package:window_manager/window_manager.dart';
 import 'models/app_state.dart';
 import 'ui/screens/home_screen.dart';
 import 'utils/tray_manager.dart';
 import 'utils/logger.dart';
+import 'utils/app_theme.dart';
+import 'l10n/app_localizations_delegate.dart';
+import 'package:flutter/foundation.dart';
 
 void main() async {
   // 确保Flutter绑定已初始化
@@ -102,74 +106,65 @@ class DualVPNApp extends StatelessWidget {
 
         return MaterialApp(
           title: '双捷VPN管理器',
-          theme: ThemeData(
-            primarySwatch: Colors.blue,
-            visualDensity: VisualDensity.adaptivePlatformDensity,
-            // 使用更现代的视觉效果
-            useMaterial3: true,
-            // 自定义颜色方案
-            colorScheme: ColorScheme.fromSeed(
-              seedColor: Colors.blue,
-              brightness: Brightness.light,
-            ),
-            // 自定义按钮主题
-            elevatedButtonTheme: ElevatedButtonThemeData(
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.blue,
-                foregroundColor: Colors.white,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                elevation: 4,
-              ),
-            ),
-            // 自定义卡片主题
-            cardTheme: CardThemeData(
-              elevation: 4,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
-              ),
-            ),
-            // 自定义底部导航栏主题
-            bottomNavigationBarTheme: const BottomNavigationBarThemeData(
-              selectedItemColor: Colors.blue,
-              unselectedItemColor: Colors.grey,
-            ),
-          ),
-          darkTheme: ThemeData(
-            primarySwatch: Colors.blue,
-            visualDensity: VisualDensity.adaptivePlatformDensity,
-            useMaterial3: true,
-            colorScheme: ColorScheme.fromSeed(
-              seedColor: Colors.blue,
-              brightness: Brightness.dark,
-            ),
-            elevatedButtonTheme: ElevatedButtonThemeData(
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.blue,
-                foregroundColor: Colors.white,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                elevation: 4,
-              ),
-            ),
-            cardTheme: CardThemeData(
-              elevation: 4,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
-              ),
-            ),
-            bottomNavigationBarTheme: const BottomNavigationBarThemeData(
-              selectedItemColor: Colors.blue,
-              unselectedItemColor: Colors.grey,
-            ),
-          ),
-          themeMode: ThemeMode.system,
+          theme: AppTheme.lightTheme(),
+          darkTheme: AppTheme.darkTheme(),
+          themeMode: appState.themeMode,
           navigatorKey: appState.navigatorKey,
           home: HomeScreen(),
+          // 添加国际化支持
+          locale: appState.language == 'en'
+              ? const Locale('en', '')
+              : appState.language == 'fr'
+              ? const Locale('fr', '')
+              : const Locale('zh', ''),
+          supportedLocales: AppLocalizations.supportedLocales,
+          localizationsDelegates: [
+            // 自定义本地化代理
+            _AppLocalizationsDelegate(),
+            // Flutter内置的本地化代理
+            GlobalMaterialLocalizations.delegate,
+            GlobalWidgetsLocalizations.delegate,
+            GlobalCupertinoLocalizations.delegate,
+          ],
+          // 如果设备语言不支持，则使用中文
+          localeResolutionCallback: (locale, supportedLocales) {
+            if (locale != null) {
+              for (var supportedLocale in supportedLocales) {
+                if (supportedLocale.languageCode == locale.languageCode) {
+                  return supportedLocale;
+                }
+              }
+            }
+            return const Locale('zh', ''); // 默认使用中文
+          },
         );
       },
     );
   }
+}
+
+// 自定义本地化代理
+class _AppLocalizationsDelegate
+    extends LocalizationsDelegate<AppLocalizations> {
+  const _AppLocalizationsDelegate();
+
+  @override
+  bool isSupported(Locale locale) {
+    return ['zh', 'en', 'fr'].contains(locale.languageCode);
+  }
+
+  @override
+  Future<AppLocalizations> load(Locale locale) {
+    return SynchronousFuture<AppLocalizations>(AppLocalizations(locale));
+  }
+
+  @override
+  bool shouldReload(_AppLocalizationsDelegate old) => false;
+
+  @override
+  List<Locale> get supportedLocales => const [
+    Locale('zh', ''), // 简体中文
+    Locale('en', ''), // 英文
+    Locale('fr', ''), // 法文
+  ];
 }

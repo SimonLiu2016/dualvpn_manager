@@ -27,6 +27,15 @@ class AppState extends ChangeNotifier {
   // 添加代理列表状态存储键
   static const String _proxyStatesKey = 'proxy_states';
 
+  // 添加主题模式存储键
+  static const String _themeModeKey = 'theme_mode';
+
+  // 语言设置相关
+  static const String _languageKey = 'selected_language';
+  String _language = 'zh'; // 默认中文
+
+  String get language => _language;
+
   // 添加路由规则更新队列和锁
   bool _isUpdatingRules = false;
   final List<Future<void> Function()> _pendingRuleUpdates = [];
@@ -45,6 +54,10 @@ class AppState extends ChangeNotifier {
   // 添加等待特权助手安装完成的Completer
   Completer<void>? _helperInstallationCompleter;
 
+  // 添加主题模式状态字段
+  ThemeMode _themeMode = ThemeMode.system;
+  ThemeMode get themeMode => _themeMode;
+
   AppState({required DualVPNTrayManager trayManager})
     : _trayManager = trayManager {
     Logger.info('=== 开始初始化AppState ===');
@@ -57,6 +70,14 @@ class AppState extends ChangeNotifier {
     Logger.info('开始加载代理列表状态...');
     _loadProxyStates();
     Logger.info('代理列表状态加载完成');
+    // 初始化时加载主题模式
+    Logger.info('开始加载主题模式...');
+    _loadThemeMode();
+    Logger.info('主题模式加载完成');
+    // 初始化时加载语言设置
+    Logger.info('开始加载语言设置...');
+    _loadLanguage();
+    Logger.info('语言设置加载完成');
     // 监听特权助手安装完成的通知
     _listenForHelperInstallation();
     // 初始化时启动Go代理核心
@@ -2995,5 +3016,87 @@ class AppState extends ChangeNotifier {
     } catch (e, stackTrace) {
       Logger.error('重新初始化Go代理核心配置时出错: $e，Stack trace: $stackTrace');
     }
+  }
+
+  // 加载主题模式
+  Future<void> _loadThemeMode() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final String? themeModeString = prefs.getString(_themeModeKey);
+
+      if (themeModeString != null) {
+        _themeMode = _themeModeFromString(themeModeString);
+        Logger.info('成功加载主题模式: $_themeMode');
+      } else {
+        _themeMode = ThemeMode.system;
+        Logger.info('未找到已保存的主题模式，使用系统默认');
+      }
+      notifyListeners();
+    } catch (e) {
+      Logger.error('加载主题模式失败: $e');
+      _themeMode = ThemeMode.system;
+    }
+  }
+
+  // 保存主题模式
+  Future<void> _saveThemeMode() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(_themeModeKey, _themeModeToString(_themeMode));
+      Logger.info('主题模式已保存: $_themeMode');
+    } catch (e) {
+      Logger.error('保存主题模式失败: $e');
+    }
+  }
+
+  // 将ThemeMode转换为字符串
+  String _themeModeToString(ThemeMode mode) {
+    switch (mode) {
+      case ThemeMode.light:
+        return 'light';
+      case ThemeMode.dark:
+        return 'dark';
+      case ThemeMode.system:
+        return 'system';
+    }
+  }
+
+  // 将字符串转换为ThemeMode
+  ThemeMode _themeModeFromString(String modeString) {
+    switch (modeString) {
+      case 'light':
+        return ThemeMode.light;
+      case 'dark':
+        return ThemeMode.dark;
+      case 'system':
+      default:
+        return ThemeMode.system;
+    }
+  }
+
+  // 设置主题模式
+  void setThemeMode(ThemeMode mode) {
+    _themeMode = mode;
+    _saveThemeMode();
+    notifyListeners();
+  }
+
+  // 加载语言设置
+  Future<void> _loadLanguage() async {
+    final prefs = await SharedPreferences.getInstance();
+    _language = prefs.getString(_languageKey) ?? 'zh';
+  }
+
+  // 设置语言
+  Future<void> setLanguage(String languageCode) async {
+    _language = languageCode;
+    await _saveLanguage();
+    notifyListeners();
+  }
+
+  // 保存语言设置
+  Future<void> _saveLanguage() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_languageKey, _language);
   }
 }

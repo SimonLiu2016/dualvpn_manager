@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import 'package:dualvpn_manager/models/app_state.dart';
 import 'package:dualvpn_manager/utils/config_manager.dart';
 import 'package:dualvpn_manager/models/vpn_config.dart';
+import 'package:dualvpn_manager/l10n/app_localizations_delegate.dart';
 
 /// 代理列表小部件
 class ProxyListWidget extends StatelessWidget {
@@ -49,6 +50,8 @@ class _ProxyListView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final localizations = AppLocalizations.of(context);
+
     if (isLoadingProxies) {
       return const Center(child: CircularProgressIndicator());
     } else if (proxies.isEmpty) {
@@ -79,17 +82,21 @@ class _ProxyListView extends StatelessWidget {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Icon(Icons.link_off, size: 48, color: Colors.grey),
+              Icon(
+                Icons.link_off,
+                size: 48,
+                color: Theme.of(context).colorScheme.primary.withOpacity(0.6),
+              ),
               const SizedBox(height: 10),
-              const Text(
-                '暂无代理信息',
-                style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+              Text(
+                localizations.get('no_proxy_info'),
+                style: Theme.of(context).textTheme.headlineSmall,
               ),
               const SizedBox(height: 5),
-              const Text(
-                '请确保已连接代理并配置了代理',
+              Text(
+                localizations.get('ensure_proxy_configured'),
                 textAlign: TextAlign.center,
-                style: TextStyle(fontSize: 14, color: Colors.grey),
+                style: Theme.of(context).textTheme.bodyMedium,
               ),
             ],
           ),
@@ -99,17 +106,21 @@ class _ProxyListView extends StatelessWidget {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Icon(Icons.info, size: 48, color: Colors.blue),
+              Icon(
+                Icons.info,
+                size: 48,
+                color: Theme.of(context).colorScheme.primary,
+              ),
               const SizedBox(height: 10),
-              const Text(
-                '该代理类型不支持代理列表',
-                style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+              Text(
+                localizations.get('proxy_type_not_supported'),
+                style: Theme.of(context).textTheme.headlineSmall,
               ),
               const SizedBox(height: 5),
-              const Text(
-                '此类型代理将直接使用配置进行连接',
+              Text(
+                localizations.get('proxy_type_direct_connection'),
                 textAlign: TextAlign.center,
-                style: TextStyle(fontSize: 14, color: Colors.grey),
+                style: Theme.of(context).textTheme.bodyMedium,
               ),
             ],
           ),
@@ -133,7 +144,9 @@ class _ProxyListView extends StatelessWidget {
               decoration: BoxDecoration(
                 borderRadius: BorderRadius.circular(12),
                 border: Border.all(
-                  color: isSelected ? Colors.blue : Colors.grey,
+                  color: isSelected
+                      ? Theme.of(context).colorScheme.primary
+                      : Theme.of(context).disabledColor,
                   width: 2,
                 ),
               ),
@@ -160,7 +173,7 @@ class _ProxyListView extends StatelessWidget {
                           : Icons.link,
                       key: ValueKey<int>(latency ?? 0),
                       color: latency == -2
-                          ? Colors.grey
+                          ? Theme.of(context).hintColor
                           : latency == -1
                           ? Colors.orange
                           : (latency < 0
@@ -183,28 +196,38 @@ class _ProxyListView extends StatelessWidget {
                   subtitle: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text('类型: $proxyType'),
+                      Text('${localizations.get('type')}: $proxyType'),
                       // 对于OpenVPN类型，显示服务器地址和端口
                       if (proxyType == 'openvpn' &&
                           proxy.containsKey('server') &&
                           proxy.containsKey('port')) ...[
-                        Text('服务器: ${proxy['server']}:${proxy['port']}'),
+                        Text(
+                          '${localizations.get('server')}: ${proxy['server']}:${proxy['port']}',
+                        ),
                         if (proxy.containsKey('protocol'))
-                          Text('协议: ${proxy['protocol']}'),
+                          Text(
+                            '${localizations.get('protocol')}: ${proxy['protocol']}',
+                          ),
                       ]
                       // 对于其他类型，保持原有的显示方式
                       else if (latency == -2)
-                        const Text('未测试', style: TextStyle(color: Colors.grey))
+                        Text(
+                          localizations.get('not_tested'),
+                          style: TextStyle(color: Theme.of(context).hintColor),
+                        )
                       else if (latency == -1)
-                        const Text(
-                          '测试中...',
-                          style: TextStyle(color: Colors.orange),
+                        Text(
+                          localizations.get('testing'),
+                          style: const TextStyle(color: Colors.orange),
                         )
                       else if (latency < 0)
-                        const Text('连接失败', style: TextStyle(color: Colors.red))
+                        Text(
+                          localizations.get('connection_failed'),
+                          style: const TextStyle(color: Colors.red),
+                        )
                       else
                         Text(
-                          '延迟: ${latency}ms',
+                          '${localizations.get('latency')}: ${latency}ms',
                           style: TextStyle(
                             color: latency < 300
                                 ? Colors.green
@@ -221,7 +244,7 @@ class _ProxyListView extends StatelessWidget {
                       IconButton(
                         icon: const Icon(Icons.speed),
                         onPressed: () => onTestLatency(proxyName),
-                        tooltip: '测试延迟',
+                        tooltip: localizations.get('test_latency'),
                       ),
                       // 对于OpenVPN类型，选中状态默认为选中且不可修改
                       if (proxyType == 'openvpn')

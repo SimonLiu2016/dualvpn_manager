@@ -1,11 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:dualvpn_manager/models/app_state.dart';
-import 'package:dualvpn_manager/models/vpn_config.dart' hide RoutingRule;
+import 'package:dualvpn_manager/models/vpn_config.dart';
+import 'package:dualvpn_manager/utils/config_manager.dart';
+import 'package:dualvpn_manager/l10n/app_localizations_delegate.dart';
+import 'package:dualvpn_manager/ui/widgets/routing_rules_widget.dart';
 import 'package:dualvpn_manager/services/smart_routing_engine.dart'
     as smart_routing_engine;
-import 'package:dualvpn_manager/utils/config_manager.dart';
-import 'package:dualvpn_manager/ui/widgets/routing_rules_widget.dart';
 
 class RoutingScreen extends StatefulWidget {
   const RoutingScreen({super.key});
@@ -20,24 +21,21 @@ class _RoutingScreenState extends State<RoutingScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final localizations = AppLocalizations.of(context);
+
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('路由配置'),
-        backgroundColor: Colors.blue,
-        foregroundColor: Colors.white,
-      ),
       body: Padding(
         padding: const EdgeInsets.all(16.0),
         child: SingleChildScrollView(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text(
-                '智能路由配置',
-                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+              Text(
+                localizations.get('routing_title'),
+                style: Theme.of(context).textTheme.headlineSmall,
               ),
               const SizedBox(height: 16),
-              const Text('为特定域名指定代理源'),
+              Text(localizations.get('specify_proxy_source_for_domain')),
               const SizedBox(height: 8),
               FutureBuilder<List<VPNConfig>>(
                 future: ConfigManager.loadConfigs(),
@@ -47,7 +45,9 @@ class _RoutingScreenState extends State<RoutingScreen> {
                   }
 
                   if (snapshot.hasError) {
-                    return Text('加载配置失败: ${snapshot.error}');
+                    return Text(
+                      '${localizations.get('load_config_failed')}: ${snapshot.error}',
+                    );
                   }
 
                   final configs = snapshot.data ?? [];
@@ -79,10 +79,11 @@ class _RoutingScreenState extends State<RoutingScreen> {
                               Expanded(
                                 child: TextField(
                                   controller: _domainController,
-                                  decoration: const InputDecoration(
-                                    hintText: '输入域名，如: google.com',
-                                    border: OutlineInputBorder(),
-                                    prefixIcon: Icon(Icons.domain),
+                                  decoration: InputDecoration(
+                                    hintText: localizations.get(
+                                      'enter_domain_example_google_com',
+                                    ),
+                                    prefixIcon: const Icon(Icons.domain),
                                   ),
                                 ),
                               ),
@@ -90,7 +91,9 @@ class _RoutingScreenState extends State<RoutingScreen> {
                               Expanded(
                                 child: DropdownButtonFormField<VPNConfig>(
                                   value: _selectedConfig,
-                                  hint: const Text('选择代理源'),
+                                  hint: Text(
+                                    localizations.get('select_proxy_source'),
+                                  ),
                                   items: configs.map((config) {
                                     return DropdownMenuItem<VPNConfig>(
                                       value: config,
@@ -102,9 +105,7 @@ class _RoutingScreenState extends State<RoutingScreen> {
                                       _selectedConfig = config;
                                     });
                                   },
-                                  decoration: const InputDecoration(
-                                    border: OutlineInputBorder(),
-                                  ),
+                                  decoration: const InputDecoration(),
                                 ),
                               ),
                               const SizedBox(width: 8),
@@ -139,24 +140,27 @@ class _RoutingScreenState extends State<RoutingScreen> {
                                     });
 
                                     ScaffoldMessenger.of(context).showSnackBar(
-                                      const SnackBar(content: Text('路由规则已添加')),
+                                      SnackBar(
+                                        content: Text(
+                                          localizations.get(
+                                            'routing_screen_rule_added',
+                                          ),
+                                        ),
+                                      ),
                                     );
                                   }
                                 },
                                 icon: const Icon(Icons.add),
-                                label: const Text('添加'),
+                                label: Text(localizations.get('add_rule')),
                               ),
                             ],
                           ),
                         ),
                       ),
                       const SizedBox(height: 16),
-                      const Text(
-                        '已配置的路由规则',
-                        style: TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.bold,
-                        ),
+                      Text(
+                        localizations.get('routing_rules'),
+                        style: Theme.of(context).textTheme.headlineSmall,
                       ),
                       const SizedBox(height: 8),
                       const RoutingRulesWidget(),
@@ -189,6 +193,6 @@ class _RoutingScreenState extends State<RoutingScreen> {
         return smart_routing_engine.RuleType.domainSuffix;
       case VPNType.custom:
         return smart_routing_engine.RuleType.domainSuffix;
-      }
+    }
   }
 }
