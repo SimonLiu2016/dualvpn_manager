@@ -4,21 +4,201 @@ import 'package:url_launcher/url_launcher.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:dualvpn_manager/models/app_state.dart';
 import 'package:dualvpn_manager/l10n/app_localizations_delegate.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:flutter/services.dart';
+import 'package:dualvpn_manager/utils/logger.dart';
+import 'package:dualvpn_manager/services/privileged_helper_service.dart';
 
 class SettingsScreen extends StatefulWidget {
-  const SettingsScreen({super.key});
+  final AppState appState;
+
+  const SettingsScreen({super.key, required this.appState});
 
   @override
   State<SettingsScreen> createState() => _SettingsScreenState();
 }
 
 class _SettingsScreenState extends State<SettingsScreen> {
+  // 添加日志管理设置的状态变量
+  late int _logFileSizeLimit;
+  late int _logRetentionDays;
+  late bool _logAutoCleanupEnabled;
   late Future<PackageInfo> _packageInfoFuture;
+
+  // 添加控制器作为状态变量，避免在对话框重建时丢失
+  late TextEditingController _fileSizeController;
+  late TextEditingController _retentionController;
 
   @override
   void initState() {
     super.initState();
+    // 初始化日志管理设置
+    _loadLogSettings();
     _packageInfoFuture = PackageInfo.fromPlatform();
+  }
+
+  @override
+  void dispose() {
+    // 释放控制器资源
+    _fileSizeController.dispose();
+    _retentionController.dispose();
+    super.dispose();
+  }
+
+  // 加载日志管理设置
+  void _loadLogSettings() {
+    final prefs = SharedPreferences.getInstance();
+    prefs.then((prefs) {
+      setState(() {
+        _logFileSizeLimit = prefs.getInt('logFileSizeLimit') ?? 10;
+        _logRetentionDays = prefs.getInt('logRetentionDays') ?? 7;
+        _logAutoCleanupEnabled = prefs.getBool('logAutoCleanupEnabled') ?? true;
+
+        // 初始化控制器
+        _fileSizeController = TextEditingController(
+          text: _logFileSizeLimit.toString(),
+        );
+        _retentionController = TextEditingController(
+          text: _logRetentionDays.toString(),
+        );
+      });
+    });
+  }
+
+  // 保存日志管理设置
+  void _saveLogSettings() {
+    final prefs = SharedPreferences.getInstance();
+    prefs.then((prefs) {
+      prefs.setInt('logFileSizeLimit', _logFileSizeLimit);
+      prefs.setInt('logRetentionDays', _logRetentionDays);
+      prefs.setBool('logAutoCleanupEnabled', _logAutoCleanupEnabled);
+    });
+  }
+
+  // 显示日志管理对话框
+  void _showLogManagementDialog(BuildContext context) {
+    final localizations = AppLocalizations.of(context);
+
+    // 使用状态变量而不是局部变量
+    int fileSizeLimit = _logFileSizeLimit;
+    int retentionDays = _logRetentionDays;
+    bool autoCleanupEnabled = _logAutoCleanupEnabled;
+
+    // 更新控制器文本而不是创建新的控制器
+    _fileSizeController.text = fileSizeLimit.toString();
+    _retentionController.text = retentionDays.toString();
+
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return StatefulBuilder(
+          builder: (context, dialogSetState) {
+            return AlertDialog(
+              title: Text(localizations.get('log_management_dialog_title')),
+              content: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(localizations.get('log_file_size_limit')),
+                    const SizedBox(height: 8),
+                    TextField(
+                      controller: _fileSizeController,
+                      keyboardType: TextInputType.number,
+                      decoration: const InputDecoration(suffixText: 'MB'),
+                      onChanged: (value) {
+                        if (value.isNotEmpty) {
+                          fileSizeLimit = int.tryParse(value) ?? fileSizeLimit;
+                        }
+                      },
+                    ),
+                    const SizedBox(height: 16),
+                    Text(localizations.get('log_retention_days')),
+                    const SizedBox(height: 8),
+                    TextField(
+                      controller: _retentionController,
+                      keyboardType: TextInputType.number,
+                      onChanged: (value) {
+                        if (value.isNotEmpty) {
+                          retentionDays = int.tryParse(value) ?? retentionDays;
+                        }
+                      },
+                    ),
+                    const SizedBox(height: 16),
+                    Row(
+                      children: [
+                        Text(localizations.get('auto_cleanup_enabled')),
+                        const SizedBox(width: 10),
+                        Switch(
+                          value: autoCleanupEnabled,
+                          onChanged: (value) {
+                            dialogSetState(() {
+                              autoCleanupEnabled = value;
+                            });
+                          },
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 16),
+                    Text(localizations.get('manual_cleanup')),
+                    const SizedBox(height: 8),
+                    ElevatedButton(
+                      onPressed: () async {
+                        // 调用日志清理功能
+                        final success = await _cleanupLogs(
+                          context,
+                          fileSizeLimit,
+                          retentionDays,
+                        );
+                        if (success) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text(
+                                localizations.get('log_cleanup_success'),
+                              ),
+                            ),
+                          );
+                        } else {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text(
+                                localizations.get('log_cleanup_failed'),
+                              ),
+                            ),
+                          );
+                        }
+                      },
+                      child: Text(localizations.get('cleanup_now')),
+                    ),
+                  ],
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () {
+                    Navigator.of(context).pop();
+                  },
+                  child: Text(localizations.get('theme_cancel')),
+                ),
+                ElevatedButton(
+                  onPressed: () {
+                    // 保存设置
+                    setState(() {
+                      _logFileSizeLimit = fileSizeLimit;
+                      _logRetentionDays = retentionDays;
+                      _logAutoCleanupEnabled = autoCleanupEnabled;
+                    });
+                    _saveLogSettings();
+                    Navigator.of(context).pop();
+                  },
+                  child: Text(localizations.get('save')),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
   }
 
   // 显示帮助说明对话框
@@ -222,6 +402,22 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: ListTile(
+                  leading: const Icon(Icons.description),
+                  title: Text(localizations.get('log_management_setting')),
+                  subtitle: Text(localizations.get('log_management_subtitle')),
+                  onTap: () {
+                    // 实现日志管理功能
+                    _showLogManagementDialog(context);
+                  },
+                ),
+              ),
+              const SizedBox(height: 8),
+              Card(
+                elevation: 4,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: ListTile(
                   leading: const Icon(Icons.import_export),
                   title: Text(localizations.get('import_export_setting')),
                   subtitle: Text(localizations.get('import_export_subtitle')),
@@ -412,5 +608,44 @@ class _SettingsScreenState extends State<SettingsScreen> {
         );
       },
     );
+  }
+
+  // 清理日志文件
+  Future<bool> _cleanupLogs(
+    BuildContext context,
+    int fileSizeLimit,
+    int retentionDays,
+  ) async {
+    try {
+      // 创建特权助手服务实例
+      final helperService = HelperService();
+
+      // 首先调用macOS层清理日志，传递参数
+      bool macOSCleanupSuccess = false;
+      try {
+        macOSCleanupSuccess =
+            await const OptionalMethodChannel(
+                  'dualvpn_manager/macos',
+                ).invokeMethod('cleanupLogs', {
+                  'fileSizeLimit': fileSizeLimit,
+                  'retentionDays': retentionDays,
+                })
+                as bool? ??
+            false;
+      } catch (e) {
+        Logger.error('macOS层日志清理失败: $e');
+      }
+
+      // 然后调用特权助手清理日志，传递参数
+      bool helperCleanupSuccess = await helperService.cleanupLogs(
+        fileSizeLimit: fileSizeLimit,
+        retentionDays: retentionDays,
+      );
+
+      return macOSCleanupSuccess || helperCleanupSuccess;
+    } catch (e) {
+      Logger.error('日志清理失败: $e');
+      return false;
+    }
   }
 }

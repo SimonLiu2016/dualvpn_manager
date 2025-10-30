@@ -1,3 +1,4 @@
+import 'package:dualvpn_manager/services/privileged_helper_service.dart';
 import 'package:flutter/material.dart';
 import 'package:dualvpn_manager/services/vpn_manager.dart';
 import 'package:dualvpn_manager/services/proxy_manager.dart';
@@ -47,6 +48,9 @@ class AppState extends ChangeNotifier {
   bool _isStarting = false;
   bool get isStarting => _isStarting;
 
+  // 日志清理定时器
+  Timer? _logCleanupTimer;
+
   // 添加特权助手安装状态字段
   bool _isHelperInstalled = false;
   bool get isHelperInstalled => _isHelperInstalled;
@@ -86,6 +90,9 @@ class AppState extends ChangeNotifier {
     // 启动统计信息更新定时器
     _startStatsUpdate();
     Logger.info('=== AppState初始化完成 ===');
+    // 启动日志清理定时器
+    _startLogCleanupTimer();
+    Logger.info('启动日志清理定时器');
   }
 
   // 监听特权助手安装完成的通知
@@ -3099,4 +3106,36 @@ class AppState extends ChangeNotifier {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(_languageKey, _language);
   }
+
+    // 启动日志清理定时器
+  void _startLogCleanupTimer() {
+    // 每小时检查一次是否需要清理日志
+    _logCleanupTimer = Timer.periodic(const Duration(hours: 1), (timer) {
+      _cleanupLogsIfNeeded();
+    });
+  }
+
+    // 根据设置清理日志
+  Future<void> _cleanupLogsIfNeeded() async {
+    try {
+      // 这里可以添加检查逻辑，比如检查磁盘空间或日志文件数量
+      // 目前我们直接调用清理方法
+      final helperService = HelperService();
+
+      // 调用macOS层清理日志
+      try {
+        await const MethodChannel(
+          'dualvpn_manager/macos',
+        ).invokeMethod('cleanupLogs');
+      } catch (e) {
+        Logger.error('macOS层日志清理失败: $e');
+      }
+
+      // 调用特权助手清理日志
+      await helperService.cleanupLogs();
+    } catch (e) {
+      Logger.error('定时清理日志失败: $e');
+    }
+  }
+
 }

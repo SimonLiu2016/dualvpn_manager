@@ -11,6 +11,9 @@ import ServiceManagement
     func copyOpenVPNConfigFiles(
         configContent: String, certFiles: [String: String],
         completion: @escaping (Bool, String?, String?) -> Void)
+    func cleanupLogs(
+        fileSizeLimit: Int, retentionDays: Int,
+        completion: @escaping (Bool, String?) -> Void)
 }
 
 // 日志工具类
@@ -210,6 +213,19 @@ class AppDelegate: FlutterAppDelegate {
                 NotificationCenter.default.post(
                     name: Notification.Name("HelperInstalled"), object: nil)
                 result(true)
+            case "cleanupLogs":
+                Logger.shared.writeLog("收到日志清理请求")
+                // 从Flutter传递的参数中获取文件大小限制和保留天数
+                var fileSizeLimit = 10  // 默认10MB
+                var retentionDays = 7  // 默认7天
+
+                if let args = call.arguments as? [String: Any] {
+                    fileSizeLimit = args["fileSizeLimit"] as? Int ?? fileSizeLimit
+                    retentionDays = args["retentionDays"] as? Int ?? retentionDays
+                }
+
+                self?.cleanupLogs(
+                    fileSizeLimit: fileSizeLimit, retentionDays: retentionDays, result: result)
             default:
                 Logger.shared.writeLog("未实现的方法: \(call.method)", level: "WARN")
                 result(FlutterMethodNotImplemented)
@@ -444,6 +460,67 @@ class AppDelegate: FlutterAppDelegate {
                 "configPath": configPath,
             ]
             result(response)
+        }
+    }
+
+    // 清理日志文件
+    private func cleanupLogs(
+        fileSizeLimit: Int, retentionDays: Int, result: @escaping FlutterResult
+    ) {
+        Logger.shared.writeLog(
+            "收到日志清理请求，通过特权助手执行清理，文件大小限制: \(fileSizeLimit)MB，保留天数: \(retentionDays)天")
+
+        if xpcConnection == nil {
+            Logger.shared.writeLog("创建XPC连接")
+            xpcConnection = NSXPCConnection(
+                machServiceName: "com.v8en.dualvpnManager.PrivilegedHelper")
+            xpcConnection?.remoteObjectInterface = NSXPCInterface(
+                with: PrivilegedHelperProtocol.self)
+            xpcConnection?.resume()
+
+            // 主程序中添加连接中断监听
+            xpcConnection?.interruptionHandler = {
+                Logger.shared.writeLog("XPC连接中断", level: "ERROR")
+                self.xpcConnection = nil
+            }
+
+            xpcConnection?.invalidationHandler = {
+                Logger.shared.writeLog("XPC连接失效", level: "ERROR")
+                self.xpcConnection = nil
+            }
+        }
+
+        guard
+            let proxy = xpcConnection?.remoteObjectProxyWithErrorHandler({ error in
+                Logger.shared.writeLog("创建XPC代理失败: \(error.localizedDescription)", level: "ERROR")
+                result(
+                    FlutterError(
+                        code: "HELPER_ERROR", message: error.localizedDescription,
+                        details: nil))
+                return
+            }) as? PrivilegedHelperProtocol
+        else {
+            Logger.shared.writeLog("无法创建XPC代理", level: "ERROR")
+            result(
+                FlutterError(
+                    code: "HELPER_ERROR", message: "Failed to create XPC proxy",
+                    details: nil))
+            return
+        }
+
+        Logger.shared.writeLog("调用特权助手清理日志文件，文件大小限制: \(fileSizeLimit)MB，保留天数: \(retentionDays)天")
+        proxy.cleanupLogs(fileSizeLimit: fileSizeLimit, retentionDays: retentionDays) {
+            success, error in
+            if success {
+                Logger.shared.writeLog("特权助手日志清理成功")
+                result(true)
+            } else {
+                Logger.shared.writeLog("特权助手日志清理失败: \(error ?? "未知错误")", level: "ERROR")
+                result(
+                    FlutterError(
+                        code: "CLEANUP_ERROR", message: error ?? "Unknown error",
+                        details: nil))
+            }
         }
     }
 }
