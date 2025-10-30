@@ -35,7 +35,7 @@ echo "Go代理核心构建成功"
 # 3. 构建Flutter应用
 echo "步骤3: 构建Flutter应用..."
 cd "${WORKSPACE_DIR}"
-flutter build macos --release --no-codesign
+flutter build macos --release
 
 if [ ! -f "${WORKSPACE_DIR}/build/macos/Build/Products/Release/Dualvpn Manager.app/Contents/MacOS/Dualvpn Manager" ]; then
     echo "错误: Flutter应用构建失败"
