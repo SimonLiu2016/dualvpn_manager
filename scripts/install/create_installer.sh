@@ -172,7 +172,7 @@ LAUNCH_SCRIPT="/usr/local/bin/dualvpn_manager"
 echo "创建启动脚本..."
 cat > "$LAUNCH_SCRIPT" << 'LAUNCH_EOF'
 #!/bin/bash
-/opt/password_manager/password_manager "$@"
+/opt/dualvpn_manager/dualvpn_manager "$@"
 LAUNCH_EOF
 
 # 设置权限
@@ -196,7 +196,7 @@ EOF
     echo "✓ Linux安装脚本创建成功: $INSTALL_SCRIPT"
     echo "  使用方法:"
     echo "    cd $OUTPUT_DIR"
-    echo "    sudo ./install-password-manager.sh"
+    echo "    sudo ./install-dualvpn-manager.sh"
     
 else
     # Windows系统或其他系统

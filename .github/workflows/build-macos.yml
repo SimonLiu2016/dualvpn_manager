@@ -29,8 +29,8 @@ jobs:
       - name: Setup macOS signing (optional)
         run: |
           if [[ -n "$MACOS_DEVELOPMENT_TEAM" ]] && [[ -n "$MACOS_SIGNING_CERTIFICATE" ]] && [[ -n "$MACOS_SIGNING_CERTIFICATE_PWD" ]] && [[ -n "$MACOS_PROVISIONING_PROFILE" ]]; then
-            chmod +x scripts/build/setup-macos-signing.sh
-            scripts/build/setup-macos-signing.sh
+            chmod +x scripts/package/setup-macos-signing.sh
+            scripts/package/setup-macos-signing.sh
           else
             echo "Skipping code signing setup - missing credentials"
           fi
@@ -43,8 +43,8 @@ jobs:
 
       - name: Build macOS version
         run: |
-          chmod +x scripts/build/build-macos-app-enhanced.sh
-          scripts/build/build-macos-app-enhanced.sh
+          chmod +x scripts/package/build-macos-app-enhanced.sh
+          scripts/package/build-macos-app-enhanced.sh
         env:
           MACOS_DEVELOPMENT_TEAM: ${{ secrets.MACOS_DEVELOPMENT_TEAM }}
           MACOS_SIGNING_CERTIFICATE: ${{ secrets.MACOS_SIGNING_CERTIFICATE }}
@@ -55,8 +55,8 @@ jobs:
 
       - name: Create release packages
         run: |
-          chmod +x scripts/build/build_release.sh
-          ./scripts/build/build_release.sh
+          chmod +x scripts/package/build_release.sh
+          ./scripts/package/build_release.sh
 
       - name: Create installers
         run: |

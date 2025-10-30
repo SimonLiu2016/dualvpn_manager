@@ -85,7 +85,8 @@ app.*.map.json
 **/FlutterMacOS.podspec
 **/Podfile.lock
 **/pubspec.lock
-**/build/
+!/scripts/package/
+/build/
 
 # Device-specific files
 **/local.properties
