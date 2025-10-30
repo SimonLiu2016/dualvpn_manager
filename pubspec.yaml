@@ -1,8 +1,8 @@
 name: dualvpn_manager
 description: "双捷VPN管理器(DualVPN Manager) - 同时管理OpenVPN和ClashX连接的轻量级工具"
 publish_to: "none"
-version: 0.1.0
-homepage: https://github.com/yourusername/dualvpn_manager
+version: 0.0.4
+homepage: https://github.com/SimonLiu2016/dualvpn_manager
 
 environment:
   sdk: ^3.9.0
@@ -31,6 +31,8 @@ dependencies:
   window_manager: ^0.5.1
   # URL启动器
   url_launcher: ^6.3.0
+  # 包信息获取
+  package_info_plus: ^8.0.0
 
 dev_dependencies:
   flutter_test:
