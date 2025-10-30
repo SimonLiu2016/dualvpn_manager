@@ -929,6 +929,7 @@ class VPNStatusPanel extends StatelessWidget {
                             const Spacer(),
                             // 显示实时上传下载速率
                             const GoProxyStatsWidget(),
+                            const Padding(padding: EdgeInsets.only(left: 16)),
                             ElevatedButton(
                               onPressed: isStarting
                                   ? null // 启动中状态时禁用按钮

@@ -16,14 +16,17 @@ class AppLocalizationsFr {
     'theme_setting': 'Paramètres du thème',
     'theme_subtitle': 'Options de thème : mode clair, mode sombre, etc.',
     'import_export_setting': 'Import/Export de config',
-    'import_export_subtitle': 'Sauvegarder et restaurer les fichiers de configuration',
+    'import_export_subtitle':
+        'Sauvegarder et restaurer les fichiers de configuration',
     'help_setting': 'Aide',
     'help_subtitle': 'Guide utilisateur et FAQ',
     'copyright_setting': 'Informations de copyright',
     'copyright_subtitle': 'Version du logiciel et informations de licence',
-    'failed_to_get_version_info': 'Échec de l\'obtention des informations de version',
+    'failed_to_get_version_info':
+        'Échec de l\'obtention des informations de version',
     'no_version_info': 'Aucune information de version',
-    'import_export_feature_pending': 'Fonction d\'import/export en attente de mise en œuvre',
+    'import_export_feature_pending':
+        'Fonction d\'import/export en attente de mise en œuvre',
     'select_theme_mode': 'Sélectionnez le mode du thème :',
 
     // Boîte de dialogue des paramètres du thème
@@ -106,9 +109,11 @@ class AppLocalizationsFr {
     'add_rule': 'Ajouter une règle',
     'edit_rule': 'Modifier la règle',
     'delete_rule': 'Supprimer la règle',
-    'specify_proxy_source_for_domain': 'Spécifier la source du proxy pour un domaine spécifique',
+    'specify_proxy_source_for_domain':
+        'Spécifier la source du proxy pour un domaine spécifique',
     'load_config_failed': 'Échec du chargement de la configuration',
-    'enter_domain_example_google_com': 'Entrez le domaine, par exemple : google.com',
+    'enter_domain_example_google_com':
+        'Entrez le domaine, par exemple : google.com',
     'select_proxy_source': 'Sélectionner la source du proxy',
     'routing_screen_rule_added': 'Règle de routage ajoutée',
 

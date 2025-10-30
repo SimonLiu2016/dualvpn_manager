@@ -229,7 +229,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     // TODO: 实现配置导入/导出功能
                     ScaffoldMessenger.of(context).showSnackBar(
                       SnackBar(
-                        content: Text(localizations.get('import_export_feature_pending')),
+                        content: Text(
+                          localizations.get('import_export_feature_pending'),
+                        ),
                       ),
                     );
                   },

@@ -23,7 +23,8 @@ class AppLocalizationsEn {
     'copyright_subtitle': 'Software version and license information',
     'failed_to_get_version_info': 'Failed to get version information',
     'no_version_info': 'No version information',
-    'import_export_feature_pending': 'Import/Export feature pending implementation',
+    'import_export_feature_pending':
+        'Import/Export feature pending implementation',
     'select_theme_mode': 'Select theme mode:',
 
     // Theme settings dialog
@@ -101,7 +102,8 @@ class AppLocalizationsEn {
     'add_rule': 'Add Rule',
     'edit_rule': 'Edit Rule',
     'delete_rule': 'Delete Rule',
-    'specify_proxy_source_for_domain': 'Specify proxy source for specific domain',
+    'specify_proxy_source_for_domain':
+        'Specify proxy source for specific domain',
     'load_config_failed': 'Failed to load configuration',
     'enter_domain_example_google_com': 'Enter domain, e.g.: google.com',
     'select_proxy_source': 'Select proxy source',

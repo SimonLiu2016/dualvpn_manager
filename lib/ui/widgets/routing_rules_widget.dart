@@ -32,7 +32,6 @@ class _RoutingRulesList extends StatelessWidget {
   Widget build(BuildContext context) {
     if (rules.isEmpty) {
       return Container(
-        height: 200,
         decoration: BoxDecoration(
           border: Border.all(color: Theme.of(context).dividerColor),
           borderRadius: BorderRadius.circular(12),
@@ -57,11 +56,7 @@ class _RoutingRulesList extends StatelessWidget {
     }
 
     return Container(
-      height: 200,
-      decoration: BoxDecoration(
-        border: Border.all(color: Theme.of(context).dividerColor),
-        borderRadius: BorderRadius.circular(12),
-      ),
+      decoration: BoxDecoration(borderRadius: BorderRadius.circular(12)),
       child: FutureBuilder<List<VPNConfig>>(
         future: ConfigManager.loadConfigs(),
         builder: (context, snapshot) {
@@ -69,6 +64,8 @@ class _RoutingRulesList extends StatelessWidget {
           final appState = context.watch<AppState>();
 
           return ListView.builder(
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
             itemCount: rules.length,
             itemBuilder: (context, index) {
               final rule = rules[index];
