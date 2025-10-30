@@ -2,7 +2,8 @@ name: Build and Release DualVPN Manager
 
 on:
   push:
-    tags:
+    branches:
+      - dev
       - qa
   workflow_dispatch:
 
