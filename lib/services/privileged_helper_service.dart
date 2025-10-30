@@ -124,4 +124,37 @@ class HelperService {
       return null;
     }
   }
+
+  /// 调用特权助手清理日志文件
+  Future<bool> cleanupLogs({
+    int fileSizeLimit = 10,
+    int retentionDays = 7,
+  }) async {
+    try {
+      Logger.info(
+        'Calling privileged helper to cleanup log files with fileSizeLimit: $fileSizeLimit MB, retentionDays: $retentionDays',
+      );
+
+      final result = await platform.invokeMethod('cleanupLogs', {
+        'fileSizeLimit': fileSizeLimit,
+        'retentionDays': retentionDays,
+      });
+
+      if (result is bool) {
+        if (result) {
+          Logger.info('Log files cleanup successfully');
+          return true;
+        } else {
+          Logger.error('Failed to cleanup log files');
+          return false;
+        }
+      } else {
+        Logger.error('Invalid response from privileged helper');
+        return false;
+      }
+    } catch (e) {
+      Logger.error('Failed to call cleanupLogs: $e');
+      return false;
+    }
+  }
 }
