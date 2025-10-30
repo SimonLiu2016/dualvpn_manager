@@ -13,6 +13,7 @@ import 'package:window_manager/window_manager.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:async';
 import 'dart:io';
+import 'package:flutter/services.dart';
 
 class AppState extends ChangeNotifier {
   final VPNManager _vpnManager = VPNManager();
@@ -33,11 +34,21 @@ class AppState extends ChangeNotifier {
   // 添加防抖定时器，用于优化代理状态保存
   Timer? _proxySaveDebounceTimer;
 
+  // 添加启动中状态字段
+  bool _isStarting = false;
+  bool get isStarting => _isStarting;
+
+  // 添加特权助手安装状态字段
+  bool _isHelperInstalled = false;
+  bool get isHelperInstalled => _isHelperInstalled;
+
+  // 添加等待特权助手安装完成的Completer
+  Completer<void>? _helperInstallationCompleter;
+
   AppState({required DualVPNTrayManager trayManager})
     : _trayManager = trayManager {
     Logger.info('=== 开始初始化AppState ===');
-    // 设置托盘管理器的显示窗口回调函数
-    _trayManager.setShowWindowCallback(_showWindow);
+    // 注意：托盘管理器的显示窗口回调函数已在main.dart中设置
     // 初始化时加载路由规则
     Logger.info('开始加载路由规则...');
     _loadRoutingRules();
@@ -46,6 +57,8 @@ class AppState extends ChangeNotifier {
     Logger.info('开始加载代理列表状态...');
     _loadProxyStates();
     Logger.info('代理列表状态加载完成');
+    // 监听特权助手安装完成的通知
+    _listenForHelperInstallation();
     // 初始化时启动Go代理核心
     Logger.info('开始初始化Go代理核心...');
     _initGoProxyCore();
@@ -54,11 +67,75 @@ class AppState extends ChangeNotifier {
     Logger.info('=== AppState初始化完成 ===');
   }
 
+  // 监听特权助手安装完成的通知
+  void _listenForHelperInstallation() {
+    Logger.info('开始监听特权助手安装完成的通知');
+    // 添加方法通道监听器
+    const platform = MethodChannel('dualvpn_manager/macos');
+    platform.setMethodCallHandler((call) async {
+      if (call.method == 'helperInstalled') {
+        Logger.info('收到特权助手安装完成的通知');
+        _markHelperInstalled();
+      }
+    });
+  }
+
   // 显示主窗口
   void _showWindow() {
     // 使用window_manager显示窗口
     windowManager.show();
     windowManager.focus();
+  }
+
+  // 初始化Go代理核心
+  void _initGoProxyCore() async {
+    try {
+      Logger.info('初始化Go代理核心...');
+
+      // 等待特权助手安装完成
+      if (!_isHelperInstalled) {
+        Logger.info('等待特权助手安装完成...');
+        _helperInstallationCompleter = Completer<void>();
+        await _helperInstallationCompleter!.future;
+        Logger.info('特权助手安装完成，继续初始化Go代理核心');
+      }
+
+      // 延迟一段时间确保应用完全启动后再启动Go代理核心
+      await Future.delayed(const Duration(seconds: 3));
+      final result = await startGoProxy();
+      if (result) {
+        Logger.info('Go代理核心初始化成功');
+
+        // 初始化所有必要的代理源
+        await _initProxySources();
+
+        // 确保相关的代理已经连接
+        await _ensureProxiesConnected();
+
+        // 添加延迟确保代理连接完成
+        await Future.delayed(const Duration(seconds: 2));
+
+        // 应用已选中的代理go代理核心
+        Logger.info('开始应用启动后已选中的代理...');
+        await _applySelectedProxiesAfterStartup();
+        Logger.info('应用启动后已选中的代理完成');
+
+        // 将路由规则发送到Go代理核心
+        _sendRoutingRulesToGoProxy();
+      } else {
+        Logger.error('Go代理核心初始化失败');
+      }
+    } catch (e, stackTrace) {
+      Logger.error('初始化Go代理核心时出错: $e，Stack trace: $stackTrace');
+    }
+  }
+
+  // 标记特权助手已安装完成
+  void _markHelperInstalled() {
+    _isHelperInstalled = true;
+    _helperInstallationCompleter?.complete();
+    _helperInstallationCompleter = null;
+    Logger.info('标记特权助手安装完成');
   }
 
   // 应用启动后已选中的代理
@@ -262,40 +339,6 @@ class AppState extends ChangeNotifier {
     } catch (e, stackTrace) {
       Logger.error('应用启动后已选中的代理时出错: $e');
       Logger.error('Stack trace: $stackTrace');
-    }
-  }
-
-  // 初始化Go代理核心
-  void _initGoProxyCore() async {
-    try {
-      Logger.info('初始化Go代理核心...');
-      // 延迟一段时间确保应用完全启动后再启动Go代理核心
-      await Future.delayed(const Duration(seconds: 3));
-      final result = await startGoProxy();
-      if (result) {
-        Logger.info('Go代理核心初始化成功');
-
-        // 初始化所有必要的代理源
-        await _initProxySources();
-
-        // 确保相关的代理已经连接
-        await _ensureProxiesConnected();
-
-        // 添加延迟确保代理连接完成
-        await Future.delayed(const Duration(seconds: 2));
-
-        // 应用已选中的代理go代理核心
-        Logger.info('开始应用启动后已选中的代理...');
-        await _applySelectedProxiesAfterStartup();
-        Logger.info('应用启动后已选中的代理完成');
-
-        // 将路由规则发送到Go代理核心
-        _sendRoutingRulesToGoProxy();
-      } else {
-        Logger.error('Go代理核心初始化失败');
-      }
-    } catch (e, stackTrace) {
-      Logger.error('初始化Go代理核心时出错: $e，Stack trace: $stackTrace');
     }
   }
 
@@ -1268,12 +1311,6 @@ class AppState extends ChangeNotifier {
     return '${processedName}_$nameHash';
   }
 
-  // 更新托盘图标
-  void _updateTrayIcon() {
-    // 更新托盘图标，考虑Go代理核心的运行状态
-    _trayManager.updateTrayIcon(_openVPNConnected, _clashConnected);
-  }
-
   // 连接Clash
   Future<bool> connectClash(VPNConfig config) async {
     try {
@@ -1529,6 +1566,11 @@ class AppState extends ChangeNotifier {
       final result = await _vpnManager.updateClashSubscription(config);
       if (result) {
         Logger.info('Clash订阅更新成功');
+        // 清除代理列表缓存并重新加载，确保UI显示最新的订阅内容
+        clearProxyCache(config.id);
+        if (_selectedConfig == config.id) {
+          await loadProxies();
+        }
       } else {
         Logger.error('Clash订阅更新失败');
       }
@@ -1553,6 +1595,11 @@ class AppState extends ChangeNotifier {
       final result = await _vpnManager.updateShadowsocksSubscription(config);
       if (result) {
         Logger.info('Shadowsocks订阅更新成功');
+        // 清除代理列表缓存并重新加载，确保UI显示最新的订阅内容
+        clearProxyCache(config.id);
+        if (_selectedConfig == config.id) {
+          await loadProxies();
+        }
       } else {
         Logger.error('Shadowsocks订阅更新失败');
       }
@@ -1577,6 +1624,11 @@ class AppState extends ChangeNotifier {
       final result = await _vpnManager.updateV2RaySubscription(config);
       if (result) {
         Logger.info('V2Ray订阅更新成功');
+        // 清除代理列表缓存并重新加载，确保UI显示最新的订阅内容
+        clearProxyCache(config.id);
+        if (_selectedConfig == config.id) {
+          await loadProxies();
+        }
       } else {
         Logger.error('V2Ray订阅更新失败');
       }
@@ -2837,23 +2889,80 @@ class AppState extends ChangeNotifier {
     }
   }
 
+  // 更新托盘图标
+  void _updateTrayIcon({bool starting = false}) {
+    // 更新托盘图标，考虑Go代理核心的运行状态和启动中状态
+    _trayManager.updateTrayIcon(
+      _openVPNConnected,
+      _clashConnected,
+      starting: starting || _isStarting,
+    );
+  }
+
   // 启动Go代理核心
   Future<bool> startGoProxy() async {
+    Logger.info('开始启动Go代理核心');
     try {
+      // 设置启动中状态
+      _isRunning = false; // 重置运行状态
+      _isStarting = true; // 设置启动中状态
+      notifyListeners();
+      Logger.info('设置启动中状态');
+
+      // 更新托盘图标为启动中状态（闪烁效果）
+      _updateTrayIcon(starting: true);
+
       final result = await _vpnManager.startGoProxy();
+      Logger.info('Go代理核心启动结果: $result');
+
       if (result) {
         _isRunning = true;
+        _isStarting = false;
         notifyListeners();
-        // 更新托盘图标
+        Logger.info('Go代理核心启动成功');
+        // 更新托盘图标为已启动状态
         _updateTrayIcon();
 
         // 重新初始化代理源和路由规则
         await _reinitializeGoProxyConfig();
+
+        // 更新托盘图标为Go代理核心已启动状态
+        _updateTrayIcon();
+      } else {
+        _isRunning = false;
+        _isStarting = false;
+        notifyListeners();
+        Logger.info('Go代理核心启动失败');
+        // 更新托盘图标为未启动状态
+        _updateTrayIcon();
       }
       return result;
     } catch (e) {
+      // 出现异常时重置状态
+      _isRunning = false;
+      _isStarting = false;
+      notifyListeners();
       Logger.error('启动Go代理核心失败: $e');
+      // 更新托盘图标为未启动状态
+      _updateTrayIcon();
       return false;
+    }
+  }
+
+  // 停止Go代理核心
+  Future<void> stopGoProxy() async {
+    Logger.info('开始停止Go代理核心');
+    try {
+      await _vpnManager.stopGoProxy();
+      _isRunning = false;
+      _isStarting = false; // 确保启动中状态也被重置
+      notifyListeners();
+      Logger.info('Go代理核心已停止');
+      // 更新托盘图标
+      _updateTrayIcon();
+    } catch (e) {
+      Logger.error('停止Go代理核心失败: $e');
+      rethrow;
     }
   }
 
@@ -2886,26 +2995,5 @@ class AppState extends ChangeNotifier {
     } catch (e, stackTrace) {
       Logger.error('重新初始化Go代理核心配置时出错: $e，Stack trace: $stackTrace');
     }
-  }
-
-  // 停止Go代理核心
-  Future<void> stopGoProxy() async {
-    try {
-      await _vpnManager.stopGoProxy();
-      _isRunning = false;
-      notifyListeners();
-      // 更新托盘图标
-      _updateTrayIcon();
-    } catch (e) {
-      Logger.error('停止Go代理核心失败: $e');
-      rethrow;
-    }
-  }
-
-  // 手动应用启动后已选中的代理（用于调试）
-  Future<void> applySelectedProxiesManually() async {
-    Logger.info('=== 手动应用选中的代理 ===');
-    await _applySelectedProxiesAfterStartup();
-    Logger.info('=== 手动应用选中的代理完成 ===');
   }
 }

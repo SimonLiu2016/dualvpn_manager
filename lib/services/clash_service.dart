@@ -2,10 +2,8 @@ import 'dart:io';
 import 'dart:async';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
-import 'dart:async';
 import 'package:path/path.dart' as path;
 import '../utils/logger.dart';
-import '../models/vpn_config.dart';
 
 class ClashService {
   static final ClashService _instance = ClashService._internal();
@@ -47,14 +45,19 @@ class ClashService {
     try {
       Logger.info('下载和解析订阅配置');
 
-      // 保存配置路径
-      _configPath = subscriptionUrl;
+      // 先更新订阅，下载配置并保存到本地文件
+      final result = await updateSubscription(subscriptionUrl);
 
-      // 设置连接状态为true，表示已连接
-      _isConnected = true;
-
-      Logger.info('Clash启动成功');
-      return true;
+      if (result) {
+        // 设置连接状态为true，表示已连接
+        _isConnected = true;
+        Logger.info('Clash启动成功');
+        return true;
+      } else {
+        Logger.error('通过订阅启动Clash失败');
+        _isConnected = false;
+        return false;
+      }
     } catch (e, stackTrace) {
       Logger.error('通过订阅启动Clash失败: $e\nStack trace: $stackTrace');
       _isConnected = false;
@@ -70,20 +73,6 @@ class ClashService {
         content.trim().startsWith('Proxy:') ||
         content.contains(':') ||
         content.contains('\n');
-  }
-
-  // 启动Clash核心
-  Future<bool> _startClash(String config) async {
-    try {
-      Logger.info('发送配置到Clash核心');
-
-      // 这里应该实现与Clash核心的通信逻辑
-      // 暂时返回true模拟成功
-      return true;
-    } catch (e) {
-      Logger.error('启动Clash核心失败: $e');
-      return false;
-    }
   }
 
   // 停止Clash
@@ -114,7 +103,13 @@ class ClashService {
 
         // 下载新的配置文件
         final response = await http
-            .get(Uri.parse(subscriptionUrl))
+            .get(
+              Uri.parse(subscriptionUrl),
+              headers: {
+                'User-Agent':
+                    'ClashX/1.116.0 (com.west2online.ClashX; build:1.116.0; macOS 15.7.1) Alamofire/5.7.1',
+              },
+            )
             .timeout(
               const Duration(seconds: 30),
               onTimeout: () {
@@ -224,16 +219,6 @@ class ClashService {
           await Future.delayed(retryDelay);
         } else {
           throw Exception('TLS/SSL连接错误，请检查服务器证书');
-        }
-      } on HandshakeException catch (e) {
-        Logger.error('TLS握手错误: $e');
-        retryCount++;
-
-        if (retryCount <= maxRetries) {
-          Logger.info('等待${retryDelay.inSeconds}秒后重试...');
-          await Future.delayed(retryDelay);
-        } else {
-          throw Exception('TLS握手失败，请检查服务器配置');
         }
       } catch (e, stackTrace) {
         Logger.error('更新Clash订阅失败: $e\nStack trace: $stackTrace');
@@ -621,95 +606,125 @@ class ClashService {
           final proxyDefinition = match.group(1)?.trim() ?? '';
 
           // 解析代理名称
-          final nameMatch = RegExp(
-            r'name:\s*"([^"]+)"',
-          ).firstMatch(proxyDefinition);
-          final name = nameMatch?.group(1)?.trim() ?? '';
+          String name = '';
+          final nameParts = proxyDefinition.split('name:');
+          if (nameParts.length > 1) {
+            final nameValue = nameParts[1].split(',').first.trim();
+            // 移除引号
+            name = nameValue.replaceAll(RegExp('^[\"\']|[\"\']\$'), '');
+          }
 
           if (name.isNotEmpty) {
             // 解析所有代理属性
             final proxy = <String, dynamic>{'name': name};
 
             // 解析类型
-            final typeMatch = RegExp(
-              r'type:\s*([a-zA-Z0-9]+)',
-            ).firstMatch(proxyDefinition);
-            if (typeMatch != null) {
-              proxy['type'] = typeMatch.group(1)?.trim() ?? 'unknown';
+            final typeParts = proxyDefinition.split('type:');
+            if (typeParts.length > 1) {
+              final typeValue = typeParts[1].split(',').first.trim();
+              proxy['type'] = typeValue.replaceAll(
+                RegExp('^[\"\']|[\"\']\$'),
+                '',
+              );
+            } else {
+              proxy['type'] = 'unknown';
             }
 
             // 解析服务器地址
-            final serverMatch = RegExp(
-              r'server:\s*([^\s,}]+)',
-            ).firstMatch(proxyDefinition);
-            if (serverMatch != null) {
-              // 移除可能的引号
-              String server = serverMatch.group(1)?.trim() ?? '127.0.0.1';
-              if (server.startsWith('"') && server.endsWith('"')) {
-                server = server.substring(1, server.length - 1);
-              }
-              proxy['server'] = server;
+            final serverParts = proxyDefinition.split('server:');
+            if (serverParts.length > 1) {
+              final serverValue = serverParts[1].split(',').first.trim();
+              proxy['server'] = serverValue.replaceAll(
+                RegExp('^[\"\']|[\"\']\$'),
+                '',
+              );
             } else {
               proxy['server'] = '127.0.0.1';
             }
 
             // 解析端口
-            final portMatch = RegExp(
-              r'port:\s*(\d+)',
-            ).firstMatch(proxyDefinition);
-            if (portMatch != null) {
-              proxy['port'] =
-                  int.tryParse(portMatch.group(1) ?? '7890') ?? 7890;
+            final portParts = proxyDefinition.split('port:');
+            if (portParts.length > 1) {
+              final portValue = portParts[1].split(',').first.trim();
+              proxy['port'] = int.tryParse(portValue) ?? 7890;
             } else {
               proxy['port'] = 7890;
             }
 
             // 解析加密方法（Shadowsocks）
-            final cipherMatch = RegExp(
-              r'cipher:\s*"([^"]*)"',
-            ).firstMatch(proxyDefinition);
-            if (cipherMatch != null) {
-              proxy['cipher'] = cipherMatch.group(1)?.trim() ?? '';
+            final cipherParts = proxyDefinition.split('cipher:');
+            if (cipherParts.length > 1) {
+              final cipherValue = cipherParts[1].split(',').first.trim();
+              proxy['cipher'] = cipherValue.replaceAll(
+                RegExp('^[\"\']|[\"\']\$'),
+                '',
+              );
             }
 
             // 解析方法（Shadowsocks）
-            final methodMatch = RegExp(
-              r'method:\s*"([^"]*)"',
-            ).firstMatch(proxyDefinition);
-            if (methodMatch != null) {
-              proxy['method'] = methodMatch.group(1)?.trim() ?? '';
+            final methodParts = proxyDefinition.split('method:');
+            if (methodParts.length > 1) {
+              final methodValue = methodParts[1].split(',').first.trim();
+              proxy['method'] = methodValue.replaceAll(
+                RegExp('^[\"\']|[\"\']\$'),
+                '',
+              );
             }
 
             // 解析密码
-            final passwordMatch = RegExp(
-              r'password:\s*"([^"]*)"',
-            ).firstMatch(proxyDefinition);
-            if (passwordMatch != null) {
-              proxy['password'] = passwordMatch.group(1)?.trim() ?? '';
+            final passwordParts = proxyDefinition.split('password:');
+            if (passwordParts.length > 1) {
+              final passwordValue = passwordParts[1].split(',').first.trim();
+              proxy['password'] = passwordValue.replaceAll(
+                RegExp('^[\"\']|[\"\']\$'),
+                '',
+              );
             }
 
             // 解析UUID（V2Ray/Vless）
-            final uuidMatch = RegExp(
-              r'uuid:\s*"([^"]*)"',
-            ).firstMatch(proxyDefinition);
-            if (uuidMatch != null) {
-              proxy['uuid'] = uuidMatch.group(1)?.trim() ?? '';
+            final uuidParts = proxyDefinition.split('uuid:');
+            if (uuidParts.length > 1) {
+              final uuidValue = uuidParts[1].split(',').first.trim();
+              proxy['uuid'] = uuidValue.replaceAll(
+                RegExp('^[\"\']|[\"\']\$'),
+                '',
+              );
             }
 
             // 解析网络类型
-            final networkMatch = RegExp(
-              r'network:\s*"([^"]*)"',
-            ).firstMatch(proxyDefinition);
-            if (networkMatch != null) {
-              proxy['network'] = networkMatch.group(1)?.trim() ?? '';
+            final networkParts = proxyDefinition.split('network:');
+            if (networkParts.length > 1) {
+              final networkValue = networkParts[1].split(',').first.trim();
+              proxy['network'] = networkValue.replaceAll(
+                RegExp('^[\"\']|[\"\']\$'),
+                '',
+              );
             }
 
             // 解析TLS设置
-            final tlsMatch = RegExp(
-              r'tls:\s*(true|false)',
-            ).firstMatch(proxyDefinition);
-            if (tlsMatch != null) {
-              proxy['tls'] = tlsMatch.group(1) == 'true';
+            final tlsParts = proxyDefinition.split('tls:');
+            if (tlsParts.length > 1) {
+              final tlsValue = tlsParts[1].split(',').first.trim();
+              proxy['tls'] = tlsValue == 'true';
+            }
+
+            // 解析UDP设置
+            final udpParts = proxyDefinition.split('udp:');
+            if (udpParts.length > 1) {
+              final udpValue = udpParts[1].split(',').first.trim();
+              proxy['udp'] = udpValue == 'true';
+            }
+
+            // 解析跳过证书验证设置
+            final skipCertVerifyParts = proxyDefinition.split(
+              'skip-cert-verify:',
+            );
+            if (skipCertVerifyParts.length > 1) {
+              final skipCertVerifyValue = skipCertVerifyParts[1]
+                  .split(',')
+                  .first
+                  .trim();
+              proxy['skipCertVerify'] = skipCertVerifyValue == 'true';
             }
 
             proxies[name] = proxy;
@@ -738,7 +753,9 @@ class ClashService {
           if (inProxiesSection &&
               (line.startsWith('proxy-groups:') ||
                   line.startsWith('rules:') ||
-                  line.startsWith('mode:'))) {
+                  line.startsWith('mode:') ||
+                  line.startsWith('mixed-port:') ||
+                  line.startsWith('allow-lan:'))) {
             break;
           }
 
@@ -751,100 +768,135 @@ class ClashService {
                 !lines[j].trim().startsWith('-') &&
                 !lines[j].trim().startsWith('}') &&
                 !lines[j].trim().startsWith('proxy-groups:') &&
-                !lines[j].trim().startsWith('rules:')) {
-              proxyDefinition += ' ' + lines[j].trim();
+                !lines[j].trim().startsWith('rules:') &&
+                !lines[j].trim().startsWith('mode:') &&
+                !lines[j].trim().startsWith('mixed-port:') &&
+                !lines[j].trim().startsWith('allow-lan:')) {
+              if (lines[j].trim().isNotEmpty) {
+                proxyDefinition += ' ' + lines[j].trim();
+              }
               j++;
             }
 
             // 解析代理的所有属性
-            final nameMatch = RegExp(
-              r'name:\s*"([^"]+)"',
-            ).firstMatch(proxyDefinition);
-            final name = nameMatch?.group(1)?.trim() ?? '';
+            String name = '';
+            final nameParts = proxyDefinition.split('name:');
+            if (nameParts.length > 1) {
+              final nameValue = nameParts[1].split(',').first.trim();
+              // 移除引号
+              name = nameValue.replaceAll(RegExp('^[\"\']|[\"\']\$'), '');
+            }
 
             if (name.isNotEmpty) {
               final proxy = <String, dynamic>{'name': name};
 
               // 解析类型
-              final typeMatch = RegExp(
-                r'type:\s*([a-zA-Z0-9]+)',
-              ).firstMatch(proxyDefinition);
-              if (typeMatch != null) {
-                proxy['type'] = typeMatch.group(1)?.trim() ?? 'unknown';
+              final typeParts = proxyDefinition.split('type:');
+              if (typeParts.length > 1) {
+                final typeValue = typeParts[1].split(',').first.trim();
+                proxy['type'] = typeValue.replaceAll(
+                  RegExp('^[\"\']|[\"\']\$'),
+                  '',
+                );
+              } else {
+                proxy['type'] = 'unknown';
               }
 
               // 解析服务器地址
-              final serverMatch = RegExp(
-                r'server:\s*([^\s,}]+)',
-              ).firstMatch(proxyDefinition);
-              if (serverMatch != null) {
-                // 移除可能的引号
-                String server = serverMatch.group(1)?.trim() ?? '127.0.0.1';
-                if (server.startsWith('"') && server.endsWith('"')) {
-                  server = server.substring(1, server.length - 1);
-                }
-                proxy['server'] = server;
+              final serverParts = proxyDefinition.split('server:');
+              if (serverParts.length > 1) {
+                final serverValue = serverParts[1].split(',').first.trim();
+                proxy['server'] = serverValue.replaceAll(
+                  RegExp('^[\"\']|[\"\']\$'),
+                  '',
+                );
               } else {
                 proxy['server'] = '127.0.0.1';
               }
 
               // 解析端口
-              final portMatch = RegExp(
-                r'port:\s*(\d+)',
-              ).firstMatch(proxyDefinition);
-              if (portMatch != null) {
-                proxy['port'] =
-                    int.tryParse(portMatch.group(1) ?? '7890') ?? 7890;
+              final portParts = proxyDefinition.split('port:');
+              if (portParts.length > 1) {
+                final portValue = portParts[1].split(',').first.trim();
+                proxy['port'] = int.tryParse(portValue) ?? 7890;
               } else {
                 proxy['port'] = 7890;
               }
 
               // 解析加密方法（Shadowsocks）
-              final cipherMatch = RegExp(
-                r'cipher:\s*"([^"]*)"',
-              ).firstMatch(proxyDefinition);
-              if (cipherMatch != null) {
-                proxy['cipher'] = cipherMatch.group(1)?.trim() ?? '';
+              final cipherParts = proxyDefinition.split('cipher:');
+              if (cipherParts.length > 1) {
+                final cipherValue = cipherParts[1].split(',').first.trim();
+                proxy['cipher'] = cipherValue.replaceAll(
+                  RegExp('^[\"\']|[\"\']\$'),
+                  '',
+                );
               }
 
               // 解析方法（Shadowsocks）
-              final methodMatch = RegExp(
-                r'method:\s*"([^"]*)"',
-              ).firstMatch(proxyDefinition);
-              if (methodMatch != null) {
-                proxy['method'] = methodMatch.group(1)?.trim() ?? '';
+              final methodParts = proxyDefinition.split('method:');
+              if (methodParts.length > 1) {
+                final methodValue = methodParts[1].split(',').first.trim();
+                proxy['method'] = methodValue.replaceAll(
+                  RegExp('^[\"\']|[\"\']\$'),
+                  '',
+                );
               }
 
               // 解析密码
-              final passwordMatch = RegExp(
-                r'password:\s*"([^"]*)"',
-              ).firstMatch(proxyDefinition);
-              if (passwordMatch != null) {
-                proxy['password'] = passwordMatch.group(1)?.trim() ?? '';
+              final passwordParts = proxyDefinition.split('password:');
+              if (passwordParts.length > 1) {
+                final passwordValue = passwordParts[1].split(',').first.trim();
+                proxy['password'] = passwordValue.replaceAll(
+                  RegExp('^[\"\']|[\"\']\$'),
+                  '',
+                );
               }
 
               // 解析UUID（V2Ray/Vless）
-              final uuidMatch = RegExp(
-                r'uuid:\s*"([^"]*)"',
-              ).firstMatch(proxyDefinition);
-              if (uuidMatch != null) {
-                proxy['uuid'] = uuidMatch.group(1)?.trim() ?? '';
+              final uuidParts = proxyDefinition.split('uuid:');
+              if (uuidParts.length > 1) {
+                final uuidValue = uuidParts[1].split(',').first.trim();
+                proxy['uuid'] = uuidValue.replaceAll(
+                  RegExp('^[\"\']|[\"\']\$'),
+                  '',
+                );
               }
 
               // 解析网络类型
-              final networkMatch = RegExp(
-                r'network:\s*"([^"]*)"',
-              ).firstMatch(proxyDefinition);
-              if (networkMatch != null) {
-                proxy['network'] = networkMatch.group(1)?.trim() ?? '';
+              final networkParts = proxyDefinition.split('network:');
+              if (networkParts.length > 1) {
+                final networkValue = networkParts[1].split(',').first.trim();
+                proxy['network'] = networkValue.replaceAll(
+                  RegExp('^[\"\']|[\"\']\$'),
+                  '',
+                );
               }
 
               // 解析TLS设置
-              final tlsMatch = RegExp(
-                r'tls:\s*(true|false)',
-              ).firstMatch(proxyDefinition);
-              if (tlsMatch != null) {
-                proxy['tls'] = tlsMatch.group(1) == 'true';
+              final tlsParts = proxyDefinition.split('tls:');
+              if (tlsParts.length > 1) {
+                final tlsValue = tlsParts[1].split(',').first.trim();
+                proxy['tls'] = tlsValue == 'true';
+              }
+
+              // 解析UDP设置
+              final udpParts = proxyDefinition.split('udp:');
+              if (udpParts.length > 1) {
+                final udpValue = udpParts[1].split(',').first.trim();
+                proxy['udp'] = udpValue == 'true';
+              }
+
+              // 解析跳过证书验证设置
+              final skipCertVerifyParts = proxyDefinition.split(
+                'skip-cert-verify:',
+              );
+              if (skipCertVerifyParts.length > 1) {
+                final skipCertVerifyValue = skipCertVerifyParts[1]
+                    .split(',')
+                    .first
+                    .trim();
+                proxy['skipCertVerify'] = skipCertVerifyValue == 'true';
               }
 
               proxies[name] = proxy;

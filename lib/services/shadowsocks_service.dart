@@ -2,7 +2,6 @@ import 'dart:io';
 import 'package:path/path.dart' as path;
 import 'package:http/http.dart' as http;
 import 'dart:convert';
-import 'package:crypto/crypto.dart';
 import 'package:dualvpn_manager/utils/logger.dart';
 
 class ShadowsocksService {
@@ -96,7 +95,13 @@ class ShadowsocksService {
   Future<bool> startWithSubscription(String subscriptionUrl) async {
     try {
       // 下载配置文件
-      final response = await http.get(Uri.parse(subscriptionUrl));
+      final response = await http.get(
+        Uri.parse(subscriptionUrl),
+        headers: {
+          'User-Agent':
+              'ShadowsocksX/1.0 (com.github.shadowsocks; build:1.0; macOS 15.7.1) Alamofire/5.7.1',
+        },
+      );
       if (response.statusCode != 200) {
         Logger.error('下载Shadowsocks订阅配置失败: ${response.statusCode}');
         throw Exception('下载Shadowsocks订阅配置失败: ${response.statusCode}');
@@ -147,7 +152,13 @@ class ShadowsocksService {
 
         // 下载新的配置文件
         final response = await http
-            .get(Uri.parse(subscriptionUrl))
+            .get(
+              Uri.parse(subscriptionUrl),
+              headers: {
+                'User-Agent':
+                    'ClashX/1.116.0 (com.west2online.ClashX; build:1.116.0; macOS 15.7.1) Alamofire/5.7.1',
+              },
+            )
             .timeout(
               const Duration(seconds: 30),
               onTimeout: () {
@@ -424,6 +435,66 @@ class ShadowsocksService {
     }
   }
 
+  // 解析Shadowsocks链接
+  Map<String, dynamic>? _parseShadowsocksLink(String link) {
+    try {
+      // ss://base64encode(method:password)@server:port#name
+      final uri = Uri.parse(link);
+      final host = uri.host;
+      final port = uri.port;
+
+      // 解码用户信息
+      final userInfo = uri.userInfo;
+      String method, password;
+
+      if (userInfo.contains(':')) {
+        // 直接的method:password格式
+        final parts = userInfo.split(':');
+        method = parts[0];
+        password = parts[1];
+      } else {
+        // Base64编码的格式
+        // 修复Base64长度问题：确保长度是4的倍数
+        String paddedUserInfo = userInfo;
+        final padding = 4 - (userInfo.length % 4);
+        if (padding != 4) {
+          paddedUserInfo += '=' * padding;
+        }
+
+        try {
+          final decoded = utf8.decode(base64Decode(paddedUserInfo));
+          final parts = decoded.split(':');
+          if (parts.length >= 2) {
+            method = parts[0];
+            password = parts[1];
+          } else {
+            Logger.error('Shadowsocks链接格式不正确，解码后: $decoded');
+            return null;
+          }
+        } catch (decodeError) {
+          Logger.error('Shadowsocks Base64解码失败: $decodeError, 链接: $link');
+          return null;
+        }
+      }
+
+      final name = uri.fragment.isNotEmpty
+          ? Uri.decodeComponent(uri.fragment)
+          : '$host:$port';
+
+      return {
+        'name': name,
+        'type': 'ss',
+        'server': host,
+        'port': port,
+        'cipher': method,
+        'password': password,
+      };
+    } catch (e) {
+      Logger.error('解析Shadowsocks链接失败: $e, 链接: $link');
+      return null;
+    }
+  }
+
   // 从订阅链接解析代理列表
   Future<List<Map<String, dynamic>>> getProxiesFromSubscription(
     String subscriptionUrl,
@@ -432,7 +503,13 @@ class ShadowsocksService {
       Logger.info('开始从订阅链接解析Shadowsocks代理列表: $subscriptionUrl');
 
       // 下载订阅内容
-      final response = await http.get(Uri.parse(subscriptionUrl));
+      final response = await http.get(
+        Uri.parse(subscriptionUrl),
+        headers: {
+          'User-Agent':
+              'ShadowsocksX/1.0 (com.github.shadowsocks; build:1.0; macOS 15.7.1) Alamofire/5.7.1',
+        },
+      );
 
       // 检查HTTP响应状态码
       if (response.statusCode >= 300) {
@@ -442,8 +519,8 @@ class ShadowsocksService {
 
       // 检查响应内容是否为空
       if (response.body.isEmpty) {
-        Logger.error('下载Shadowsocks订阅失败: 响应内容为空');
-        throw Exception('下载Shadowsocks订阅失败: 响应内容为空');
+        Logger.error('下载Shadowsocks订阅配置失败: 响应内容为空');
+        throw Exception('下载Shadowsocks订阅配置失败: 响应内容为空');
       }
 
       // 解析订阅内容
@@ -465,161 +542,40 @@ class ShadowsocksService {
 
       final List<Map<String, dynamic>> proxies = [];
 
+      // 解析Shadowsocks配置
       try {
-        // 尝试解析JSON格式的配置
-        final jsonConfig = json.decode(configContent);
-
-        // 处理不同的Shadowsocks配置格式
-        if (jsonConfig is Map<String, dynamic>) {
-          // 单个配置格式
-          if (jsonConfig.containsKey('server') &&
-              jsonConfig.containsKey('server_port')) {
-            final name =
-                jsonConfig['remarks'] ??
-                '${jsonConfig['server']}:${jsonConfig['server_port']}';
-            proxies.add({
-              'name': name,
-              'type': 'shadowsocks',
-              'server': jsonConfig['server'],
-              'port': jsonConfig['server_port'],
-              'password': jsonConfig['password'],
-              'method': jsonConfig['method'],
-              'latency': -2, // -2表示未测试
-              'isSelected': false,
-            });
-          }
-          // 多配置格式
-          else if (jsonConfig.containsKey('configs') &&
-              jsonConfig['configs'] is List) {
-            final configsList = jsonConfig['configs'] as List;
-            for (var i = 0; i < configsList.length; i++) {
-              final config = configsList[i];
-              if (config is Map<String, dynamic>) {
-                final name =
-                    config['remarks'] ??
-                    config['server'] ??
-                    'Shadowsocks Server ${i + 1}';
-                proxies.add({
-                  'name': name,
-                  'type': 'shadowsocks',
-                  'server': config['server'],
-                  'port': config['server_port'],
-                  'password': config['password'],
-                  'method': config['method'],
-                  'latency': -2, // -2表示未测试
-                  'isSelected': false,
-                });
-              }
-            }
-          }
-          // Clash格式
-          else if (jsonConfig.containsKey('proxies') &&
-              jsonConfig['proxies'] is List) {
-            final proxiesList = jsonConfig['proxies'] as List;
-            for (var i = 0; i < proxiesList.length; i++) {
-              final proxy = proxiesList[i];
-              if (proxy is Map<String, dynamic> &&
-                  (proxy['type'] == 'ss' || proxy['type'] == 'shadowsocks')) {
-                final name = proxy['name'] ?? 'Shadowsocks Proxy ${i + 1}';
-                proxies.add({
-                  'name': name,
-                  'type': 'shadowsocks',
-                  'server': proxy['server'],
-                  'port': proxy['port'],
-                  'password': proxy['password'],
-                  'method': proxy['cipher'],
-                  'latency': -2, // -2表示未测试
-                  'isSelected': false,
-                });
-              }
+        // Shadowsocks订阅通常是ss://链接列表，每行一个
+        final lines = configContent.split('\n');
+        for (int i = 0; i < lines.length; i++) {
+          final line = lines[i].trim();
+          if (line.startsWith('ss://')) {
+            // 解析Shadowsocks链接
+            final proxy = _parseShadowsocksLink(line);
+            if (proxy != null) {
+              proxies.add(proxy);
             }
           }
         }
       } catch (e) {
-        // 如果JSON解析失败，尝试按行解析（可能是一行一个ss://链接的格式）
-        final lines = configContent.split('\n');
-        for (var i = 0; i < lines.length; i++) {
-          final line = lines[i].trim();
-          if (line.isNotEmpty &&
-              (line.startsWith('ss://') || line.startsWith('ssr://'))) {
-            // 简单解析URL格式的Shadowsocks配置
-            try {
-              final uri = Uri.parse(line);
-              final name =
-                  (uri.fragment.isNotEmpty
-                      ? Uri.decodeComponent(uri.fragment)
-                      : null) ??
-                  uri.queryParameters['remarks'] ??
-                  (uri.host.isNotEmpty
-                      ? '${uri.host}:${uri.port}'
-                      : 'Shadowsocks Server ${i + 1}');
-              
-              // 解析用户信息
-              String method = 'aes-256-gcm';
-              String password = '';
-              if (uri.userInfo.isNotEmpty) {
-                try {
-                  // 尝试Base64解码用户信息
-                  String paddedUserInfo = uri.userInfo;
-                  final padding = 4 - (uri.userInfo.length % 4);
-                  if (padding != 4) {
-                    paddedUserInfo += '=' * padding;
-                  }
-                  final decoded = utf8.decode(base64Decode(paddedUserInfo));
-                  final parts = decoded.split(':');
-                  if (parts.length >= 2) {
-                    method = parts[0];
-                    password = parts[1];
-                  }
-                } catch (decodeError) {
-                  // 如果解码失败，直接使用用户信息
-                  final parts = uri.userInfo.split(':');
-                  if (parts.length >= 2) {
-                    method = parts[0];
-                    password = parts[1];
-                  }
-                }
-              }
-              
-              proxies.add({
-                'name': name,
-                'type': 'shadowsocks',
-                'server': uri.host,
-                'port': uri.port,
-                'password': password,
-                'method': method,
-                'latency': -2, // -2表示未测试
-                'isSelected': false,
-              });
-            } catch (uriError) {
-              // URL解析失败，使用默认名称
-              proxies.add({
-                'name': 'Shadowsocks Server ${i + 1}',
-                'type': 'shadowsocks',
-                'latency': -2, // -2表示未测试
-                'isSelected': false,
-              });
-            }
-          }
-        }
+        // 如果解析失败，返回空列表
+        Logger.warn('解析Shadowsocks配置时出错: $e');
       }
 
-      Logger.info('成功解析到 ${proxies.length} 个Shadowsocks代理');
       return proxies;
     } catch (e, stackTrace) {
-      Logger.error('从订阅链接解析Shadowsocks代理列表失败: $e\nStack trace: $stackTrace');
-      rethrow;
+      Logger.error('获取Shadowsocks代理列表时出错: $e\nStack trace: $stackTrace');
+      return [];
     }
   }
-  
+
   // 获取指定代理的详细配置信息
   Future<Map<String, dynamic>?> getProxyDetails(String proxyName) async {
     try {
       Logger.info('获取Shadowsocks代理详细配置信息: $proxyName');
-      
+
       // 获取代理列表
       final proxies = await getProxies();
-      
+
       // 查找指定代理
       for (var proxy in proxies) {
         if (proxy['name'] == proxyName) {
@@ -632,12 +588,12 @@ class ShadowsocksService {
             'password': proxy['password'],
             'method': proxy['method'] ?? 'aes-256-gcm',
           };
-          
+
           Logger.info('构建的协议配置: $protocolConfig');
           return protocolConfig;
         }
       }
-      
+
       Logger.warn('未找到代理的详细配置信息: $proxyName');
       return null;
     } catch (e) {

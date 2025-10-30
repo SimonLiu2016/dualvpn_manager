@@ -487,9 +487,6 @@ class VPNManager {
     } on TlsException catch (e) {
       Logger.error('TLS/SSL错误: $e');
       throw Exception('TLS/SSL连接错误，请检查服务器证书');
-    } on HandshakeException catch (e) {
-      Logger.error('TLS握手错误: $e');
-      throw Exception('TLS握手失败，请检查服务器配置');
     } catch (e) {
       Logger.error('更新Clash订阅失败: $e');
       if (e.toString().contains('404')) {
@@ -737,26 +734,6 @@ class VPNManager {
     } catch (e) {
       Logger.error('获取Go代理核心统计信息失败: $e');
       return null;
-    }
-  }
-
-  // 获取OpenVPN状态
-  Future<bool> getOpenVPNStatus() async {
-    try {
-      return await _openVPNService.checkStatus();
-    } catch (e) {
-      Logger.error('获取OpenVPN状态失败: $e');
-      rethrow;
-    }
-  }
-
-  // 获取Clash状态
-  Future<Map<String, dynamic>?> getClashStatus() async {
-    try {
-      return await _clashService.getStatus();
-    } catch (e) {
-      Logger.error('获取Clash状态失败: $e');
-      rethrow;
     }
   }
 

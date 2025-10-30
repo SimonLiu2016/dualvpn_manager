@@ -280,12 +280,6 @@ class SOCKS5ProxyServer {
         return;
       }
 
-      if (targetHost == null || targetPort == null) {
-        Logger.error('无法解析目标地址');
-        _sendConnectionResponse(clientSocket, 0x01, safeClose); // 一般SOCKS服务器故障
-        return;
-      }
-
       Logger.debug('目标地址: $targetHost:$targetPort');
 
       // 根据路由规则决定是否代理

@@ -9,7 +9,6 @@ class GoProxyService {
   factory GoProxyService() => _instance;
   GoProxyService._internal();
 
-  Process? _process;
   bool _isRunning = false;
 
   bool get isRunning => _isRunning;
@@ -117,7 +116,6 @@ class GoProxyService {
 
       await _killExistingProcess();
 
-      _process = null;
       _isRunning = false;
       Logger.info('Go代理核心已停止');
     } catch (e, stackTrace) {
@@ -326,34 +324,6 @@ class GoProxyService {
     }
   }
 
-  /// 检查端口是否可用
-  Future<bool> _checkPortAvailability(List<int> ports) async {
-    try {
-      for (final port in ports) {
-        Socket? socket;
-        try {
-          socket = await Socket.connect(
-            '127.0.0.1',
-            port,
-          ).timeout(const Duration(seconds: 1));
-          // 端口被占用
-          await socket.close();
-          Logger.info('端口 $port 被占用');
-          return false;
-        } catch (e) {
-          // 连接失败通常意味着端口未被占用
-          // 继续检查下一个端口
-          Logger.info('端口 $port 未被占用');
-        }
-      }
-      return true;
-    } catch (e) {
-      // 出现异常也认为端口可用
-      Logger.info('检查端口可用性时出现异常: $e');
-      return true;
-    }
-  }
-
   /// 获取代理核心可执行文件路径
   Future<String?> _getProxyExecutablePath() async {
     try {
@@ -504,14 +474,12 @@ class GoProxyService {
   Future<Map<String, dynamic>?> getStats() async {
     try {
       final url = Uri.parse('http://127.0.0.1:6162/stats');
-      Logger.info('获取Go代理核心统计信息: $url');
       final response = await HttpClient().getUrl(url);
       final httpResponse = await response.close();
       final responseBody = await utf8.decodeStream(httpResponse);
 
       if (httpResponse.statusCode == 200) {
         final stats = jsonDecode(responseBody) as Map<String, dynamic>;
-        Logger.info('获取统计信息成功: $stats');
         return stats;
       } else {
         Logger.error('获取统计信息失败: ${httpResponse.statusCode}, $responseBody');
