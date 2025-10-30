@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:dualvpn_manager/models/app_state.dart';
 import 'package:dualvpn_manager/models/vpn_config.dart';
+import 'package:dualvpn_manager/l10n/app_localizations_delegate.dart';
 
 /// 已选中代理小部件
 /// 这个小部件只监听与选中代理相关的状态变化
@@ -10,6 +11,8 @@ class SelectedProxiesWidget extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final localizations = AppLocalizations.of(context);
+
     return FutureBuilder<List<Map<String, dynamic>>>(
       future: context.read<AppState>().getSelectedProxies(),
       builder: (context, snapshot) {
@@ -24,7 +27,10 @@ class SelectedProxiesWidget extends StatelessWidget {
         final selectedProxies = snapshot.data ?? [];
 
         if (selectedProxies.isEmpty) {
-          return const Text('暂无已选中代理', style: TextStyle(color: Colors.grey));
+          return Text(
+            localizations.get('no_selected_proxies'),
+            style: TextStyle(color: Theme.of(context).hintColor),
+          );
         }
 
         return Column(
@@ -41,37 +47,45 @@ class SelectedProxiesWidget extends StatelessWidget {
               case VPNType.openVPN:
                 color = Colors.blue;
                 icon = Icons.vpn_lock;
-                typeName = 'OpenVPN';
+                typeName = localizations
+                    .get('openvpn_label')
+                    .replaceAll(':', '');
                 break;
               case VPNType.clash:
                 color = Colors.green;
                 icon = Icons.shield;
-                typeName = 'Clash';
+                typeName = localizations.get('clash_label').replaceAll(':', '');
                 break;
               case VPNType.shadowsocks:
                 color = Colors.purple;
                 icon = Icons.link;
-                typeName = 'Shadowsocks';
+                typeName = localizations
+                    .get('shadowsocks_label')
+                    .replaceAll(':', '');
                 break;
               case VPNType.v2ray:
                 color = Colors.orange;
                 icon = Icons.link;
-                typeName = 'V2Ray';
+                typeName = localizations.get('v2ray_label').replaceAll(':', '');
                 break;
               case VPNType.httpProxy:
                 color = Colors.red;
                 icon = Icons.http;
-                typeName = 'HTTP代理';
+                typeName = localizations
+                    .get('http_proxy_label')
+                    .replaceAll(':', '');
                 break;
               case VPNType.socks5:
                 color = Colors.teal;
                 icon = Icons.http;
-                typeName = 'SOCKS5代理';
+                typeName = localizations
+                    .get('socks5_proxy_label')
+                    .replaceAll(':', '');
                 break;
               default:
-                color = Colors.grey;
+                color = Theme.of(context).hintColor;
                 icon = Icons.help;
-                typeName = '未知';
+                typeName = localizations.get('unknown');
             }
 
             return Container(
@@ -96,9 +110,9 @@ class SelectedProxiesWidget extends StatelessWidget {
                         ),
                         Text(
                           '$typeName - ${proxy['name']}',
-                          style: const TextStyle(
+                          style: TextStyle(
                             fontSize: 12,
-                            color: Colors.grey,
+                            color: Theme.of(context).hintColor,
                           ),
                         ),
                       ],
@@ -115,9 +129,9 @@ class SelectedProxiesWidget extends StatelessWidget {
                       color: color,
                       borderRadius: BorderRadius.circular(12),
                     ),
-                    child: const Text(
-                      '已连接',
-                      style: TextStyle(color: Colors.white, fontSize: 10),
+                    child: Text(
+                      localizations.get('connected'),
+                      style: const TextStyle(color: Colors.white, fontSize: 10),
                     ),
                   ),
                 ],
@@ -160,7 +174,11 @@ class _RateInfoWidget extends StatelessWidget {
       builder: (context, rateInfo, child) {
         return Text(
           rateInfo,
-          style: const TextStyle(fontSize: 12, color: Colors.grey),
+          style: TextStyle(
+            fontSize: 12,
+            color: Theme.of(context).hintColor,
+            fontFamily: 'monospace',
+          ),
         );
       },
     );

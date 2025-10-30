@@ -5,6 +5,7 @@ import 'package:dualvpn_manager/models/vpn_config.dart';
 import 'package:dualvpn_manager/services/smart_routing_engine.dart'
     as smart_routing_engine;
 import 'package:dualvpn_manager/utils/config_manager.dart';
+import 'package:dualvpn_manager/l10n/app_localizations_delegate.dart';
 
 // 添加扩展方法以支持firstWhereOrNull
 extension ListExtensions<T> on List<T> {
@@ -47,10 +48,12 @@ class _RoutingRulesScreenState extends State<RoutingRulesScreen> {
   }
 
   void _addRoutingRule() async {
+    final localizations = AppLocalizations.of(context);
+
     if (_patternController.text.isEmpty || _selectedConfigId == null) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('请填写完整信息')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(localizations.get('please_fill_complete_info'))),
+      );
       return;
     }
 
@@ -103,13 +106,15 @@ class _RoutingRulesScreenState extends State<RoutingRulesScreen> {
     appState.addRoutingRule(smartRule);
 
     if (mounted) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('路由规则已添加')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(localizations.get('routing_rule_added'))),
+      );
     }
   }
 
   void _deleteRoutingRule(VPNConfig config, int ruleIndex) async {
+    final localizations = AppLocalizations.of(context);
+
     final updatedRules = List<RoutingRule>.from(config.routingRules);
     final removedRule = updatedRules.removeAt(ruleIndex);
 
@@ -141,9 +146,9 @@ class _RoutingRulesScreenState extends State<RoutingRulesScreen> {
     _loadConfigs();
 
     if (mounted) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('路由规则已删除')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(localizations.get('routing_rule_deleted'))),
+      );
     }
   }
 
@@ -196,29 +201,33 @@ class _RoutingRulesScreenState extends State<RoutingRulesScreen> {
 
   // 获取路由类型标签
   String _getRouteTypeLabel(RouteType routeType) {
+    final localizations = AppLocalizations.of(context);
+
     switch (routeType) {
       case RouteType.openVPN:
-        return '强制使用OpenVPN';
+        return localizations.get('force_use_openvpn');
       case RouteType.clash:
-        return '强制使用Clash';
+        return localizations.get('force_use_clash');
       case RouteType.shadowsocks:
-        return '强制使用Shadowsocks';
+        return localizations.get('force_use_shadowsocks');
       case RouteType.v2ray:
-        return '强制使用V2Ray';
+        return localizations.get('force_use_v2ray');
       case RouteType.httpProxy:
-        return '强制使用HTTP代理';
+        return localizations.get('force_use_http_proxy');
       case RouteType.socks5:
-        return '强制使用SOCKS5代理';
+        return localizations.get('force_use_socks5_proxy');
       case RouteType.custom:
-        return '强制使用自定义代理';
-      }
+        return localizations.get('force_use_custom_proxy');
+    }
   }
 
   // 获取VPN配置名称
   String _getConfigNameByRouteType(RouteType routeType, String? configId) {
+    final localizations = AppLocalizations.of(context);
+
     // 如果configs为空，直接返回默认值
     if (configs.isEmpty) {
-      return '未找到配置';
+      return localizations.get('config_not_found');
     }
 
     // 如果有配置ID，优先根据配置ID查找
@@ -255,7 +264,7 @@ class _RoutingRulesScreenState extends State<RoutingRulesScreen> {
           break;
       }
     }
-    return '未找到配置';
+    return localizations.get('config_not_found');
   }
 
   // 添加转换方法
@@ -277,14 +286,16 @@ class _RoutingRulesScreenState extends State<RoutingRulesScreen> {
         return smart_routing_engine.RuleType.domainSuffix;
       case RouteType.custom:
         return smart_routing_engine.RuleType.domainSuffix;
-      }
+    }
   }
 
   @override
   Widget build(BuildContext context) {
+    final localizations = AppLocalizations.of(context);
+
     return Scaffold(
       appBar: AppBar(
-        title: const Text('路由规则管理'),
+        title: Text(localizations.get('routing_rules_management')),
         backgroundColor: Colors.blue,
         foregroundColor: Colors.white,
       ),
@@ -300,9 +311,9 @@ class _RoutingRulesScreenState extends State<RoutingRulesScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text(
-                      '添加新路由规则',
-                      style: TextStyle(
+                    Text(
+                      localizations.get('add_new_routing_rule'),
+                      style: const TextStyle(
                         fontSize: 18,
                         fontWeight: FontWeight.bold,
                       ),
@@ -310,18 +321,20 @@ class _RoutingRulesScreenState extends State<RoutingRulesScreen> {
                     const SizedBox(height: 16),
                     TextField(
                       controller: _patternController,
-                      decoration: const InputDecoration(
-                        labelText: '网址或IP地址模式',
-                        hintText: '例如: google.com 或 8.8.8.8',
-                        border: OutlineInputBorder(),
+                      decoration: InputDecoration(
+                        labelText: localizations.get('website_or_ip_pattern'),
+                        hintText: localizations.get(
+                          'example_google_com_or_8_8_8_8',
+                        ),
+                        border: const OutlineInputBorder(),
                       ),
                     ),
                     const SizedBox(height: 16),
                     DropdownButtonFormField<String>(
                       value: _selectedConfigId,
-                      decoration: const InputDecoration(
-                        labelText: '选择VPN配置',
-                        border: OutlineInputBorder(),
+                      decoration: InputDecoration(
+                        labelText: localizations.get('select_vpn_config'),
+                        border: const OutlineInputBorder(),
                       ),
                       items: configs.map((config) {
                         return DropdownMenuItem(
@@ -338,33 +351,33 @@ class _RoutingRulesScreenState extends State<RoutingRulesScreen> {
                     const SizedBox(height: 16),
                     DropdownButtonFormField<RouteType>(
                       value: _selectedRouteType,
-                      decoration: const InputDecoration(
-                        labelText: '强制使用VPN类型',
-                        border: OutlineInputBorder(),
+                      decoration: InputDecoration(
+                        labelText: localizations.get('force_use_vpn_type'),
+                        border: const OutlineInputBorder(),
                       ),
                       items: RouteType.values.map((type) {
                         String label;
                         switch (type) {
                           case RouteType.openVPN:
-                            label = 'OpenVPN';
+                            label = localizations.get('vpn_type_openvpn');
                             break;
                           case RouteType.clash:
-                            label = 'Clash';
+                            label = localizations.get('vpn_type_clash');
                             break;
                           case RouteType.shadowsocks:
-                            label = 'Shadowsocks';
+                            label = localizations.get('vpn_type_shadowsocks');
                             break;
                           case RouteType.v2ray:
-                            label = 'V2Ray';
+                            label = localizations.get('vpn_type_v2ray');
                             break;
                           case RouteType.httpProxy:
-                            label = 'HTTP代理';
+                            label = localizations.get('vpn_type_http_proxy');
                             break;
                           case RouteType.socks5:
-                            label = 'SOCKS5代理';
+                            label = localizations.get('vpn_type_socks5_proxy');
                             break;
                           case RouteType.custom:
-                            label = '自定义代理';
+                            label = localizations.get('vpn_type_custom_proxy');
                             break;
                         }
                         return DropdownMenuItem(
@@ -383,7 +396,7 @@ class _RoutingRulesScreenState extends State<RoutingRulesScreen> {
                     const SizedBox(height: 16),
                     Row(
                       children: [
-                        const Text('启用规则'),
+                        Text(localizations.get('enable_rule')),
                         const SizedBox(width: 10),
                         Switch(
                           value: _isEnabled,
@@ -398,7 +411,7 @@ class _RoutingRulesScreenState extends State<RoutingRulesScreen> {
                     const SizedBox(height: 16),
                     ElevatedButton(
                       onPressed: _addRoutingRule,
-                      child: const Text('添加路由规则'),
+                      child: Text(localizations.get('add_routing_rule')),
                     ),
                   ],
                 ),
@@ -406,17 +419,17 @@ class _RoutingRulesScreenState extends State<RoutingRulesScreen> {
             ),
             const SizedBox(height: 20),
             // 路由规则列表
-            const Text(
-              '现有路由规则',
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+            Text(
+              localizations.get('existing_routing_rules'),
+              style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 10),
             Expanded(
               child: configs.isEmpty
-                  ? const Center(
+                  ? Center(
                       child: Text(
-                        '暂无VPN配置，请先添加配置',
-                        style: TextStyle(color: Colors.grey),
+                        localizations.get('no_vpn_config_please_add_config'),
+                        style: const TextStyle(color: Colors.grey),
                       ),
                     )
                   : ListView.builder(
@@ -438,13 +451,15 @@ class _RoutingRulesScreenState extends State<RoutingRulesScreen> {
                                 ),
                                 const SizedBox(height: 10),
                                 if (config.routingRules.isEmpty)
-                                  const Padding(
-                                    padding: EdgeInsets.symmetric(
+                                  Padding(
+                                    padding: const EdgeInsets.symmetric(
                                       vertical: 8.0,
                                     ),
                                     child: Text(
-                                      '暂无路由规则',
-                                      style: TextStyle(color: Colors.grey),
+                                      localizations.get('no_routing_rules'),
+                                      style: const TextStyle(
+                                        color: Colors.grey,
+                                      ),
                                     ),
                                   ),
                                 ...List.generate(config.routingRules.length, (
@@ -471,7 +486,7 @@ class _RoutingRulesScreenState extends State<RoutingRulesScreen> {
                                             _getRouteTypeLabel(rule.routeType),
                                           ),
                                           Text(
-                                            '代理源: ${_getConfigNameByRouteType(rule.routeType, rule.configId)}',
+                                            '${localizations.get('proxy_source')}: ${_getConfigNameByRouteType(rule.routeType, rule.configId)}',
                                             style: const TextStyle(
                                               fontSize: 12,
                                               color: Colors.grey,
