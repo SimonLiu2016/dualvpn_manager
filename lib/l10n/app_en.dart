@@ -15,6 +15,8 @@ class AppLocalizationsEn {
     'language_subtitle': 'Language settings and multilingual support',
     'theme_setting': 'Theme Settings',
     'theme_subtitle': 'Light mode, dark mode and other theme options',
+    'log_management_setting': 'Log Management',
+    'log_management_subtitle': 'Configure log file size and retention time',
     'import_export_setting': 'Import/Export Config',
     'import_export_subtitle': 'Backup and restore configuration files',
     'help_setting': 'Help',

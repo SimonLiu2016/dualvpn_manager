@@ -16,7 +16,9 @@ import 'package:dualvpn_manager/utils/config_manager.dart';
 import 'package:provider/provider.dart';
 
 class HomeScreen extends StatefulWidget {
-  const HomeScreen({super.key});
+  final AppState appState;
+
+  const HomeScreen({super.key, required this.appState});
 
   @override
   _HomeScreenState createState() => _HomeScreenState();
@@ -132,7 +134,7 @@ class _HomeScreenState extends State<HomeScreen> with WindowListener {
       case 3:
         return const RoutingScreen(); // 使用完整的路由配置界面
       case 4:
-        return const SettingsScreen(); // 添加设置界面
+        return SettingsScreen(appState: widget.appState); // 添加设置界面
       default:
         return const HomeContent();
     }

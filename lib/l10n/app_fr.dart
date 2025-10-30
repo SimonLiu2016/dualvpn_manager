@@ -15,6 +15,9 @@ class AppLocalizationsFr {
     'language_subtitle': 'Paramètres de langue et support multilingue',
     'theme_setting': 'Paramètres du thème',
     'theme_subtitle': 'Options de thème : mode clair, mode sombre, etc.',
+    'log_management_setting': 'Gestion des journaux',
+    'log_management_subtitle':
+        'Configurer la taille des fichiers journaux et le temps de rétention',
     'import_export_setting': 'Import/Export de config',
     'import_export_subtitle':
         'Sauvegarder et restaurer les fichiers de configuration',

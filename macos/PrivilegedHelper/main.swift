@@ -12,6 +12,9 @@ private var globalHelper: PrivilegedHelper?
     func copyOpenVPNConfigFiles(
         configContent: String, certFiles: [String: String],
         completion: @escaping (Bool, String?, String?) -> Void)
+    func cleanupLogs(
+        fileSizeLimit: Int, retentionDays: Int,
+        completion: @escaping (Bool, String?) -> Void)
 }
 
 // 日志工具类
@@ -71,6 +74,23 @@ class Logger {
                     NSLog("创建日志文件失败: \(error)")
                 }
             }
+        }
+    }
+
+    // 截断大日志文件，只保留最后的部分
+    func truncateLargeLogFile(_ filePath: String, maxSize: Int64) throws {
+        let fileHandle = try FileHandle(forReadingFrom: URL(fileURLWithPath: filePath))
+        defer { fileHandle.closeFile() }
+
+        let fileSize = try fileHandle.seekToEnd()
+        if fileSize > UInt64(maxSize) {
+            try fileHandle.seek(toOffset: fileSize - UInt64(maxSize))
+            let data = fileHandle.readData(ofLength: Int(maxSize))
+
+            let tempFile = filePath + ".tmp"
+            try data.write(to: URL(fileURLWithPath: tempFile))
+            try FileManager.default.removeItem(atPath: filePath)
+            try FileManager.default.moveItem(atPath: tempFile, toPath: filePath)
         }
     }
 
@@ -269,6 +289,80 @@ class PrivilegedHelper: NSObject, PrivilegedHelperProtocol, NSXPCListenerDelegat
             Logger.shared.writeLog(errorMsg)
             completion(false, errorMsg, nil)
         }
+    }
+
+    // 清理日志文件
+    func cleanupLogs(
+        fileSizeLimit: Int, retentionDays: Int,
+        completion: @escaping (Bool, String?) -> Void
+    ) {
+        Logger.shared.writeLog("开始清理日志文件，文件大小限制: \(fileSizeLimit)MB，保留天数: \(retentionDays)天")
+
+        let logDirectories = [
+            "/private/var/tmp"  // 日志目录
+        ]
+
+        let maxFileSizeMB = fileSizeLimit  // 使用传入的文件大小限制
+        let cutoffDate = Calendar.current.date(byAdding: .day, value: -retentionDays, to: Date())!
+
+        var success = true
+        var errorMessage: String?
+
+        for logDir in logDirectories {
+            guard let files = try? FileManager.default.contentsOfDirectory(atPath: logDir) else {
+                Logger.shared.writeLog("无法读取日志目录: \(logDir)", level: "WARN")
+                continue
+            }
+
+            for file in files {
+                let filePath = "\(logDir)/\(file)"
+
+                // 检查文件名是否匹配日志文件模式
+                if file.hasPrefix("dualvpn_macos_helper_") || file.hasPrefix("dualvpn_macos_")
+                    || file.hasPrefix("dualvpn_") || file == "go-proxy-core.log"
+                {
+                    do {
+                        let attrs = try FileManager.default.attributesOfItem(atPath: filePath)
+                        if let modificationDate = attrs[.modificationDate] as? Date {
+                            // 检查文件是否过期
+                            if modificationDate < cutoffDate {
+                                try FileManager.default.removeItem(atPath: filePath)
+                                Logger.shared.writeLog("删除过期日志文件: \(filePath)")
+                                continue
+                            }
+                        }
+
+                        // 检查文件大小
+                        if let fileSize = attrs[.size] as? NSNumber {
+                            let fileSizeMB = fileSize.int64Value / (1024 * 1024)
+                            if fileSizeMB > maxFileSizeMB {
+                                // 对于大文件，尝试截断而不是删除
+                                if file == "go-proxy-core.log" {
+                                    // 对于Go代理核心日志，保留最后1MB
+                                    try Logger.shared.truncateLargeLogFile(
+                                        filePath, maxSize: 1024 * 1024)
+                                    Logger.shared.writeLog("截断大日志文件: \(filePath)")
+                                } else {
+                                    try FileManager.default.removeItem(atPath: filePath)
+                                    Logger.shared.writeLog("删除超大日志文件: \(filePath)")
+                                }
+                            }
+                        }
+                    } catch {
+                        Logger.shared.writeLog(
+                            "处理日志文件失败: \(filePath), 错误: \(error)", level: "ERROR")
+                        success = false
+                        errorMessage = error.localizedDescription
+                    }
+                }
+            }
+        }
+
+        if success {
+            Logger.shared.writeLog("日志文件清理完成")
+        }
+
+        completion(success, errorMessage)
     }
 
     // 优雅关闭
