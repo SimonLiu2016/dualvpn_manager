@@ -1,6 +1,6 @@
 module github.com/dualvpn/go-proxy-core
 
-go 1.22
+go 1.23
 
 require (
 	github.com/miekg/dns v1.1.65
