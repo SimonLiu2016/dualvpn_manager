@@ -44,8 +44,8 @@ jobs:
 
       - name: Build macOS version
         run: |
-          chmod +x scripts/package/build-macos-app-enhanced.sh
-          scripts/package/build-macos-app-enhanced.sh
+          chmod +x scripts/build_and_package_fixed.sh
+          scripts/build_and_package_fixed.sh
         env:
           MACOS_DEVELOPMENT_TEAM: ${{ secrets.MACOS_DEVELOPMENT_TEAM }}
           MACOS_SIGNING_CERTIFICATE: ${{ secrets.MACOS_SIGNING_CERTIFICATE }}

@@ -131,9 +131,18 @@ echo "开始构建macOS版本..."
 echo "-----------------------"
 BUILD_START_TIME=$(date +%s)
 
-flutter build macos --release
+# 检查是否已经存在macOS构建产物（由build_and_package_fixed.sh脚本构建）
+MACOS_BUILD_DIR="$PROJECT_DIR/build/macos/Build/Products/Release"
+if [ -d "$MACOS_BUILD_DIR" ] && [ -f "$MACOS_BUILD_DIR/Dualvpn Manager.app/Contents/MacOS/Dualvpn Manager" ]; then
+    echo "✓ 使用已存在的macOS构建产物"
+    BUILD_RESULT=0
+else
+    # 如果不存在，则执行构建
+    flutter build macos --release
+    BUILD_RESULT=$?
+fi
 
-if [ $? -eq 0 ]; then
+if [ $BUILD_RESULT -eq 0 ]; then
     BUILD_END_TIME=$(date +%s)
     BUILD_DURATION=$((BUILD_END_TIME-BUILD_START_TIME))
     
