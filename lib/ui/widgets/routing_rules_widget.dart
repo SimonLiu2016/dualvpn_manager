@@ -34,24 +34,21 @@ class _RoutingRulesList extends StatelessWidget {
       return Container(
         height: 200,
         decoration: BoxDecoration(
-          border: Border.all(color: Colors.grey),
+          border: Border.all(color: Theme.of(context).dividerColor),
           borderRadius: BorderRadius.circular(12),
         ),
-        child: const Center(
+        child: Center(
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(Icons.rule, size: 48, color: Colors.grey),
-              SizedBox(height: 10),
-              Text(
-                '暂无路由规则',
-                style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-              ),
-              SizedBox(height: 5),
+              Icon(Icons.rule, size: 48, color: Theme.of(context).hintColor),
+              const SizedBox(height: 10),
+              Text('暂无路由规则', style: Theme.of(context).textTheme.headlineSmall),
+              const SizedBox(height: 5),
               Text(
                 '请添加域名和对应的代理源',
                 textAlign: TextAlign.center,
-                style: TextStyle(color: Colors.grey),
+                style: Theme.of(context).textTheme.bodyMedium,
               ),
             ],
           ),
@@ -62,7 +59,7 @@ class _RoutingRulesList extends StatelessWidget {
     return Container(
       height: 200,
       decoration: BoxDecoration(
-        border: Border.all(color: Colors.grey),
+        border: Border.all(color: Theme.of(context).dividerColor),
         borderRadius: BorderRadius.circular(12),
       ),
       child: FutureBuilder<List<VPNConfig>>(
@@ -77,7 +74,7 @@ class _RoutingRulesList extends StatelessWidget {
               final rule = rules[index];
               // 获取代理源名称
               String proxyName = '未找到配置';
-              Color proxyColor = Colors.grey;
+              Color proxyColor = Theme.of(context).hintColor;
               IconData proxyIcon = Icons.help;
 
               if (rule.proxyId.isNotEmpty) {
@@ -155,6 +152,7 @@ class _RoutingRulesList extends StatelessWidget {
       case VPNType.socks5:
         return Colors.teal;
       case VPNType.custom:
+        // 使用默认的提示颜色
         return Colors.grey;
     }
   }

@@ -24,7 +24,10 @@ class SelectedProxiesWidget extends StatelessWidget {
         final selectedProxies = snapshot.data ?? [];
 
         if (selectedProxies.isEmpty) {
-          return const Text('暂无已选中代理', style: TextStyle(color: Colors.grey));
+          return Text(
+            '暂无已选中代理',
+            style: TextStyle(color: Theme.of(context).hintColor),
+          );
         }
 
         return Column(
@@ -69,7 +72,7 @@ class SelectedProxiesWidget extends StatelessWidget {
                 typeName = 'SOCKS5代理';
                 break;
               default:
-                color = Colors.grey;
+                color = Theme.of(context).hintColor;
                 icon = Icons.help;
                 typeName = '未知';
             }
@@ -96,9 +99,9 @@ class SelectedProxiesWidget extends StatelessWidget {
                         ),
                         Text(
                           '$typeName - ${proxy['name']}',
-                          style: const TextStyle(
+                          style: TextStyle(
                             fontSize: 12,
-                            color: Colors.grey,
+                            color: Theme.of(context).hintColor,
                           ),
                         ),
                       ],
@@ -160,7 +163,11 @@ class _RateInfoWidget extends StatelessWidget {
       builder: (context, rateInfo, child) {
         return Text(
           rateInfo,
-          style: const TextStyle(fontSize: 12, color: Colors.grey),
+          style: TextStyle(
+            fontSize: 12,
+            color: Theme.of(context).hintColor,
+            fontFamily: 'monospace',
+          ),
         );
       },
     );

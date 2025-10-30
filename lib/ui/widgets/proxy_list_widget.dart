@@ -79,17 +79,18 @@ class _ProxyListView extends StatelessWidget {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Icon(Icons.link_off, size: 48, color: Colors.grey),
-              const SizedBox(height: 10),
-              const Text(
-                '暂无代理信息',
-                style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+              Icon(
+                Icons.link_off,
+                size: 48,
+                color: Theme.of(context).colorScheme.primary.withOpacity(0.6),
               ),
+              const SizedBox(height: 10),
+              Text('暂无代理信息', style: Theme.of(context).textTheme.headlineSmall),
               const SizedBox(height: 5),
-              const Text(
+              Text(
                 '请确保已连接代理并配置了代理',
                 textAlign: TextAlign.center,
-                style: TextStyle(fontSize: 14, color: Colors.grey),
+                style: Theme.of(context).textTheme.bodyMedium,
               ),
             ],
           ),
@@ -99,17 +100,21 @@ class _ProxyListView extends StatelessWidget {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Icon(Icons.info, size: 48, color: Colors.blue),
+              Icon(
+                Icons.info,
+                size: 48,
+                color: Theme.of(context).colorScheme.primary,
+              ),
               const SizedBox(height: 10),
-              const Text(
+              Text(
                 '该代理类型不支持代理列表',
-                style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                style: Theme.of(context).textTheme.headlineSmall,
               ),
               const SizedBox(height: 5),
-              const Text(
+              Text(
                 '此类型代理将直接使用配置进行连接',
                 textAlign: TextAlign.center,
-                style: TextStyle(fontSize: 14, color: Colors.grey),
+                style: Theme.of(context).textTheme.bodyMedium,
               ),
             ],
           ),
@@ -133,7 +138,9 @@ class _ProxyListView extends StatelessWidget {
               decoration: BoxDecoration(
                 borderRadius: BorderRadius.circular(12),
                 border: Border.all(
-                  color: isSelected ? Colors.blue : Colors.grey,
+                  color: isSelected
+                      ? Theme.of(context).colorScheme.primary
+                      : Theme.of(context).disabledColor,
                   width: 2,
                 ),
               ),
@@ -160,7 +167,7 @@ class _ProxyListView extends StatelessWidget {
                           : Icons.link,
                       key: ValueKey<int>(latency ?? 0),
                       color: latency == -2
-                          ? Colors.grey
+                          ? Theme.of(context).hintColor
                           : latency == -1
                           ? Colors.orange
                           : (latency < 0
@@ -194,7 +201,10 @@ class _ProxyListView extends StatelessWidget {
                       ]
                       // 对于其他类型，保持原有的显示方式
                       else if (latency == -2)
-                        const Text('未测试', style: TextStyle(color: Colors.grey))
+                        Text(
+                          '未测试',
+                          style: TextStyle(color: Theme.of(context).hintColor),
+                        )
                       else if (latency == -1)
                         const Text(
                           '测试中...',

@@ -241,19 +241,37 @@ class CustomTitleBar extends StatelessWidget implements PreferredSizeWidget {
   Widget build(BuildContext context) {
     return Container(
       height: preferredSize.height,
-      decoration: const BoxDecoration(
-        color: Colors.blue,
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: [
+            Theme.of(context).colorScheme.primary,
+            Theme.of(context).colorScheme.primary.withOpacity(0.8),
+          ],
+          begin: Alignment.centerLeft,
+          end: Alignment.centerRight,
+        ),
         boxShadow: [
-          BoxShadow(color: Colors.black26, blurRadius: 4, offset: Offset(0, 2)),
+          BoxShadow(
+            color: Colors.black.withOpacity(0.2),
+            blurRadius: 4,
+            offset: const Offset(0, 2),
+          ),
         ],
       ),
-      child: const Center(
+      child: Center(
         child: Text(
           '双捷VPN管理器',
           style: TextStyle(
             color: Colors.white,
             fontSize: 18,
             fontWeight: FontWeight.bold,
+            shadows: [
+              Shadow(
+                color: Colors.black.withOpacity(0.3),
+                offset: const Offset(1, 1),
+                blurRadius: 2,
+              ),
+            ],
           ),
         ),
       ),
@@ -303,19 +321,13 @@ class AboutContent extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 30),
-            const Text(
-              '应用信息',
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-            ),
+            Text('应用信息', style: Theme.of(context).textTheme.headlineSmall),
             const SizedBox(height: 10),
             _buildInfoRow('版本', '0.1.0'),
             _buildInfoRow('开发者', 'DualVPN Team'),
             _buildInfoRow('许可证', 'MIT'),
             const SizedBox(height: 20),
-            const Text(
-              '功能说明',
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-            ),
+            Text('功能说明', style: Theme.of(context).textTheme.headlineSmall),
             const SizedBox(height: 10),
             const Text(
               '双捷VPN管理器是一个轻量级的VPN管理工具，可以同时管理OpenVPN和Clash两种VPN连接，实现内外网同时访问的功能。\n\n'
@@ -327,16 +339,12 @@ class AboutContent extends StatelessWidget {
               '• 轻量级设计：无需安装Tunnelblick和ClashX，一个工具搞定所有',
             ),
             const SizedBox(height: 20),
-            const Text(
-              '使用说明',
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-            ),
+            Text('使用说明', style: Theme.of(context).textTheme.headlineSmall),
             const SizedBox(height: 10),
             const Text(
-              '1. 在"配置"页面添加OpenVPN配置文件路径或Clash订阅链接\n'
-              '2. 在"主页"切换两种VPN的连接状态\n'
-              '3. 在"路由"页面配置内外网域名并启用智能路由\n'
-              '4. 享受同时访问内外网的便利',
+              '1. 在"代理源"页面添加并启用代理配置\n'
+              '2. 在"代理列表"页面选择具体的代理服务器\n'
+              '3. 在本页面查看已启用的代理源和选中的代理\n',
             ),
           ],
         ),
@@ -399,7 +407,11 @@ class _AnimatedVPNIconState extends State<AnimatedVPNIcon>
       builder: (context, child) {
         return Transform.rotate(
           angle: _animation.value * 2 * 3.14159,
-          child: const Icon(Icons.vpn_lock, size: 64, color: Colors.blue),
+          child: Icon(
+            Icons.vpn_lock,
+            size: 64,
+            color: Theme.of(context).colorScheme.primary,
+          ),
         );
       },
     );
@@ -420,24 +432,23 @@ class VPNStatusPanel extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text(
-                '连接状态',
-                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-              ),
+              Text('连接状态', style: Theme.of(context).textTheme.headlineSmall),
               const SizedBox(height: 16),
               // 使用说明
               Container(
                 width: double.infinity,
                 padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
-                  color: Colors.blue.withOpacity(0.1),
+                  color: Theme.of(context).colorScheme.primary.withOpacity(0.1),
                   borderRadius: BorderRadius.circular(8),
                   border: Border.all(
-                    color: Colors.blue.withOpacity(0.3),
+                    color: Theme.of(
+                      context,
+                    ).colorScheme.primary.withOpacity(0.3),
                     width: 1,
                   ),
                 ),
-                child: const Column(
+                child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
@@ -445,19 +456,19 @@ class VPNStatusPanel extends StatelessWidget {
                       style: TextStyle(
                         fontSize: 14,
                         fontWeight: FontWeight.bold,
-                        color: Colors.blue,
+                        color: Theme.of(context).colorScheme.primary,
                       ),
                     ),
-                    SizedBox(height: 4),
-                    Text(
+                    const SizedBox(height: 4),
+                    const Text(
                       '1. 在"代理源"页面添加并启用代理配置',
                       style: TextStyle(fontSize: 12),
                     ),
-                    Text(
+                    const Text(
                       '2. 在"代理列表"页面选择具体的代理服务器',
                       style: TextStyle(fontSize: 12),
                     ),
-                    Text(
+                    const Text(
                       '3. 在本页面查看已启用的代理源和选中的代理',
                       style: TextStyle(fontSize: 12),
                     ),
@@ -467,10 +478,7 @@ class VPNStatusPanel extends StatelessWidget {
               const SizedBox(height: 16),
               // 显示已启用的代理源（仅作展示，不可交互）
               // 代理源的启用/禁用应在"代理源"页面中操作
-              const Text(
-                '已启用代理源',
-                style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-              ),
+              Text('已启用代理源', style: Theme.of(context).textTheme.headlineSmall),
               const SizedBox(height: 8),
               FutureBuilder<List<VPNConfig>>(
                 future: ConfigManager.loadConfigs(),
@@ -514,14 +522,17 @@ class VPNStatusPanel extends StatelessWidget {
                       width: double.infinity,
                       padding: const EdgeInsets.all(16),
                       decoration: BoxDecoration(
-                        color: Colors.grey.withOpacity(0.1),
+                        color: Theme.of(context).hintColor.withOpacity(0.1),
                         borderRadius: BorderRadius.circular(8),
-                        border: Border.all(color: Colors.grey, width: 1),
+                        border: Border.all(
+                          color: Theme.of(context).hintColor,
+                          width: 1,
+                        ),
                       ),
-                      child: const Text(
+                      child: Text(
                         '暂无启用的代理源',
                         style: TextStyle(
-                          color: Colors.grey,
+                          color: Theme.of(context).hintColor,
                           fontStyle: FontStyle.italic,
                         ),
                       ),
@@ -840,18 +851,12 @@ class VPNStatusPanel extends StatelessWidget {
               ),
               const SizedBox(height: 16),
               // 显示启用的代理源对应的代理列表中被选中的代理
-              const Text(
-                '已选中代理',
-                style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-              ),
+              Text('已选中代理', style: Theme.of(context).textTheme.headlineSmall),
               const SizedBox(height: 8),
               const SelectedProxiesWidget(),
               const SizedBox(height: 16),
               // Go代理核心控制
-              const Text(
-                'Go代理核心',
-                style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-              ),
+              Text('Go代理核心', style: Theme.of(context).textTheme.headlineSmall),
               const SizedBox(height: 8),
               Selector<AppState, bool>(
                 selector: (context, appState) => appState.isGoProxyRunning,
@@ -866,14 +871,14 @@ class VPNStatusPanel extends StatelessWidget {
                               ? Colors.orange.withOpacity(0.1)
                               : isGoProxyRunning
                               ? Colors.green.withOpacity(0.1)
-                              : Colors.grey.withOpacity(0.1),
+                              : Theme.of(context).hintColor.withOpacity(0.1),
                           borderRadius: BorderRadius.circular(8),
                           border: Border.all(
                             color: isStarting
                                 ? Colors.orange
                                 : isGoProxyRunning
                                 ? Colors.green
-                                : Colors.grey,
+                                : Theme.of(context).hintColor,
                             width: 1,
                           ),
                         ),
@@ -889,7 +894,7 @@ class VPNStatusPanel extends StatelessWidget {
                                   ? Colors.orange
                                   : isGoProxyRunning
                                   ? Colors.green
-                                  : Colors.grey,
+                                  : Theme.of(context).hintColor,
                             ),
                             const SizedBox(width: 8),
                             const Text('Go代理核心'),
@@ -942,7 +947,7 @@ class VPNStatusPanel extends StatelessWidget {
                                     ? Colors.orange
                                     : isGoProxyRunning
                                     ? Colors.red
-                                    : Colors.green,
+                                    : Theme.of(context).colorScheme.primary,
                                 foregroundColor: Colors.white,
                               ),
                               child: Text(
@@ -1039,13 +1044,17 @@ class _AnimatedChoiceChipState extends State<AnimatedChoiceChip>
             color: _colorAnimation.value,
             borderRadius: BorderRadius.circular(20),
             border: Border.all(
-              color: widget.selected ? Colors.blue : Colors.grey,
+              color: widget.selected
+                  ? Theme.of(context).colorScheme.primary
+                  : Theme.of(context).disabledColor,
               width: 2,
             ),
           ),
           child: DefaultTextStyle(
             style: TextStyle(
-              color: widget.selected ? Colors.blue : Colors.grey[600],
+              color: widget.selected
+                  ? Theme.of(context).colorScheme.primary
+                  : Theme.of(context).hintColor,
               fontWeight: widget.selected ? FontWeight.bold : FontWeight.normal,
             ),
             child: widget.label,

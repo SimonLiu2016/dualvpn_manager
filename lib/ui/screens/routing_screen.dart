@@ -21,21 +21,13 @@ class _RoutingScreenState extends State<RoutingScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('路由配置'),
-        backgroundColor: Colors.blue,
-        foregroundColor: Colors.white,
-      ),
       body: Padding(
         padding: const EdgeInsets.all(16.0),
         child: SingleChildScrollView(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text(
-                '智能路由配置',
-                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-              ),
+              Text('智能路由配置', style: Theme.of(context).textTheme.headlineSmall),
               const SizedBox(height: 16),
               const Text('为特定域名指定代理源'),
               const SizedBox(height: 8),
@@ -81,7 +73,6 @@ class _RoutingScreenState extends State<RoutingScreen> {
                                   controller: _domainController,
                                   decoration: const InputDecoration(
                                     hintText: '输入域名，如: google.com',
-                                    border: OutlineInputBorder(),
                                     prefixIcon: Icon(Icons.domain),
                                   ),
                                 ),
@@ -102,9 +93,7 @@ class _RoutingScreenState extends State<RoutingScreen> {
                                       _selectedConfig = config;
                                     });
                                   },
-                                  decoration: const InputDecoration(
-                                    border: OutlineInputBorder(),
-                                  ),
+                                  decoration: const InputDecoration(),
                                 ),
                               ),
                               const SizedBox(width: 8),
@@ -151,12 +140,9 @@ class _RoutingScreenState extends State<RoutingScreen> {
                         ),
                       ),
                       const SizedBox(height: 16),
-                      const Text(
+                      Text(
                         '已配置的路由规则',
-                        style: TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.bold,
-                        ),
+                        style: Theme.of(context).textTheme.headlineSmall,
                       ),
                       const SizedBox(height: 8),
                       const RoutingRulesWidget(),
@@ -189,6 +175,6 @@ class _RoutingScreenState extends State<RoutingScreen> {
         return smart_routing_engine.RuleType.domainSuffix;
       case VPNType.custom:
         return smart_routing_engine.RuleType.domainSuffix;
-      }
+    }
   }
 }

@@ -571,11 +571,6 @@ class _ConfigScreenState extends State<ConfigScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('代理源管理'),
-        backgroundColor: Colors.blue,
-        foregroundColor: Colors.white,
-      ),
       body: Padding(
         padding: const EdgeInsets.all(16.0),
         child: SingleChildScrollView(
@@ -593,19 +588,15 @@ class _ConfigScreenState extends State<ConfigScreen> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const Text(
+                      Text(
                         '添加新代理源',
-                        style: TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.bold,
-                        ),
+                        style: Theme.of(context).textTheme.headlineSmall,
                       ),
                       const SizedBox(height: 16),
                       TextField(
                         controller: _nameController,
                         decoration: const InputDecoration(
                           labelText: '代理源名称',
-                          border: OutlineInputBorder(),
                           prefixIcon: Icon(Icons.label),
                         ),
                       ),
@@ -614,7 +605,6 @@ class _ConfigScreenState extends State<ConfigScreen> {
                         value: _selectedType,
                         decoration: const InputDecoration(
                           labelText: '代理类型',
-                          border: OutlineInputBorder(),
                           prefixIcon: Icon(Icons.category),
                         ),
                         items: VPNType.values.map((type) {
@@ -674,7 +664,6 @@ class _ConfigScreenState extends State<ConfigScreen> {
                                     : _selectedType.supportsSubscription
                                     ? '配置文件路径或订阅链接'
                                     : '配置文件路径',
-                                border: const OutlineInputBorder(),
                                 prefixIcon: const Icon(Icons.file_present),
                               ),
                             ),
@@ -685,7 +674,6 @@ class _ConfigScreenState extends State<ConfigScreen> {
                                 controller: _usernameController,
                                 decoration: const InputDecoration(
                                   labelText: '用户名(可选)',
-                                  border: OutlineInputBorder(),
                                   prefixIcon: Icon(Icons.person),
                                 ),
                               ),
@@ -694,7 +682,6 @@ class _ConfigScreenState extends State<ConfigScreen> {
                                 controller: _passwordController,
                                 decoration: const InputDecoration(
                                   labelText: '密码(可选)',
-                                  border: OutlineInputBorder(),
                                   prefixIcon: Icon(Icons.lock),
                                 ),
                                 obscureText: true,
@@ -710,7 +697,6 @@ class _ConfigScreenState extends State<ConfigScreen> {
                               controller: _serverController,
                               decoration: const InputDecoration(
                                 labelText: '服务器地址',
-                                border: OutlineInputBorder(),
                                 prefixIcon: Icon(Icons.dns),
                               ),
                             ),
@@ -719,7 +705,6 @@ class _ConfigScreenState extends State<ConfigScreen> {
                               controller: _portController,
                               decoration: const InputDecoration(
                                 labelText: '端口',
-                                border: OutlineInputBorder(),
                                 prefixIcon: Icon(Icons.portrait),
                               ),
                               keyboardType: TextInputType.number,
@@ -729,7 +714,6 @@ class _ConfigScreenState extends State<ConfigScreen> {
                               controller: _usernameController,
                               decoration: const InputDecoration(
                                 labelText: '用户名(可选)',
-                                border: OutlineInputBorder(),
                                 prefixIcon: Icon(Icons.person),
                               ),
                             ),
@@ -738,7 +722,6 @@ class _ConfigScreenState extends State<ConfigScreen> {
                               controller: _passwordController,
                               decoration: const InputDecoration(
                                 labelText: '密码(可选)',
-                                border: OutlineInputBorder(),
                                 prefixIcon: Icon(Icons.lock),
                               ),
                               obscureText: true,
@@ -769,10 +752,7 @@ class _ConfigScreenState extends State<ConfigScreen> {
               ),
               const SizedBox(height: 20),
               // 配置列表
-              const Text(
-                '代理源列表',
-                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-              ),
+              Text('代理源列表', style: Theme.of(context).textTheme.headlineSmall),
               const SizedBox(height: 10),
               ListView.builder(
                 shrinkWrap: true,
@@ -786,7 +766,9 @@ class _ConfigScreenState extends State<ConfigScreen> {
                     decoration: BoxDecoration(
                       borderRadius: BorderRadius.circular(12),
                       border: Border.all(
-                        color: config.isActive ? Colors.blue : Colors.grey,
+                        color: config.isActive
+                            ? Theme.of(context).colorScheme.primary
+                            : Theme.of(context).disabledColor,
                         width: 2,
                       ),
                     ),
@@ -961,7 +943,7 @@ class _ConfigScreenState extends State<ConfigScreen> {
       case ConnectionStatus.error:
         return Colors.red;
       case ConnectionStatus.disconnected:
-        return Colors.grey;
+        return Theme.of(context).hintColor;
     }
   }
 

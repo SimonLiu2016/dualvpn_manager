@@ -171,18 +171,6 @@ class _ProxyListScreenState extends State<ProxyListScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('代理列表'),
-        backgroundColor: Colors.blue,
-        foregroundColor: Colors.white,
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.refresh),
-            onPressed: _refreshAllLatencies,
-            tooltip: '刷新所有延迟',
-          ),
-        ],
-      ),
       body: Padding(
         padding: const EdgeInsets.all(16.0),
         child: Column(
@@ -195,24 +183,35 @@ class _ProxyListScreenState extends State<ProxyListScreen> {
               ),
               child: Padding(
                 padding: const EdgeInsets.all(8.0),
-                child: DropdownButtonFormField<VPNConfig>(
-                  value: _selectedConfig,
-                  decoration: const InputDecoration(
-                    labelText: '选择代理源',
-                    border: InputBorder.none,
-                    prefixIcon: Icon(Icons.source),
-                  ),
-                  items: _configs.map((config) {
-                    return DropdownMenuItem<VPNConfig>(
-                      value: config,
-                      child: Text('${config.name} (${config.type})'),
-                    );
-                  }).toList(),
-                  onChanged: (config) {
-                    if (config != null) {
-                      _switchConfig(config);
-                    }
-                  },
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: DropdownButtonFormField<VPNConfig>(
+                        value: _selectedConfig,
+                        decoration: const InputDecoration(
+                          labelText: '选择代理源',
+                          border: InputBorder.none,
+                          prefixIcon: Icon(Icons.source),
+                        ),
+                        items: _configs.map((config) {
+                          return DropdownMenuItem<VPNConfig>(
+                            value: config,
+                            child: Text('${config.name} (${config.type})'),
+                          );
+                        }).toList(),
+                        onChanged: (config) {
+                          if (config != null) {
+                            _switchConfig(config);
+                          }
+                        },
+                      ),
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.refresh),
+                      onPressed: _refreshAllLatencies,
+                      tooltip: '刷新所有延迟',
+                    ),
+                  ],
                 ),
               ),
             ),
