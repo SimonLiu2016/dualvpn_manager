@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:package_info_plus/package_info_plus.dart';
+import 'package:provider/provider.dart';
+import 'package:dualvpn_manager/models/app_state.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
@@ -189,10 +191,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   title: const Text('主题设置'),
                   subtitle: const Text('深色模式、浅色模式等主题选项'),
                   onTap: () {
-                    // TODO: 实现主题设置功能
-                    ScaffoldMessenger.of(
-                      context,
-                    ).showSnackBar(const SnackBar(content: Text('主题设置功能待实现')));
+                    // 实现主题设置功能
+                    _showThemeSettingsDialog(context);
                   },
                 ),
               ),
@@ -250,6 +250,71 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ),
         ),
       ),
+    );
+  }
+
+  // 显示主题设置对话框
+  void _showThemeSettingsDialog(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return Consumer<AppState>(
+          builder: (context, appState, child) {
+            return AlertDialog(
+              title: const Text('主题设置'),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text('选择主题模式：'),
+                  const SizedBox(height: 16),
+                  RadioListTile<ThemeMode>(
+                    title: const Text('浅色模式'),
+                    value: ThemeMode.light,
+                    groupValue: appState.themeMode,
+                    onChanged: (ThemeMode? value) {
+                      if (value != null) {
+                        appState.setThemeMode(value);
+                        Navigator.of(context).pop();
+                      }
+                    },
+                  ),
+                  RadioListTile<ThemeMode>(
+                    title: const Text('深色模式'),
+                    value: ThemeMode.dark,
+                    groupValue: appState.themeMode,
+                    onChanged: (ThemeMode? value) {
+                      if (value != null) {
+                        appState.setThemeMode(value);
+                        Navigator.of(context).pop();
+                      }
+                    },
+                  ),
+                  RadioListTile<ThemeMode>(
+                    title: const Text('跟随系统'),
+                    value: ThemeMode.system,
+                    groupValue: appState.themeMode,
+                    onChanged: (ThemeMode? value) {
+                      if (value != null) {
+                        appState.setThemeMode(value);
+                        Navigator.of(context).pop();
+                      }
+                    },
+                  ),
+                ],
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () {
+                    Navigator.of(context).pop();
+                  },
+                  child: const Text('取消'),
+                ),
+              ],
+            );
+          },
+        );
+      },
     );
   }
 }

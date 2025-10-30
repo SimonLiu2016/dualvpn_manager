@@ -105,7 +105,7 @@ class DualVPNApp extends StatelessWidget {
           title: '双捷VPN管理器',
           theme: AppTheme.lightTheme(),
           darkTheme: AppTheme.darkTheme(),
-          themeMode: ThemeMode.system,
+          themeMode: appState.themeMode,
           navigatorKey: appState.navigatorKey,
           home: HomeScreen(),
         );

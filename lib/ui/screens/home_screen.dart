@@ -239,14 +239,17 @@ class CustomTitleBar extends StatelessWidget implements PreferredSizeWidget {
 
   @override
   Widget build(BuildContext context) {
+    // 根据当前主题模式选择合适的背景色
+    final isDarkMode = Theme.of(context).brightness == Brightness.dark;
+    final backgroundColor = isDarkMode
+        ? const Color(0xFF0F2035) // 深色主题AppBar颜色
+        : Theme.of(context).colorScheme.primary;
+
     return Container(
       height: preferredSize.height,
       decoration: BoxDecoration(
         gradient: LinearGradient(
-          colors: [
-            Theme.of(context).colorScheme.primary,
-            Theme.of(context).colorScheme.primary.withOpacity(0.8),
-          ],
+          colors: [backgroundColor, backgroundColor.withOpacity(0.8)],
           begin: Alignment.centerLeft,
           end: Alignment.centerRight,
         ),
