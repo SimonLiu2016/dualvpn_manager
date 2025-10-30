@@ -110,7 +110,7 @@ class DualVPNApp extends StatelessWidget {
           darkTheme: AppTheme.darkTheme(),
           themeMode: appState.themeMode,
           navigatorKey: appState.navigatorKey,
-          home: HomeScreen(),
+          home: HomeScreen(appState: appState), // 传递appState参数
           // 添加国际化支持
           locale: appState.language == 'en'
               ? const Locale('en', '')
