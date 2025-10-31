@@ -207,6 +207,13 @@ class AppLocalizations {
     'no_selected_proxies': '暂无已选中代理',
     'connected': '已连接',
     'unknown': '未知',
+
+    // 系统托盘菜单
+    'tray_toggle_start': '启动',
+    'tray_toggle_starting': '启动中...',
+    'tray_toggle_stop': '停止',
+    'tray_show_window': '显示主窗口',
+    'tray_exit_app': '退出应用',
   };
 
   // 英文文本
@@ -410,5 +417,12 @@ class AppLocalizations {
     'no_selected_proxies': 'No selected proxies',
     'connected': 'Connected',
     'unknown': 'Unknown',
+
+    // System tray menu
+    'tray_toggle_start': 'Start',
+    'tray_toggle_starting': 'Starting...',
+    'tray_toggle_stop': 'Stop',
+    'tray_show_window': 'Show Window',
+    'tray_exit_app': 'Exit App',
   };
 }

@@ -96,6 +96,9 @@ class DualVPNApp extends StatelessWidget {
         // 设置AppState到托盘管理器
         trayManager.setAppState(appState);
 
+        // 设置BuildContext到托盘管理器以支持国际化
+        trayManager.setContext(context);
+
         // 设置显示窗口的回调函数
         trayManager.setShowWindowCallback(() {
           Logger.info('通过回调函数显示窗口');

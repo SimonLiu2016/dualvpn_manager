@@ -6,11 +6,19 @@ import 'dart:developer' as developer;
 import 'package:dualvpn_manager/models/app_state.dart';
 import 'package:flutter/foundation.dart';
 import 'package:path/path.dart' as path;
+import 'package:dualvpn_manager/utils/localization.dart';
+import 'package:flutter/material.dart';
 
 class DualVPNTrayManager with TrayListener {
   bool _isInitialized = false;
   VoidCallback? _showWindowCallback;
   AppState? _appState; // 添加AppState引用
+  BuildContext? _context; // 添加BuildContext引用用于国际化
+
+  // 设置BuildContext引用
+  void setContext(BuildContext context) {
+    _context = context;
+  }
 
   // 设置AppState引用
   void setAppState(AppState appState) {
@@ -46,12 +54,24 @@ class DualVPNTrayManager with TrayListener {
         items: [
           MenuItem(
             key: 'toggle_proxy',
-            label: '启动',
+            label: _context != null
+                ? AppLocalizations.of(_context!).get('tray_toggle_start')
+                : '启动',
             icon: _getIconPath('assets/icons/go_proxy_running.png'),
           ),
-          MenuItem(key: 'show_window', label: '显示主窗口'),
+          MenuItem(
+            key: 'show_window',
+            label: _context != null
+                ? AppLocalizations.of(_context!).get('tray_show_window')
+                : '显示主窗口',
+          ),
           MenuItem(key: 'separator1', label: ''),
-          MenuItem(key: 'exit_app', label: '退出应用'),
+          MenuItem(
+            key: 'exit_app',
+            label: _context != null
+                ? AppLocalizations.of(_context!).get('tray_exit_app')
+                : '退出应用',
+          ),
         ],
       );
 
@@ -130,7 +150,9 @@ class DualVPNTrayManager with TrayListener {
   // 更新上下文菜单
   Future<void> _updateContextMenu() async {
     try {
-      String toggleLabel = '启动';
+      String toggleLabel = _context != null
+          ? AppLocalizations.of(_context!).get('tray_toggle_start')
+          : '启动';
       String toggleIcon = _getIconPath('assets/icons/go_proxy_running.png');
 
       if (_appState != null) {
@@ -138,13 +160,19 @@ class DualVPNTrayManager with TrayListener {
           'AppState状态检查 - isStarting: ${_appState!.isStarting}, isGoProxyRunning: ${_appState!.isGoProxyRunning}',
         );
         if (_appState!.isStarting) {
-          toggleLabel = '启动中...';
+          toggleLabel = _context != null
+              ? AppLocalizations.of(_context!).get('tray_toggle_starting')
+              : '启动中...';
           toggleIcon = _getIconPath('assets/icons/starting.png');
         } else if (_appState!.isGoProxyRunning) {
-          toggleLabel = '停止';
+          toggleLabel = _context != null
+              ? AppLocalizations.of(_context!).get('tray_toggle_stop')
+              : '停止';
           toggleIcon = _getIconPath('assets/icons/disconnected.png');
         } else {
-          toggleLabel = '启动';
+          toggleLabel = _context != null
+              ? AppLocalizations.of(_context!).get('tray_toggle_start')
+              : '启动';
           toggleIcon = _getIconPath('assets/icons/go_proxy_running.png');
         }
       } else {
@@ -157,9 +185,19 @@ class DualVPNTrayManager with TrayListener {
       Menu menu = Menu(
         items: [
           MenuItem(key: 'toggle_proxy', label: toggleLabel, icon: toggleIcon),
-          MenuItem(key: 'show_window', label: '显示主窗口'),
+          MenuItem(
+            key: 'show_window',
+            label: _context != null
+                ? AppLocalizations.of(_context!).get('tray_show_window')
+                : '显示主窗口',
+          ),
           MenuItem(key: 'separator1', label: ''),
-          MenuItem(key: 'exit_app', label: '退出应用'),
+          MenuItem(
+            key: 'exit_app',
+            label: _context != null
+                ? AppLocalizations.of(_context!).get('tray_exit_app')
+                : '退出应用',
+          ),
         ],
       );
 

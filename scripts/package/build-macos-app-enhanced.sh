@@ -56,14 +56,17 @@ if [[ -n "$CI" ]]; then
     echo "Updating Xcode project with development team..."
     sed -i '' "s/DEVELOPMENT_TEAM = \"[^\"]*\"/DEVELOPMENT_TEAM = \"$MACOS_DEVELOPMENT_TEAM\"/g" macos/Runner.xcodeproj/project.pbxproj
     
-    # 使用手动签名并指定您的配置文件
-    echo "Setting manual code signing with your provisioning profile..."
+    # 使用手动签名并指定您的配置文件 - 仅对Runner目标设置
+    echo "Setting manual code signing with your provisioning profile for Runner target..."
     sed -i '' 's/CODE_SIGN_IDENTITY = "-"/CODE_SIGN_IDENTITY = "Apple Distribution"/g' macos/Runner.xcodeproj/project.pbxproj
     sed -i '' 's/CODE_SIGN_STYLE = Automatic/CODE_SIGN_STYLE = Manual/g' macos/Runner.xcodeproj/project.pbxproj
     
-    # 设置您的特定配置文件
-    echo "Setting your specific provisioning profile: V8en DualVPN Manager Profile"
-    sed -i '' 's/PROVISIONING_PROFILE_SPECIFIER = ""/PROVISIONING_PROFILE_SPECIFIER = "V8en DualVPN Manager Profile"/g' macos/Runner.xcodeproj/project.pbxproj
+    # 设置您的特定配置文件 - 仅对Runner目标设置，避免对PrivilegedHelper设置
+    echo "Setting your specific provisioning profile for Runner target only..."
+    # 先为Runner目标设置配置文件
+    sed -i '' 's/"PROVISIONING_PROFILE_SPECIFIER\[sdk=macosx\*]" = ""/"PROVISIONING_PROFILE_SPECIFIER[sdk=macosx*]" = "V8en DualVPN Manager Profile"/g' macos/Runner.xcodeproj/project.pbxproj
+    # 然后确保特权助手工具的配置文件保持为空
+    sed -i '' '/PRODUCT_BUNDLE_IDENTIFIER = com.v8en.dualvpnManager.PrivilegedHelper/,+10s/"PROVISIONING_PROFILE_SPECIFIER\[sdk=macosx\*]" = ".*"/"PROVISIONING_PROFILE_SPECIFIER[sdk=macosx*]" = ""/g' macos/Runner.xcodeproj/project.pbxproj
     
     # 构建macOS应用（带签名）
     echo "Building macOS app with code signing..."
