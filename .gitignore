@@ -178,7 +178,6 @@ coverage/
 **/*.obj
 **/*.dll
 **/*.so
-**/*.dylib
 **/*.lib
 **/*.a
 **/*.exe
