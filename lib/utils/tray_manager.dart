@@ -1,3 +1,4 @@
+import 'package:dualvpn_manager/l10n/app_fr.dart';
 import 'package:tray_manager/tray_manager.dart';
 import 'package:window_manager/window_manager.dart';
 import 'package:flutter/services.dart';
@@ -6,7 +7,9 @@ import 'dart:developer' as developer;
 import 'package:dualvpn_manager/models/app_state.dart';
 import 'package:flutter/foundation.dart';
 import 'package:path/path.dart' as path;
-import 'package:dualvpn_manager/utils/localization.dart';
+import 'package:dualvpn_manager/l10n/app_localizations_delegate.dart';
+import 'package:dualvpn_manager/l10n/app_en.dart';
+import 'package:dualvpn_manager/l10n/app_zh.dart';
 import 'package:flutter/material.dart';
 
 class DualVPNTrayManager with TrayListener {
@@ -14,6 +17,12 @@ class DualVPNTrayManager with TrayListener {
   VoidCallback? _showWindowCallback;
   AppState? _appState; // 添加AppState引用
   BuildContext? _context; // 添加BuildContext引用用于国际化
+  String _currentLanguage = 'en'; // 默认语言设置为英文
+
+  // 设置当前语言
+  void setCurrentLanguage(String languageCode) {
+    _currentLanguage = languageCode;
+  }
 
   // 设置BuildContext引用
   void setContext(BuildContext context) {
@@ -37,6 +46,35 @@ class DualVPNTrayManager with TrayListener {
     _showWindowCallback = callback;
   }
 
+  // 获取本地化文本的安全方法，不依赖context
+  String _getLocalizedText(String key, String fallback) {
+    try {
+      // 首先尝试通过context获取本地化文本
+      if (_context != null) {
+        try {
+          return AppLocalizations.of(_context!).get(key);
+        } catch (e) {
+          print('通过context获取本地化文本失败: $e');
+        }
+      }
+
+      // 如果context不可用或获取失败，使用内部本地化映射
+      final Map<String, Map<String, String>> localizedValues = {
+        'en': AppLocalizationsEn.localizedValues,
+        'zh': AppLocalizationsZh.localizedValues,
+        'fr': AppLocalizationsFr.localizedValues,
+      };
+
+      final values =
+          localizedValues[_currentLanguage] ??
+          AppLocalizationsEn.localizedValues;
+      return values[key] ?? fallback;
+    } catch (e) {
+      print('获取本地化文本失败: $e');
+    }
+    return fallback; // 默认返回英文文本
+  }
+
   Future<void> initTray() async {
     print('开始初始化托盘');
     if (_isInitialized) {
@@ -54,23 +92,17 @@ class DualVPNTrayManager with TrayListener {
         items: [
           MenuItem(
             key: 'toggle_proxy',
-            label: _context != null
-                ? AppLocalizations.of(_context!).get('tray_toggle_start')
-                : '启动',
+            label: _getLocalizedText('tray_toggle_start', 'Start'),
             icon: _getIconPath('assets/icons/go_proxy_running.png'),
           ),
           MenuItem(
             key: 'show_window',
-            label: _context != null
-                ? AppLocalizations.of(_context!).get('tray_show_window')
-                : '显示主窗口',
+            label: _getLocalizedText('tray_show_window', 'Show Window'),
           ),
           MenuItem(key: 'separator1', label: ''),
           MenuItem(
             key: 'exit_app',
-            label: _context != null
-                ? AppLocalizations.of(_context!).get('tray_exit_app')
-                : '退出应用',
+            label: _getLocalizedText('tray_exit_app', 'Exit App'),
           ),
         ],
       );
@@ -150,9 +182,7 @@ class DualVPNTrayManager with TrayListener {
   // 更新上下文菜单
   Future<void> _updateContextMenu() async {
     try {
-      String toggleLabel = _context != null
-          ? AppLocalizations.of(_context!).get('tray_toggle_start')
-          : '启动';
+      String toggleLabel = _getLocalizedText('tray_toggle_start', 'Start');
       String toggleIcon = _getIconPath('assets/icons/go_proxy_running.png');
 
       if (_appState != null) {
@@ -160,19 +190,16 @@ class DualVPNTrayManager with TrayListener {
           'AppState状态检查 - isStarting: ${_appState!.isStarting}, isGoProxyRunning: ${_appState!.isGoProxyRunning}',
         );
         if (_appState!.isStarting) {
-          toggleLabel = _context != null
-              ? AppLocalizations.of(_context!).get('tray_toggle_starting')
-              : '启动中...';
+          toggleLabel = _getLocalizedText(
+            'tray_toggle_starting',
+            'Starting...',
+          );
           toggleIcon = _getIconPath('assets/icons/starting.png');
         } else if (_appState!.isGoProxyRunning) {
-          toggleLabel = _context != null
-              ? AppLocalizations.of(_context!).get('tray_toggle_stop')
-              : '停止';
+          toggleLabel = _getLocalizedText('tray_toggle_stop', 'Stop');
           toggleIcon = _getIconPath('assets/icons/disconnected.png');
         } else {
-          toggleLabel = _context != null
-              ? AppLocalizations.of(_context!).get('tray_toggle_start')
-              : '启动';
+          toggleLabel = _getLocalizedText('tray_toggle_start', 'Start');
           toggleIcon = _getIconPath('assets/icons/go_proxy_running.png');
         }
       } else {
@@ -187,16 +214,12 @@ class DualVPNTrayManager with TrayListener {
           MenuItem(key: 'toggle_proxy', label: toggleLabel, icon: toggleIcon),
           MenuItem(
             key: 'show_window',
-            label: _context != null
-                ? AppLocalizations.of(_context!).get('tray_show_window')
-                : '显示主窗口',
+            label: _getLocalizedText('tray_show_window', 'Show Window'),
           ),
           MenuItem(key: 'separator1', label: ''),
           MenuItem(
             key: 'exit_app',
-            label: _context != null
-                ? AppLocalizations.of(_context!).get('tray_exit_app')
-                : '退出应用',
+            label: _getLocalizedText('tray_exit_app', 'Exit App'),
           ),
         ],
       );
