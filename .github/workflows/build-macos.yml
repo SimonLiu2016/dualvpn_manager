@@ -64,18 +64,12 @@ jobs:
           chmod +x scripts/package/build_release.sh
           ./scripts/package/build_release.sh
 
-      - name: Create installers
-        run: |
-          chmod +x scripts/install/create_installer.sh
-          ./scripts/install/create_installer.sh
-
       - name: Upload macOS artifacts
         uses: actions/upload-artifact@v4
         with:
           name: macos-artifacts
           path: |
             build/release/
-            build/installer/
 
   release:
     name: Create Release
@@ -96,7 +90,6 @@ jobs:
           mkdir -p release-files
           # Copy files from all platforms
           cp -r macos-artifacts/build/release/* release-files/ 2>/dev/null || true
-          cp -r macos-artifacts/build/installer/* release-files/ 2>/dev/null || true
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v1

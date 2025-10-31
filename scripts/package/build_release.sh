@@ -63,69 +63,6 @@ if [ $? -ne 0 ]; then
     echo
 fi
 
-# 构建Windows版本
-echo "开始构建Windows版本..."
-echo "------------------------"
-BUILD_START_TIME=$(date +%s)
-
-flutter build windows --release
-
-if [ $? -eq 0 ]; then
-    BUILD_END_TIME=$(date +%s)
-    BUILD_DURATION=$((BUILD_END_TIME-BUILD_START_TIME))
-    
-    # Windows构建成功
-    echo "✓ Windows版本构建成功 (耗时: ${BUILD_DURATION}秒)"
-    
-    # 查找Windows构建文件
-    WINDOWS_BUILD_DIR="$PROJECT_DIR/build/windows/x64/runner/Release"
-    if [ -d "$WINDOWS_BUILD_DIR" ]; then
-        # 创建Windows压缩包
-        WINDOWS_ZIP_NAME="dualvpn_manager-windows-$VERSION.zip"
-        echo "创建Windows安装包: $WINDOWS_ZIP_NAME"
-        
-        # 进入Windows构建目录并创建压缩包
-        cd "$WINDOWS_BUILD_DIR"
-        zip -r "$OUTPUT_DIR/$WINDOWS_ZIP_NAME" ./* >/dev/null 2>&1
-        
-        if [ $? -eq 0 ]; then
-            echo "✓ Windows安装包创建成功: $OUTPUT_DIR/$WINDOWS_ZIP_NAME"
-            WINDOWS_SIZE=$(du -h "$OUTPUT_DIR/$WINDOWS_ZIP_NAME" | cut -f1)
-            echo "  文件大小: $WINDOWS_SIZE"
-        else
-            echo "⚠ 警告: Windows安装包创建失败"
-        fi
-    else
-        echo "⚠ 警告: 未找到Windows构建输出目录"
-        echo "  尝试查找其他可能的输出位置..."
-        # 查找其他可能的Windows构建目录
-        WINDOWS_ALT_DIR=$(find "$PROJECT_DIR/build" -type d -path "*/windows/*/runner/Release" 2>/dev/null | head -n 1)
-        if [ -n "$WINDOWS_ALT_DIR" ] && [ -d "$WINDOWS_ALT_DIR" ]; then
-            echo "  在替代位置找到Windows构建目录: $WINDOWS_ALT_DIR"
-            cd "$WINDOWS_ALT_DIR"
-            zip -r "$OUTPUT_DIR/$WINDOWS_ZIP_NAME" ./* >/dev/null 2>&1
-            if [ $? -eq 0 ]; then
-                echo "✓ Windows安装包创建成功: $OUTPUT_DIR/$WINDOWS_ZIP_NAME"
-                WINDOWS_SIZE=$(du -h "$OUTPUT_DIR/$WINDOWS_ZIP_NAME" | cut -f1)
-                echo "  文件大小: $WINDOWS_SIZE"
-            else
-                echo "⚠ 警告: Windows安装包创建失败"
-            fi
-        else
-            echo "  未在替代位置找到Windows构建目录"
-        fi
-    fi
-else
-    echo "✗ Windows版本构建失败"
-    echo "  可能的原因:"
-    echo "  1. 未启用Windows桌面平台支持"
-    echo "  2. 缺少Windows构建工具"
-    echo "  3. 项目配置问题"
-fi
-
-echo
-cd "$PROJECT_DIR"
-
 # 构建macOS版本
 echo "开始构建macOS版本..."
 echo "-----------------------"
