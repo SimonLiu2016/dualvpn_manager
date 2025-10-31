@@ -11,10 +11,36 @@ PROJECT_ROOT="$SCRIPT_DIR/../.."
 
 cd "$PROJECT_ROOT" || exit 1
 
-# 清理之前的构建
-echo "Cleaning previous builds..."
+# 获取当前工作目录
+WORKSPACE_DIR=$(pwd)
+BUILD_DIR="${WORKSPACE_DIR}/build"
+MACOS_BUILD_DIR="${BUILD_DIR}/macos"
+RELEASE_DIR="${BUILD_DIR}/macos/Build/Products/Release"
+
+echo "工作目录: ${WORKSPACE_DIR}"
+
+# 1. 清理之前的构建
+echo "步骤1: 清理之前的构建..."
 flutter clean
 flutter pub get
+rm -rf "${BUILD_DIR}"
+mkdir -p "${BUILD_DIR}"
+
+# 2. 构建Go代理核心
+echo "步骤2: 构建Go代理核心..."
+cd "${WORKSPACE_DIR}/go-proxy-core"
+go build -o "${WORKSPACE_DIR}/go-proxy-core/bin/go-proxy-core" ./cmd/main.go
+
+if [ ! -f "${WORKSPACE_DIR}/go-proxy-core/bin/go-proxy-core" ]; then
+    echo "错误: Go代理核心构建失败"
+    exit 1
+fi
+
+echo "Go代理核心构建成功"
+
+# 3. 构建Flutter应用（带签名）
+echo "步骤3: 构建Flutter应用..."
+cd "${WORKSPACE_DIR}"
 
 # 检查是否在CI环境中
 if [[ -n "$CI" ]]; then
@@ -82,6 +108,31 @@ if [ $BUILD_RESULT -eq 0 ]; then
     if [ -n "$MACOS_APP_FILE" ] && [ -d "$MACOS_APP_FILE" ]; then
       echo "Found built app: $MACOS_APP_FILE"
       
+      # 4. 复制Go代理核心到应用包中
+      echo "步骤4: 复制Go代理核心到应用包中..."
+      APP_CONTENTS_DIR="${MACOS_APP_FILE}/Contents"
+      mkdir -p "${APP_CONTENTS_DIR}/Resources/bin"
+      cp "${WORKSPACE_DIR}/go-proxy-core/bin/go-proxy-core" "${APP_CONTENTS_DIR}/Resources/bin/"
+      cp "${WORKSPACE_DIR}/go-proxy-core/config.yaml" "${APP_CONTENTS_DIR}/Resources/bin/"
+
+      # 4.1 复制OpenVPN二进制文件到应用包Resources/bin目录
+      echo "步骤4.1: 复制OpenVPN二进制文件到应用包Resources/bin目录..."
+      cp "${WORKSPACE_DIR}/go-proxy-core/openvpn/openvpn_bin/openvpn" "${APP_CONTENTS_DIR}/Resources/bin/"
+      chmod +x "${APP_CONTENTS_DIR}/Resources/bin/openvpn"
+
+      # 4.2 复制OpenVPN库文件到应用包Resources目录
+      echo "步骤4.2: 复制OpenVPN库文件到应用包Resources目录..."
+      mkdir -p "${APP_CONTENTS_DIR}/Resources/openvpn_frameworks"
+      cp -R "${WORKSPACE_DIR}/go-proxy-core/openvpn/frameworks/" "${APP_CONTENTS_DIR}/Resources/openvpn_frameworks/"
+
+      echo "Go代理核心和OpenVPN文件复制完成"
+      
+      # 重新签名应用以包含新添加的文件
+      if [[ -n "$CI" ]] && [[ -n "$MACOS_DEVELOPMENT_TEAM" ]] && [[ -n "$MACOS_SIGNING_CERTIFICATE" ]]; then
+        echo "Re-signing app to include added files..."
+        codesign --force --deep --sign "Apple Distribution" "$MACOS_APP_FILE"
+      fi
+      
       # 验证应用签名（如果在CI环境中且有签名设置）
       if [[ -n "$CI" ]] && [[ -n "$MACOS_DEVELOPMENT_TEAM" ]]; then
         echo "Verifying app signature..."
@@ -110,5 +161,11 @@ else
   
   exit 1
 fi
+
+echo ""
+echo "==================== 构建完成 ===================="
+echo "应用包位置: ${WORKSPACE_DIR}/build/macos/Build/Products/Release/Dualvpn Manager.app"
+echo "=================================================="
+echo ""
 
 echo "macOS build process completed"
