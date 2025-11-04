@@ -3,6 +3,8 @@
 一个轻量级的 VPN 管理工具，可以同时管理多种类型的网络代理连接，实现指定地址使用指定代理源访问的需求，
 典型应用场景：不需要频繁反复切换网络或代理，达到同时访问内外网。
 
+注意：由于 macOS App Store 审核问题，暂时无法提交 macOS 应用，请谅解。
+
 ## 功能特点
 
 - **多协议支持**: 支持 OpenVPN、Clash、Shadowsocks、V2Ray、HTTP代理、SOCKS5代理等多种协议
@@ -81,14 +83,11 @@ flutter run
 ## 构建应用
 
 ```bash
-# Windows
-flutter build windows
+# pkg 安装包
+./scripts/app_store/build_pkg_for_app_store_v2.sh
 
-# macOS
-flutter build macos
-
-# Linux
-flutter build linux
+# dmg 安装包
+./scripts/build_and_pakcage_fixed.sh
 ```
 
 ## 使用说明

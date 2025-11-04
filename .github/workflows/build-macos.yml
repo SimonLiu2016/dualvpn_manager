@@ -1,0 +1,105 @@
+name: Build and Release DualVPN Manager
+
+on:
+  push:
+    branches:
+      - dev
+      - qa
+  workflow_dispatch:
+
+jobs:
+  build-macos:
+    name: Build macOS Package
+    runs-on: macos-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v4
+        with:
+          go-version: "1.23.0"
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: "3.x"
+          channel: "stable"
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      - name: Install create-dmg
+        run: brew install create-dmg
+
+      - name: Setup macOS signing (optional)
+        run: |
+          if [[ -n "$MACOS_DEVELOPMENT_TEAM" ]] && [[ -n "$MACOS_SIGNING_CERTIFICATE" ]] && [[ -n "$MACOS_SIGNING_CERTIFICATE_PWD" ]] && [[ -n "$MACOS_PROVISIONING_PROFILE" ]]; then
+            chmod +x scripts/package/setup-macos-signing.sh
+            scripts/package/setup-macos-signing.sh
+          else
+            echo "Skipping code signing setup - missing credentials"
+          fi
+        env:
+          MACOS_DEVELOPMENT_TEAM: ${{ secrets.MACOS_DEVELOPMENT_TEAM }}
+          MACOS_SIGNING_CERTIFICATE: ${{ secrets.MACOS_SIGNING_CERTIFICATE }}
+          MACOS_SIGNING_CERTIFICATE_PWD: ${{ secrets.MACOS_SIGNING_CERTIFICATE_PWD }}
+          MACOS_PROVISIONING_PROFILE: ${{ secrets.MACOS_PROVISIONING_PROFILE }}
+        continue-on-error: true
+
+      - name: Build macOS version
+        run: |
+          chmod +x scripts/package/build-macos-app-enhanced.sh
+          scripts/package/build-macos-app-enhanced.sh
+        env:
+          MACOS_DEVELOPMENT_TEAM: ${{ secrets.MACOS_DEVELOPMENT_TEAM }}
+          MACOS_SIGNING_CERTIFICATE: ${{ secrets.MACOS_SIGNING_CERTIFICATE }}
+          MACOS_SIGNING_CERTIFICATE_PWD: ${{ secrets.MACOS_SIGNING_CERTIFICATE_PWD }}
+          MACOS_PROVISIONING_PROFILE: ${{ secrets.MACOS_PROVISIONING_PROFILE }}
+          GITHUB_RUN_NUMBER: ${{ github.run_number }}
+          CI: true
+
+      - name: Create release packages
+        run: |
+          chmod +x scripts/package/build_release.sh
+          ./scripts/package/build_release.sh
+
+      - name: Upload macOS artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: macos-artifacts
+          path: |
+            build/release/
+
+  release:
+    name: Create Release
+    needs: [build-macos]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Download macOS artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: macos-artifacts
+          path: macos-artifacts
+
+      - name: Prepare release files
+        run: |
+          mkdir -p release-files
+          # Copy files from all platforms
+          cp -r macos-artifacts/build/release/* release-files/ 2>/dev/null || true
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v1
+        if: startsWith(github.ref, 'refs/tags/')
+        with:
+          files: |
+            release-files/*.zip
+            release-files/*.dmg
+            release-files/*.exe
+            release-files/*.sh
+            release-files/*.tar.gz
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

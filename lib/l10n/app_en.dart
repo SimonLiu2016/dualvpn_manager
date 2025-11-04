@@ -247,5 +247,12 @@ class AppLocalizationsEn {
     'no_selected_proxies': 'No selected proxies',
     'connected': 'Connected',
     'unknown': 'Unknown',
+
+    // System tray menu
+    'tray_toggle_start': 'Start',
+    'tray_toggle_starting': 'Starting...',
+    'tray_toggle_stop': 'Stop',
+    'tray_show_window': 'Show Window',
+    'tray_exit_app': 'Exit App',
   };
 }
