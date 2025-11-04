@@ -231,5 +231,12 @@ class AppLocalizationsZh {
     'no_selected_proxies': '暂无已选中代理',
     'connected': '已连接',
     'unknown': '未知',
+
+    // 系统托盘菜单
+    'tray_toggle_start': '启动',
+    'tray_toggle_starting': '启动中...',
+    'tray_toggle_stop': '停止',
+    'tray_show_window': '显示主窗口',
+    'tray_exit_app': '退出应用',
   };
 }

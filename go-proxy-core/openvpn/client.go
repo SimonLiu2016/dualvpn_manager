@@ -742,7 +742,15 @@ func (oc *OpenVPNClient) startOpenVPNStandard() error {
 	if runtime.GOOS == "darwin" {
 		// 在macOS上，通过特权助手工具启动OpenVPN以确保有足够的权限
 		// 注意：特权助手工具已经确保了权限，所以这里不需要sudo
-		cmd = exec.Command(openvpnPath, "--config", finalConfigPath, "--auth-user-pass", tempAuthPath, "--proto", protocol, "--dev-type", "tun", "--dev", "tun", "--persist-tun", "--pull")
+		cmd = exec.Command(openvpnPath, "--config", finalConfigPath, "--auth-user-pass", tempAuthPath, "--proto", protocol, 
+		"--dev-type", "tun", "--dev", "tun", "--persist-tun", "--pull",
+		// 核心性能优化（文档依据明确）
+		"--fast-io",                // 优化UDP小数据包I/O（文档Tunnel选项）
+		// 调试与兼容性（按需添加）
+		"--verb", "3",              // 输出关键协商日志（文档General选项）
+		// 压缩（仅当服务器支持时添加）
+		// "--comp-lzo", "yes",      // 兼容LZO压缩（文档General选项）
+		)
 
 		// 设置DYLD_LIBRARY_PATH环境变量，指向openvpn_frameworks目录以解决动态库加载问题
 		appContentsDir := filepath.Join(filepath.Dir(openvpnPath), "..", "..")
@@ -751,7 +759,24 @@ func (oc *OpenVPNClient) startOpenVPNStandard() error {
 		log.Printf("设置DYLD_LIBRARY_PATH环境变量: %s", frameworksPath)
 	} else {
 		// 在其他平台上直接运行OpenVPN
-		cmd = exec.Command(openvpnPath, "--config", finalConfigPath, "--auth-user-pass", tempAuthPath, "--proto", protocol, "--dev-type", "tun", "--dev", "tun", "--pull")
+		cmd = exec.Command(openvpnPath, "--config", finalConfigPath, "--auth-user-pass", tempAuthPath, "--proto", protocol, 
+		"--dev-type", "tun", "--dev", "tun", "--pull",
+		// 核心性能优化（文档依据明确）
+		"--fast-io",                // 优化UDP小数据包I/O（文档Tunnel选项）
+		"--tun-mtu", "1300",        // 保守MTU避免分片（文档Tunnel选项）
+		"--mssfix", "1260",         // 匹配MTU的MSS（文档Tunnel选项）
+		"--mtu-disc", "maybe",      // 动态MTU探测（文档Tunnel选项）
+		"--sndbuf", "524288",       // 增大发送缓冲区（文档Tunnel选项）
+		"--rcvbuf", "524288",       // 增大接收缓冲区（文档Tunnel选项）
+		// 稳定性优化
+		"--ping", "5",              // 5秒心跳（文档General选项）
+		"--ping-restart", "15",     // 15秒无响应重连（文档General选项）
+		"--tls-version-min", "1.2", // 最低TLS 1.2（文档TLS选项）
+		// 调试与兼容性（按需添加）
+		"--verb", "3",              // 输出关键协商日志（文档General选项）
+		// 压缩（仅当服务器支持时添加）
+		// "--comp-lzo", "yes",      // 兼容LZO压缩（文档General选项）
+	    )
 	}
 
 	cmd.Dir = workDir // 设置工作目录
