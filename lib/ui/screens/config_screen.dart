@@ -145,6 +145,9 @@ class _ConfigScreenState extends State<ConfigScreen> {
     await ConfigManager.deleteConfig(id);
     _loadConfigs();
 
+    final appState = context.read<AppState>();
+    appState.reinitializeGoProxyConfig();
+
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text(localizations.get('config_deleted'))),
@@ -1052,6 +1055,9 @@ class _ConfigScreenState extends State<ConfigScreen> {
     await ConfigManager.updateConfig(updatedConfig);
     _loadConfigs();
 
+    final appState = context.read<AppState>();
+    appState.reinitializeGoProxyConfig();
+
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -1061,5 +1067,7 @@ class _ConfigScreenState extends State<ConfigScreen> {
         ),
       );
     }
+
+    // 通知 go 代理核心配置变更
   }
 }

@@ -246,14 +246,7 @@ class _ProxyListView extends StatelessWidget {
                         onPressed: () => onTestLatency(proxyName),
                         tooltip: localizations.get('test_latency'),
                       ),
-                      // 对于OpenVPN类型，选中状态默认为选中且不可修改
-                      if (proxyType == 'openvpn')
-                        const Switch(
-                          value: true, // OpenVPN默认选中
-                          onChanged: null, // 不可修改
-                        )
-                      else
-                        Switch(
+                      Switch(
                           value: isSelected,
                           onChanged: (value) {
                             onProxySelected(proxyName, value);
