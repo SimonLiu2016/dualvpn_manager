@@ -1014,24 +1014,6 @@ class AppState extends ChangeNotifier {
       );
     }
 
-    // 检查是否是OpenVPN类型的代理，如果是则不修改其选中状态
-    Map<String, dynamic>? openVPNProxy;
-    for (var proxy in _proxies) {
-      if (proxy['type'] == 'openvpn') {
-        openVPNProxy = proxy;
-        break;
-      }
-    }
-
-    // 如果是OpenVPN代理，保持其选中状态为true且不修改
-    if (openVPNProxy != null && proxyName == openVPNProxy['name']) {
-      Logger.info('OpenVPN代理选中状态不可修改，保持为选中状态');
-      // 通知监听器但不修改OpenVPN代理的状态
-      notifyListeners();
-      Logger.info('=== 代理选中状态设置完成（OpenVPN代理） ===');
-      return;
-    }
-
     // 创建全新的代理列表
     List<Map<String, dynamic>> newProxies = [];
     bool foundTargetProxy = false;
@@ -1052,8 +1034,7 @@ class AppState extends ChangeNotifier {
         Logger.info('更新后的代理状态: ${updatedProxy['isSelected']}');
       } else {
         // 对于非目标代理，如果需要选中目标代理，则取消它们的选中状态
-        // 但不修改OpenVPN代理的状态
-        if (isSelected && proxy['type'] != 'openvpn') {
+        if (isSelected) {
           final updatedProxy = Map<String, dynamic>.from(proxy);
           updatedProxy['isSelected'] = false;
           newProxies.add(updatedProxy);
@@ -2253,7 +2234,6 @@ class AppState extends ChangeNotifier {
               }
 
               // 构建OpenVPN代理信息
-              // 对于OpenVPN类型，代理默认选中且不可修改
               final proxyInfo = {
                 'name': currentConfig.name,
                 'type': 'openvpn',
@@ -2264,7 +2244,7 @@ class AppState extends ChangeNotifier {
                 'username': currentConfig.settings['username'] ?? '',
                 'password': currentConfig.settings['password'] ?? '',
                 'latency': existingProxy?['latency'] ?? -2, // -2表示未测试
-                'isSelected': true, // OpenVPN代理默认选中
+                'isSelected': false, 
               };
 
               Logger.info('创建OpenVPN代理信息: $proxyInfo');
@@ -2952,7 +2932,7 @@ class AppState extends ChangeNotifier {
         _updateTrayIcon();
 
         // 重新初始化代理源和路由规则
-        await _reinitializeGoProxyConfig();
+        await reinitializeGoProxyConfig();
 
         // 更新托盘图标为Go代理核心已启动状态
         _updateTrayIcon();
@@ -2995,7 +2975,7 @@ class AppState extends ChangeNotifier {
   }
 
   // 重新初始化Go代理核心配置
-  Future<void> _reinitializeGoProxyConfig() async {
+  Future<void> reinitializeGoProxyConfig() async {
     try {
       Logger.info('重新初始化Go代理核心配置...');
 
