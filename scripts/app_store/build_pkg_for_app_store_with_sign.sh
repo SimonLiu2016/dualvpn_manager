@@ -53,6 +53,11 @@ echo "Flutter应用构建成功"
 # 5. 复制Go代理核心到应用包中
 echo "步骤5: 复制Go代理核心到应用包中..."
 APP_CONTENTS_DIR="${WORKSPACE_DIR}/build/macos/Build/Products/Release/Dualvpn Manager.app/Contents"
+
+# https://developer.apple.com/documentation/bundleresources/adding-a-privacy-manifest-to-your-app-or-third-party-sdk
+echo "复制隐私信息文件..."
+cp "${WORKSPACE_DIR}/build/macos/Build/Products/Release/device_info_plus/device_info_plus_privacy.bundle/Contents/Resources/PrivacyInfo.xcprivacy" "${APP_CONTENTS_DIR}/Resources/"
+
 mkdir -p "${APP_CONTENTS_DIR}/Resources/bin"
 cp "${WORKSPACE_DIR}/go-proxy-core/bin/go-proxy-core" "${APP_CONTENTS_DIR}/Resources/bin/"
 cp "${WORKSPACE_DIR}/go-proxy-core/config.yaml" "${APP_CONTENTS_DIR}/Resources/bin/"
