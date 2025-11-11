@@ -14,9 +14,16 @@
 ./generate_privacy_policy_en.sh
 ```
 
+运行以下命令生成法文隐私政策页面：
+
+```bash
+./generate_privacy_policy_fr.sh
+```
+
 生成的隐私政策页面将位于：
 - 中文版：`docs/privacy-policy.html`
 - 英文版：`docs/privacy-policy-en.html`
+- 法文版：`docs/privacy-policy-fr.html`
 
 都可以用于 GitHub Pages 发布。
 
@@ -28,7 +35,9 @@
 2. 隐私政策页面的访问地址将是：
    - 中文版：`https://[username].github.io/[repository]/privacy-policy.html`
    - 英文版：`https://[username].github.io/[repository]/privacy-policy-en.html`
+   - 法文版：`https://[username].github.io/[repository]/privacy-policy-fr.html`
 
 例如：
 - 中文版：https://SimonLiu2016.github.io/dualvpn_manager/privacy-policy.html
 - 英文版：https://SimonLiu2016.github.io/dualvpn_manager/privacy-policy-en.html
+- 法文版：https://SimonLiu2016.github.io/dualvpn_manager/privacy-policy-fr.html
