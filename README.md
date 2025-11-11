@@ -176,6 +176,7 @@ MIT License
 ## 隐私政策
 
 本应用的隐私政策可在以下链接查看：
-[隐私政策页面](https://SimonLiu2016.github.io/dualvpn_manager/privacy-policy.html)
+- 中文版：[隐私政策页面](https://SimonLiu2016.github.io/dualvpn_manager/privacy-policy.html)
+- 英文版：[Privacy Policy](https://SimonLiu2016.github.io/dualvpn_manager/privacy-policy-en.html)
 
 **免责声明**：本软件为开发预览版本，功能尚未完全稳定，仅供技术预览和测试使用。作者不对因使用本软件而造成的任何直接或间接损失负责。
