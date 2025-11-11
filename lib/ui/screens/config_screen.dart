@@ -30,9 +30,12 @@ class _ConfigScreenState extends State<ConfigScreen> {
   final TextEditingController _editUsernameController = TextEditingController();
   final TextEditingController _editPasswordController = TextEditingController();
 
-  VPNType _selectedType = VPNType.openVPN;
-  VPNType _editSelectedType = VPNType.openVPN;
+  VPNType _selectedType = VPNType.clash; // 默认改为Clash而不是OpenVPN
+  VPNType _editSelectedType = VPNType.clash;
   VPNConfig? _editingConfig; // 当前正在编辑的配置
+
+  // 添加App Store版本标识
+  bool _isAppStoreVersion = true;
 
   @override
   void initState() {
@@ -367,7 +370,6 @@ class _ConfigScreenState extends State<ConfigScreen> {
     setState(() {
       _editingConfig = config;
       _editNameController.text = config.name;
-      _editSelectedType = config.type;
       _editPathController.text = config.configPath;
 
       // 如果是服务器类型配置，解析服务器信息
@@ -398,6 +400,19 @@ class _ConfigScreenState extends State<ConfigScreen> {
       builder: (BuildContext context) {
         final localizations = AppLocalizations.of(context);
 
+        // 获取可用的VPN类型列表（在App Store版本中过滤掉OpenVPN）
+        List<VPNType> availableTypes = VPNType.values
+            .where((type) => !(_isAppStoreVersion && type == VPNType.openVPN))
+            .toList();
+
+        // 设置编辑选中的类型，确保它是可用类型之一
+        VPNType editSelectedType = config.type;
+        if (!availableTypes.contains(editSelectedType)) {
+          editSelectedType = availableTypes.isNotEmpty
+              ? availableTypes[0]
+              : VPNType.clash;
+        }
+
         return AlertDialog(
           title: Text(localizations.get('edit_proxy_source')),
           content: SingleChildScrollView(
@@ -412,11 +427,11 @@ class _ConfigScreenState extends State<ConfigScreen> {
                 ),
                 const SizedBox(height: 16),
                 DropdownButtonFormField<VPNType>(
-                  value: _editSelectedType,
+                  value: editSelectedType,
                   decoration: InputDecoration(
                     labelText: localizations.get('proxy_type'),
                   ),
-                  items: VPNType.values.map((type) {
+                  items: availableTypes.map((type) {
                     String label;
                     switch (type) {
                       case VPNType.openVPN:
@@ -459,17 +474,17 @@ class _ConfigScreenState extends State<ConfigScreen> {
                 ),
                 const SizedBox(height: 16),
                 // 根据类型显示不同的输入字段
-                if (_editSelectedType == VPNType.openVPN ||
-                    _editSelectedType == VPNType.clash ||
-                    _editSelectedType.supportsSubscription)
+                if (editSelectedType == VPNType.openVPN ||
+                    editSelectedType == VPNType.clash ||
+                    editSelectedType.supportsSubscription)
                   Column(
                     children: [
                       TextField(
                         controller: _editPathController,
                         decoration: InputDecoration(
-                          labelText: _editSelectedType == VPNType.openVPN
+                          labelText: editSelectedType == VPNType.openVPN
                               ? localizations.get('config_file_path')
-                              : _editSelectedType.supportsSubscription
+                              : editSelectedType.supportsSubscription
                               ? localizations.get(
                                   'config_file_path_or_subscription',
                                 )
@@ -478,7 +493,7 @@ class _ConfigScreenState extends State<ConfigScreen> {
                       ),
                       const SizedBox(height: 16),
                       // 为OpenVPN类型添加用户名和密码输入框
-                      if (_editSelectedType == VPNType.openVPN) ...[
+                      if (editSelectedType == VPNType.openVPN) ...[
                         TextField(
                           controller: _editUsernameController,
                           decoration: InputDecoration(
@@ -648,6 +663,18 @@ class _ConfigScreenState extends State<ConfigScreen> {
   Widget build(BuildContext context) {
     final localizations = AppLocalizations.of(context);
 
+    // 获取可用的VPN类型列表（在App Store版本中过滤掉OpenVPN）
+    List<VPNType> availableTypes = VPNType.values
+        .where((type) => !(_isAppStoreVersion && type == VPNType.openVPN))
+        .toList();
+
+    // 确保_selectedType是可用类型之一，如果不是则设置为第一个可用类型
+    if (!availableTypes.contains(_selectedType)) {
+      _selectedType = availableTypes.isNotEmpty
+          ? availableTypes[0]
+          : VPNType.clash;
+    }
+
     return Scaffold(
       body: Padding(
         padding: const EdgeInsets.all(16.0),
@@ -677,6 +704,10 @@ class _ConfigScreenState extends State<ConfigScreen> {
                           labelText: localizations.get('proxy_source_name'),
                           prefixIcon: const Icon(Icons.label),
                         ),
+                        // 根据是否为App Store版本且选择了OpenVPN类型来决定是否禁用
+                        enabled:
+                            !(_isAppStoreVersion &&
+                                _selectedType == VPNType.openVPN),
                       ),
                       const SizedBox(height: 16),
                       DropdownButtonFormField<VPNType>(
@@ -685,7 +716,7 @@ class _ConfigScreenState extends State<ConfigScreen> {
                           labelText: localizations.get('proxy_type'),
                           prefixIcon: const Icon(Icons.category),
                         ),
-                        items: VPNType.values.map((type) {
+                        items: availableTypes.map((type) {
                           String label;
                           switch (type) {
                             case VPNType.openVPN:
@@ -752,6 +783,10 @@ class _ConfigScreenState extends State<ConfigScreen> {
                                     : localizations.get('config_file_path'),
                                 prefixIcon: const Icon(Icons.file_present),
                               ),
+                              // 根据是否为App Store版本且选择了OpenVPN类型来决定是否禁用
+                              enabled:
+                                  !(_isAppStoreVersion &&
+                                      _selectedType == VPNType.openVPN),
                             ),
                             const SizedBox(height: 16),
                             // 为OpenVPN类型添加用户名和密码输入框
@@ -764,6 +799,10 @@ class _ConfigScreenState extends State<ConfigScreen> {
                                   ),
                                   prefixIcon: const Icon(Icons.person),
                                 ),
+                                // 根据是否为App Store版本且选择了OpenVPN类型来决定是否禁用
+                                enabled:
+                                    !(_isAppStoreVersion &&
+                                        _selectedType == VPNType.openVPN),
                               ),
                               const SizedBox(height: 16),
                               TextField(
@@ -775,6 +814,10 @@ class _ConfigScreenState extends State<ConfigScreen> {
                                   prefixIcon: const Icon(Icons.lock),
                                 ),
                                 obscureText: true,
+                                // 根据是否为App Store版本且选择了OpenVPN类型来决定是否禁用
+                                enabled:
+                                    !(_isAppStoreVersion &&
+                                        _selectedType == VPNType.openVPN),
                               ),
                               const SizedBox(height: 16),
                             ],
@@ -789,6 +832,10 @@ class _ConfigScreenState extends State<ConfigScreen> {
                                 labelText: localizations.get('server_address'),
                                 prefixIcon: const Icon(Icons.dns),
                               ),
+                              // 根据是否为App Store版本且选择了OpenVPN类型来决定是否禁用
+                              enabled:
+                                  !(_isAppStoreVersion &&
+                                      _selectedType == VPNType.openVPN),
                             ),
                             const SizedBox(height: 16),
                             TextField(
@@ -798,6 +845,10 @@ class _ConfigScreenState extends State<ConfigScreen> {
                                 prefixIcon: const Icon(Icons.portrait),
                               ),
                               keyboardType: TextInputType.number,
+                              // 根据是否为App Store版本且选择了OpenVPN类型来决定是否禁用
+                              enabled:
+                                  !(_isAppStoreVersion &&
+                                      _selectedType == VPNType.openVPN),
                             ),
                             const SizedBox(height: 16),
                             TextField(
@@ -808,6 +859,10 @@ class _ConfigScreenState extends State<ConfigScreen> {
                                 ),
                                 prefixIcon: const Icon(Icons.person),
                               ),
+                              // 根据是否为App Store版本且选择了OpenVPN类型来决定是否禁用
+                              enabled:
+                                  !(_isAppStoreVersion &&
+                                      _selectedType == VPNType.openVPN),
                             ),
                             const SizedBox(height: 16),
                             TextField(
@@ -819,14 +874,58 @@ class _ConfigScreenState extends State<ConfigScreen> {
                                 prefixIcon: const Icon(Icons.lock),
                               ),
                               obscureText: true,
+                              // 根据是否为App Store版本且选择了OpenVPN类型来决定是否禁用
+                              enabled:
+                                  !(_isAppStoreVersion &&
+                                      _selectedType == VPNType.openVPN),
                             ),
                           ],
+                        ),
+                      const SizedBox(height: 16),
+                      // 当选择OpenVPN类型且为App Store版本时显示提示信息
+                      if (_isAppStoreVersion &&
+                          _selectedType == VPNType.openVPN)
+                        Container(
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                            color: Colors.orange.withOpacity(0.2),
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(color: Colors.orange),
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                localizations.get(
+                                  'app_store_version_openvpn_not_supported',
+                                ),
+                                style: const TextStyle(
+                                  color: Colors.orange,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                              const SizedBox(height: 8),
+                              Text(
+                                localizations.get(
+                                  'app_store_version_openvpn_not_supported_detail',
+                                ),
+                                style: const TextStyle(
+                                  color: Colors.orange,
+                                  fontSize: 12,
+                                ),
+                              ),
+                            ],
+                          ),
                         ),
                       const SizedBox(height: 16),
                       SizedBox(
                         width: double.infinity,
                         child: ElevatedButton.icon(
-                          onPressed: _addConfig,
+                          onPressed:
+                              (_isAppStoreVersion &&
+                                  _selectedType == VPNType.openVPN)
+                              ? null // 禁用按钮
+                              : _addConfig, // 正常的添加功能
                           icon: const Icon(Icons.add),
                           label: Text(localizations.get('add_proxy_source')),
                           style: ElevatedButton.styleFrom(
