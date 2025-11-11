@@ -127,11 +127,11 @@ EOF
 
 # 步骤7: 创建PKG安装文件
 productbuild \
-  --component "${PKG_TEMP_DIR}/Dualvpn Manager.app" /Applications \
   --product "${PKG_TEMP_DIR}/Dualvpn Manager.app/Contents/Info.plist" \
   --identifier "com.v8en.dualvpnManager.pkg" \
   --version "${VERSION}" \
   --sign "3rd Party Mac Developer Installer: Simon Liu (4UKN65653U)" \
+  --component "${PKG_TEMP_DIR}/Dualvpn Manager.app" /Applications \
   "${PKG_PATH}"
 
 # 清理临时文件

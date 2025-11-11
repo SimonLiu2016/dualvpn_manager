@@ -173,4 +173,9 @@ MIT License
 邮箱：582883825@qq.com  
 网址：[v8en.com](https://v8en.com)
 
+## 隐私政策
+
+本应用的隐私政策可在以下链接查看：
+[隐私政策页面](https://SimonLiu2016.github.io/dualvpn_manager/privacy-policy.html)
+
 **免责声明**：本软件为开发预览版本，功能尚未完全稳定，仅供技术预览和测试使用。作者不对因使用本软件而造成的任何直接或间接损失负责。
