@@ -274,9 +274,44 @@ func (hs *HTTPServer) handleProxyConnection(clientConn net.Conn, req *http.Reque
 			isClientSide: false,
 		}
 
+		// 修复：正确处理HTTP请求转发
+		// 创建一个新的请求，确保Host头正确设置
+		newReq := &http.Request{
+			Method: req.Method,
+			URL: &url.URL{
+				Scheme:   req.URL.Scheme,
+				Host:     targetAddr,
+				Path:     req.URL.Path,
+				RawQuery: req.URL.RawQuery,
+			},
+			Host:       targetAddr,
+			Header:     req.Header,
+			Body:       req.Body,
+			Proto:      req.Proto,
+			ProtoMajor: req.ProtoMajor,
+			ProtoMinor: req.ProtoMinor,
+		}
+
+		// 移除代理特有的头部
+		newReq.Header.Del("Proxy-Connection")
+		newReq.Header.Del("Proxy-Authorization")
+
+		// 移除可能干扰的头部
+		newReq.Header.Del("Connection")
+		newReq.Header.Del("Upgrade")
+		newReq.Header.Del("Accept-Encoding") // 避免压缩问题
+
+		// 添加必要的头部
+		if newReq.Header.Get("User-Agent") == "" {
+			newReq.Header.Set("User-Agent", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.114 Safari/537.36")
+		}
+
+		// 设置连接为关闭状态，避免连接复用问题
+		newReq.Header.Set("Connection", "close")
+
 		// 先转发请求到目标服务器（上传）
 		log.Printf("转发HTTP请求到目标服务器")
-		err = req.Write(downloadConn)
+		err = newReq.Write(downloadConn)
 		if err != nil {
 			log.Printf("Error writing request to target: %v", err)
 			// 发送错误响应
@@ -362,9 +397,44 @@ func (hs *HTTPServer) handleDirectConnection(clientConn net.Conn, req *http.Requ
 			isClientSide: false,
 		}
 
+		// 修复：正确处理HTTP请求转发
+		// 创建一个新的请求，确保Host头正确设置
+		newReq := &http.Request{
+			Method: req.Method,
+			URL: &url.URL{
+				Scheme:   "http", // 直连时使用http协议
+				Host:     targetAddr,
+				Path:     req.URL.Path,
+				RawQuery: req.URL.RawQuery,
+			},
+			Host:       targetAddr,
+			Header:     req.Header,
+			Body:       req.Body,
+			Proto:      req.Proto,
+			ProtoMajor: req.ProtoMajor,
+			ProtoMinor: req.ProtoMinor,
+		}
+
+		// 移除代理特有的头部
+		newReq.Header.Del("Proxy-Connection")
+		newReq.Header.Del("Proxy-Authorization")
+
+		// 移除可能干扰的头部
+		newReq.Header.Del("Connection")
+		newReq.Header.Del("Upgrade")
+		newReq.Header.Del("Accept-Encoding") // 避免压缩问题
+
+		// 添加必要的头部
+		if newReq.Header.Get("User-Agent") == "" {
+			newReq.Header.Set("User-Agent", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.114 Safari/537.36")
+		}
+
+		// 设置连接为关闭状态，避免连接复用问题
+		newReq.Header.Set("Connection", "close")
+
 		// 先转发请求到目标服务器（上传）
 		log.Printf("转发HTTP请求到目标服务器")
-		err = req.Write(downloadConn)
+		err = newReq.Write(downloadConn)
 		if err != nil {
 			log.Printf("Error writing request to target: %v", err)
 			// 发送错误响应
