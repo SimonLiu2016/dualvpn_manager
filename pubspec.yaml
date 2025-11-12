@@ -1,7 +1,7 @@
 name: dualvpn_manager
 description: "双捷VPN管理器(DualVPN Manager) - 同时管理OpenVPN和ClashX连接的轻量级工具"
 publish_to: "none"
-version: 0.0.8
+version: 0.0.9
 homepage: https://github.com/SimonLiu2016/dualvpn_manager
 
 environment:
@@ -26,7 +26,7 @@ dependencies:
   # 系统托盘支持
   tray_manager: ^0.5.1
   # 系统信息获取
-  device_info_plus: ^10.1.0
+  device_info_plus: ^12.2.0
   # Base64编码解码
   crypto: ^3.0.0
   # 窗口管理
