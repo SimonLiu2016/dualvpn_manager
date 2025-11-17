@@ -1,6 +1,6 @@
 import 'dart:io';
 import 'dart:convert';
-import 'package:dualvpn_manager/services/privileged_helper_service.dart';
+import 'dart:async';
 import 'package:dualvpn_manager/utils/logger.dart';
 import 'package:path/path.dart' as path;
 
@@ -10,6 +10,7 @@ class GoProxyService {
   GoProxyService._internal();
 
   bool _isRunning = false;
+  Process? _process; // 添加进程引用
 
   bool get isRunning => _isRunning;
 
@@ -36,22 +37,96 @@ class GoProxyService {
       Logger.info('Go代理核心可执行文件目录: $executableDir');
 
       // 检查配置文件是否存在
-      final configPath = path.join(executableDir, 'config.yaml');
+      final configPath = path.join(executableDir, 'Resources', 'config.yaml');
       final configFile = File(configPath);
+      Logger.info('检查配置文件路径: $configPath');
+      Logger.info('配置文件是否存在: ${await configFile.exists()}');
+
       if (!await configFile.exists()) {
         Logger.error('配置文件不存在: $configPath');
-        // 尝试使用项目根目录下的配置文件
-        final projectDir = Directory.current;
-        final projectConfigPath = path.join(
-          projectDir.path,
-          'go-proxy-core',
-          'config.yaml',
-        );
-        final projectConfigFile = File(projectConfigPath);
-        if (await projectConfigFile.exists()) {
-          Logger.info('使用项目根目录下的配置文件: $projectConfigPath');
-        } else {
-          Logger.error('项目根目录下也找不到配置文件: $projectConfigPath');
+        bool configCopied = false;
+
+        // 在沙盒环境中，尝试从应用包Resources目录复制配置文件
+        try {
+          final appExecutable = Platform.resolvedExecutable;
+          final appDir = File(appExecutable).parent; // MacOS目录
+          final resourcesDir = Directory(
+            path.join(appDir.parent.path, 'Resources'),
+          );
+          final resourceConfigPath = path.join(
+            resourcesDir.path,
+            'bin',
+            'Contents',
+            'Resources',
+            'config.yaml',
+          );
+          final resourceConfigFile = File(resourceConfigPath);
+
+          if (await resourceConfigFile.exists()) {
+            // 将配置文件复制到可执行文件目录
+            await resourceConfigFile.copy(configPath);
+            Logger.info(
+              '从应用包Resources目录复制配置文件: $resourceConfigPath -> $configPath',
+            );
+            configCopied = true;
+          }
+        } catch (e) {
+          Logger.warn('从应用包Resources目录复制配置文件时出错: $e');
+        }
+
+        // 如果还没有复制配置文件，尝试使用项目根目录下的配置文件
+        if (!configCopied) {
+          // 尝试使用项目根目录下的配置文件
+          // 在沙盒环境中，使用Platform.resolvedExecutable来定位项目根目录
+          final executablePath = Platform.resolvedExecutable;
+          final executableDir = File(executablePath).parent;
+
+          // 在开发环境中，可执行文件通常在项目根目录下的.dart_tool目录中
+          // 我们需要向上遍历目录结构来找到项目根目录
+          Directory projectDir = executableDir;
+          int maxLevels = 10; // 限制遍历层级以防止无限循环
+
+          while (maxLevels > 0) {
+            // 检查当前目录是否包含go-proxy-core目录
+            final goProxyDir = Directory(
+              path.join(projectDir.path, 'go-proxy-core'),
+            );
+            if (await goProxyDir.exists()) {
+              break;
+            }
+
+            // 检查当前目录是否包含pubspec.yaml文件（项目根目录标志）
+            final pubspecFile = File(
+              path.join(projectDir.path, 'pubspec.yaml'),
+            );
+            if (await pubspecFile.exists()) {
+              break;
+            }
+
+            // 向上一级目录
+            projectDir = projectDir.parent;
+            maxLevels--;
+          }
+
+          final projectConfigPath = path.join(
+            projectDir.path,
+            'go-proxy-core',
+            'config.yaml',
+          );
+          final projectConfigFile = File(projectConfigPath);
+          if (await projectConfigFile.exists()) {
+            Logger.info('使用项目根目录下的配置文件: $projectConfigPath');
+            // 将配置文件复制到可执行文件目录
+            await projectConfigFile.copy(configPath);
+            Logger.info('已将配置文件复制到可执行文件目录');
+            configCopied = true;
+          } else {
+            Logger.error('项目根目录下也找不到配置文件: $projectConfigPath');
+          }
+        }
+
+        if (!configCopied) {
+          Logger.error('无法找到或复制配置文件');
         }
       } else {
         Logger.info('找到配置文件: $configPath');
@@ -59,21 +134,62 @@ class GoProxyService {
 
       Logger.info('正在启动Go代理核心: $executablePath');
 
-      final helper = HelperService();
-      final _process = await helper.runGoProxyCore(
-        executablePath: executablePath,
-        executableDir: executableDir,
-        arguments: [],
+      // 添加调试信息
+      Logger.info('检查可执行文件是否存在: ${await File(executablePath).exists()}');
+      Logger.info('检查可执行文件权限: ${await File(executablePath).stat()}');
+
+      // 确保可执行文件具有执行权限
+      try {
+        // 使用同步方式设置权限，确保在启动进程前完成
+        final result = await Process.run('chmod', ['+x', executablePath]);
+        if (result.exitCode == 0) {
+          Logger.info('已设置可执行文件权限');
+        } else {
+          Logger.warn('设置可执行文件权限失败，退出码: ${result.exitCode}');
+        }
+      } catch (e) {
+        Logger.warn('设置可执行文件权限时出错: $e');
+      }
+
+      // 直接启动Go代理核心进程
+      _process = await Process.start(
+        executablePath,
+        [],
+        workingDirectory: executableDir,
+        includeParentEnvironment: true,
       );
 
-      // 等待一段时间确认启动状态
-      await Future.delayed(const Duration(seconds: 5));
+      // 添加进程启动后的调试信息
+      Logger.info('Go代理核心进程已启动，PID: ${_process!.pid}');
 
-      // 再次检查进程是否仍在运行
-      if (_isRunning) {
+      // 监听进程输出
+      _process!.stdout.transform(utf8.decoder).listen((data) {
+        Logger.info('Go代理核心 stdout: $data');
+      });
+
+      _process!.stderr.transform(utf8.decoder).listen((data) {
+        Logger.error('Go代理核心 stderr: $data');
+      });
+
+      // 监听进程退出
+      _process!.exitCode.then((code) {
+        Logger.info('Go代理核心进程退出，退出码: $code');
+        _isRunning = false;
+      });
+
+      // 使用非阻塞方式等待一段时间确认启动状态
+      // 创建一个Completer来处理异步等待
+      final completer = Completer<void>();
+      Timer(const Duration(seconds: 5), () {
+        completer.complete();
+      });
+      await completer.future;
+
+      // 检查进程是否仍在运行
+      if (_process != null) {
         try {
           // 检查进程是否已经退出
-          final exitCode = _process.exitCode;
+          final exitCode = _process!.exitCode;
           if (await exitCode.timeout(
                 const Duration(milliseconds: 100),
                 onTimeout: () => -1,
@@ -114,6 +230,13 @@ class GoProxyService {
 
       Logger.info('正在停止Go代理核心...');
 
+      // 直接终止进程
+      if (_process != null) {
+        _process!.kill();
+        _process = null;
+      }
+
+      // 作为后备方案，终止任何残留的go-proxy-core进程
       await _killExistingProcess();
 
       _isRunning = false;
@@ -163,8 +286,12 @@ class GoProxyService {
       if (response.statusCode == 200) {
         Logger.info('路由规则更新成功: $responseBody');
 
-        // 验证规则是否已正确更新
-        await Future.delayed(const Duration(milliseconds: 100));
+        // 使用非阻塞方式验证规则是否已正确更新
+        final completer = Completer<void>();
+        Timer(const Duration(milliseconds: 100), () {
+          completer.complete();
+        });
+        await completer.future;
         final verifyRules = await getRules();
         if (verifyRules != null) {
           Logger.info('验证路由规则更新，当前规则数量: ${verifyRules.length}');
@@ -259,9 +386,12 @@ class GoProxyService {
       if (response.statusCode == 201) {
         Logger.info('协议添加成功: $responseBody');
 
-        // 添加延迟以确保协议真正添加完成
-        Logger.info('等待500毫秒确保协议添加完成');
-        await Future.delayed(const Duration(milliseconds: 500));
+        // 使用非阻塞方式添加延迟以确保协议真正添加完成
+        final completer = Completer<void>();
+        Timer(const Duration(milliseconds: 500), () {
+          completer.complete();
+        });
+        await completer.future;
 
         // 验证协议是否真的添加成功
         Logger.info('开始验证协议是否真的添加成功');
@@ -327,72 +457,23 @@ class GoProxyService {
   /// 获取代理核心可执行文件路径
   Future<String?> _getProxyExecutablePath() async {
     try {
-      // 首先尝试在项目目录中查找
-      final projectDir = Directory.current;
-      final possiblePaths = [
-        path.join(projectDir.path, 'go-proxy-core', 'go-proxy-core'),
-        path.join(projectDir.path, 'go-proxy-core', 'bin', 'go-proxy-core'),
-        path.join(projectDir.path, 'go-proxy-core', 'dist', 'go-proxy-core'),
-      ];
+      // 在沙盒环境中，直接使用固定路径
+      // 根据打包脚本，Go代理核心bundle会被打包到应用包的Contents/Resources目录中
+      final executablePath = Platform.resolvedExecutable;
+      final appDir = File(executablePath).parent; // MacOS目录
+      final bundleExecutablePath = path.join(
+        appDir.parent.path,
+        'Resources',
+        'bin',
+        'Contents',
+        'MacOS',
+        'go-proxy-core',
+      );
+      final bundleExecutableFile = File(bundleExecutablePath);
 
-      for (final p in possiblePaths) {
-        final file = File(p);
-        if (await file.exists()) {
-          Logger.info('找到代理核心可执行文件: $p');
-          return p;
-        }
-      }
-
-      // 尝试在应用包的Contents/Resources目录中查找（用于发布版本）
-      try {
-        final executable = Platform.resolvedExecutable;
-        final appDir = File(executable).parent.parent; // Contents目录
-        final resourcesBinPath = path.join(
-          appDir.path,
-          'Resources',
-          'bin',
-          'go-proxy-core',
-        );
-        final resourcesBinFile = File(resourcesBinPath);
-        if (await resourcesBinFile.exists()) {
-          Logger.info(
-            '在应用包Contents/Resources目录中找到代理核心可执行文件: $resourcesBinPath',
-          );
-          return resourcesBinPath;
-        }
-      } catch (e) {
-        Logger.warn('检查应用包Contents/Resources目录时出错: $e');
-      }
-
-      // 尝试在系统PATH中查找
-      final result = await Process.run('which', ['go-proxy-core']);
-      if (result.exitCode == 0) {
-        final path = result.stdout.toString().trim();
-        Logger.info('在系统PATH中找到代理核心可执行文件: $path');
-        return path;
-      }
-
-      // 尝试查找go-proxy-core目录并构建
-      final goProxyDir = Directory(path.join(projectDir.path, 'go-proxy-core'));
-      if (await goProxyDir.exists()) {
-        Logger.info('找到go-proxy-core目录，尝试构建...');
-        final buildResult = await Process.run('go', [
-          'build',
-          '-o',
-          'go-proxy-core',
-          './cmd/main.go',
-        ], workingDirectory: goProxyDir.path);
-
-        if (buildResult.exitCode == 0) {
-          final executablePath = path.join(goProxyDir.path, 'go-proxy-core');
-          final file = File(executablePath);
-          if (await file.exists()) {
-            Logger.info('成功构建代理核心可执行文件: $executablePath');
-            return executablePath;
-          }
-        } else {
-          Logger.error('构建Go代理核心失败: ${buildResult.stderr}');
-        }
+      if (await bundleExecutableFile.exists()) {
+        Logger.info('在应用包Resources目录中找到代理核心bundle可执行文件: $bundleExecutablePath');
+        return bundleExecutablePath;
       }
 
       Logger.error('未找到代理核心可执行文件');
@@ -406,29 +487,68 @@ class GoProxyService {
   /// 终止任何已运行的Go代理核心实例
   Future<void> _killExistingProcess() async {
     try {
-      // 首先尝试通过特权助手服务停止Go代理核心
-      try {
-        final helper = HelperService();
-        await helper.stopGoProxyCore();
-        Logger.info('通过特权助手终止现有的Go代理核心实例');
-        // 等待一段时间确保进程完全终止
-        await Future.delayed(const Duration(seconds: 2));
-      } catch (e) {
-        Logger.warn('通过特权助手终止现有Go代理核心实例时出错: $e');
+      // 移除对特权助手服务的调用，直接终止进程
+      Logger.info('终止现有的Go代理核心实例');
+
+      // 在沙盒环境中，我们不能使用pkill命令
+      // 如果有进程引用，直接终止它
+      if (_process != null) {
+        Logger.info('终止已知的Go代理核心进程');
+        _process!.kill();
+        // 使用非阻塞方式等待进程终止
+        final completer = Completer<bool>();
+        Timer(const Duration(seconds: 5), () {
+          completer.complete(false); // 超时
+        });
+
+        _process!.exitCode
+            .then((code) {
+              if (!completer.isCompleted) {
+                completer.complete(true); // 正常退出
+              }
+            })
+            .catchError((e) {
+              if (!completer.isCompleted) {
+                completer.complete(false); // 错误
+              }
+              Logger.warn('等待进程终止时出错: $e');
+            });
+
+        final completed = await completer.future;
+        if (!completed) {
+          Logger.warn('等待进程终止超时');
+        }
+        _process = null;
       }
 
-      // 作为后备方案，使用pkill命令终止任何残留的go-proxy-core进程
+      // 使用更安全的方式检查是否有残留进程
       try {
-        final result = await Process.run('pkill', ['-f', 'go-proxy-core']);
-        if (result.exitCode == 0) {
-          Logger.info('已终止残留的Go代理核心实例');
-          // 等待一段时间确保进程完全终止
-          await Future.delayed(const Duration(seconds: 1));
-        } else {
-          Logger.info('没有找到残留的Go代理核心实例');
-        }
+        // 使用非阻塞方式检查进程，避免界面卡顿
+        Process.start('pgrep', ['-f', 'go-proxy-core'])
+            .then((process) async {
+              final stdout = await utf8.decodeStream(process.stdout);
+              final exitCode = await process.exitCode;
+
+              if (exitCode == 0) {
+                final pids = stdout.trim().split('\n');
+                Logger.info('找到残留的Go代理核心进程: $pids');
+
+                // 在沙盒环境中，我们只能终止自己启动的进程
+                // 这里我们记录日志但不实际终止，因为可能没有权限
+                for (final pid in pids) {
+                  if (pid.isNotEmpty) {
+                    Logger.info('检测到Go代理核心进程PID: $pid');
+                  }
+                }
+              } else {
+                Logger.info('没有找到残留的Go代理核心实例');
+              }
+            })
+            .catchError((e) {
+              Logger.warn('检查残留Go代理核心实例时出错: $e');
+            });
       } catch (e) {
-        Logger.warn('终止残留Go代理核心实例时出错: $e');
+        Logger.warn('检查残留Go代理核心实例时出错: $e');
       }
     } catch (e) {
       Logger.warn('终止现有Go代理核心实例时出错: $e');

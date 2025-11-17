@@ -30,15 +30,6 @@
 	<string>MainMenu</string>
 	<key>NSPrincipalClass</key>
 	<string>NSApplication</string>
-	<key>SMAuthorizedClients</key>
-	<array>
-		<string>identifier &quot;com.v8en.dualvpnManager&quot; and anchor apple generic</string>
-	</array>
-	<key>SMPrivilegedExecutables</key>
-	<dict>
-		<key>com.v8en.dualvpnManager.PrivilegedHelper</key>
-		<string>identifier &quot;com.v8en.dualvpnManager.PrivilegedHelper&quot; and anchor apple generic</string>
-	</dict>
 	<key>LSApplicationCategoryType</key>
 	<string>public.app-category.utilities</string>
 </dict>

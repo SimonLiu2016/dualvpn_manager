@@ -7,7 +7,8 @@ import 'package:dualvpn_manager/l10n/app_localizations_delegate.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter/services.dart';
 import 'package:dualvpn_manager/utils/logger.dart';
-import 'package:dualvpn_manager/services/privileged_helper_service.dart';
+import 'dart:io';
+import 'package:path_provider/path_provider.dart';
 
 class SettingsScreen extends StatefulWidget {
   final AppState appState;
@@ -169,6 +170,78 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         }
                       },
                       child: Text(localizations.get('cleanup_now')),
+                    ),
+                    const SizedBox(height: 16),
+                    Text(localizations.get('log_location')),
+                    const SizedBox(height: 8),
+                    FutureBuilder<String>(
+                      future: _getLogDirectoryPath(),
+                      builder: (context, snapshot) {
+                        // 添加调试信息
+                        print(
+                          'FutureBuilder state: ${snapshot.connectionState}',
+                        );
+                        if (snapshot.hasData) {
+                          print('Log directory path: ${snapshot.data}');
+                        }
+                        if (snapshot.hasError) {
+                          print('FutureBuilder error: ${snapshot.error}');
+                        }
+
+                        if (snapshot.connectionState ==
+                            ConnectionState.waiting) {
+                          return const CircularProgressIndicator();
+                        } else if (snapshot.hasError) {
+                          return Text('Error: ${snapshot.error}');
+                        } else if (snapshot.hasData) {
+                          return Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                snapshot.data!,
+                                style: const TextStyle(
+                                  fontSize: 12,
+                                  color: Colors.grey,
+                                ),
+                              ),
+                              const SizedBox(height: 8),
+                              ElevatedButton(
+                                onPressed: () {
+                                  Clipboard.setData(
+                                    ClipboardData(text: snapshot.data!),
+                                  );
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    SnackBar(
+                                      content: Text(
+                                        localizations.get(
+                                          'log_location_copied',
+                                        ),
+                                      ),
+                                    ),
+                                  );
+                                },
+                                child: Text(localizations.get('copy_path')),
+                              ),
+                              // 添加调试按钮
+                              const SizedBox(height: 8),
+                              ElevatedButton(
+                                onPressed: () async {
+                                  final path = await _getLogDirectoryPath();
+                                  print('Debug log path: $path');
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    SnackBar(
+                                      content: Text('Debug path: $path'),
+                                    ),
+                                  );
+                                },
+                                child: const Text('Debug Path'),
+                              ),
+                            ],
+                          );
+                        } else {
+                          return const Text('Unable to get log directory path');
+                        }
+                      },
                     ),
                   ],
                 ),
@@ -617,35 +690,65 @@ class _SettingsScreenState extends State<SettingsScreen> {
     int retentionDays,
   ) async {
     try {
-      // 创建特权助手服务实例
-      final helperService = HelperService();
-
-      // 首先调用macOS层清理日志，传递参数
-      bool macOSCleanupSuccess = false;
-      try {
-        macOSCleanupSuccess =
-            await const OptionalMethodChannel(
-                  'dualvpn_manager/macos',
-                ).invokeMethod('cleanupLogs', {
-                  'fileSizeLimit': fileSizeLimit,
-                  'retentionDays': retentionDays,
-                })
-                as bool? ??
-            false;
-      } catch (e) {
-        Logger.error('macOS层日志清理失败: $e');
-      }
-
-      // 然后调用特权助手清理日志，传递参数
-      bool helperCleanupSuccess = await helperService.cleanupLogs(
+      // 直接清理日志文件，不再依赖特权助手
+      bool cleanupSuccess = await _cleanupLogsDirectly(
         fileSizeLimit: fileSizeLimit,
         retentionDays: retentionDays,
       );
 
-      return macOSCleanupSuccess || helperCleanupSuccess;
+      return cleanupSuccess;
     } catch (e) {
       Logger.error('日志清理失败: $e');
       return false;
+    }
+  }
+
+  // 直接清理日志文件
+  Future<bool> _cleanupLogsDirectly({
+    int fileSizeLimit = 10, // MB
+    int retentionDays = 7,
+  }) async {
+    try {
+      // 获取应用临时目录
+      final tempDir = await getTemporaryDirectory();
+      final logDir = '${tempDir.path}/dualvpn_logs';
+      final logPattern = 'dualvpn_macos_*.log';
+
+      // 查找并清理过期的日志文件
+      final result = await Process.run('find', [
+        logDir,
+        '-name',
+        logPattern,
+        '-type',
+        'f',
+        '-mtime',
+        '+$retentionDays', // retentionDays天前的文件
+        '-delete',
+      ]);
+
+      if (result.exitCode == 0) {
+        Logger.info('成功清理过期日志文件');
+        return true;
+      } else {
+        Logger.error('清理过期日志文件失败: ${result.stderr}');
+        return false;
+      }
+    } catch (e) {
+      Logger.error('直接清理日志文件失败: $e');
+      return false;
+    }
+  }
+
+  // 获取日志目录路径
+  Future<String> _getLogDirectoryPath() async {
+    try {
+      final tempDir = await getTemporaryDirectory();
+      final path = '${tempDir.path}/dualvpn_logs';
+      print('获取到日志目录路径: $path');
+      return path;
+    } catch (e) {
+      print('获取日志目录路径失败: $e');
+      rethrow;
     }
   }
 }

@@ -2,7 +2,6 @@ import 'dart:io';
 import 'package:path/path.dart' as path;
 import 'package:dualvpn_manager/utils/logger.dart';
 import 'package:dualvpn_manager/utils/openvpn_config_parser.dart';
-import 'package:dualvpn_manager/services/privileged_helper_service.dart';
 import 'package:dualvpn_manager/services/go_proxy_service.dart';
 
 class OpenVPNService {
@@ -54,19 +53,18 @@ class OpenVPNService {
       // 解析配置文件以提取证书文件
       final certFiles = await _extractCertFiles(configPath);
 
-      // 调用特权助手处理配置文件
-      final helper = HelperService();
-      final processedConfigPath = await helper.copyOpenVPNConfigFiles(
+      // 直接处理配置文件，不再使用特权助手
+      final processedConfigPath = await _processOpenVPNConfigFiles(
         configContent: configContent,
         certFiles: certFiles,
       );
 
       if (processedConfigPath == null) {
-        Logger.error('特权助手处理OpenVPN配置文件失败');
-        throw Exception('特权助手处理OpenVPN配置文件失败');
+        Logger.error('处理OpenVPN配置文件失败');
+        throw Exception('处理OpenVPN配置文件失败');
       }
 
-      Logger.info('特权助手处理后的配置文件路径: $processedConfigPath');
+      Logger.info('处理后的配置文件路径: $processedConfigPath');
 
       // 解析OpenVPN配置文件获取服务器和端口信息
       final proxyInfo = await OpenVPNConfigParser.parseProxyInfo(
@@ -77,7 +75,7 @@ class OpenVPNService {
         password: password,
       );
 
-      // 更新配置路径为特权助手处理后的路径
+      // 更新配置路径为处理后的路径
       proxyInfo.config['processed_config_path'] = processedConfigPath;
 
       // 通过GoProxyService设置OpenVPN代理
@@ -204,5 +202,34 @@ class OpenVPNService {
     }
 
     return certFiles;
+  }
+
+  /// 直接处理OpenVPN配置文件，替代特权助手的功能
+  Future<String?> _processOpenVPNConfigFiles({
+    required String configContent,
+    required Map<String, String> certFiles,
+  }) async {
+    try {
+      // 创建临时目录来存储处理后的配置文件
+      final tempDir = await Directory.systemTemp.createTemp('openvpn_config_');
+      final configPath = path.join(tempDir.path, 'config.ovpn');
+
+      // 写入配置文件
+      final configFile = File(configPath);
+      await configFile.writeAsString(configContent);
+
+      // 写入证书文件
+      for (final entry in certFiles.entries) {
+        final certPath = path.join(tempDir.path, entry.key);
+        final certFile = File(certPath);
+        await certFile.writeAsString(entry.value);
+      }
+
+      Logger.info('OpenVPN配置文件处理完成，路径: $configPath');
+      return configPath;
+    } catch (e) {
+      Logger.error('处理OpenVPN配置文件时出错: $e');
+      return null;
+    }
   }
 }

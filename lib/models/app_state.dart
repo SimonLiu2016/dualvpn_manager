@@ -15,6 +15,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:async';
 import 'dart:io';
 import 'package:flutter/services.dart';
+import 'package:path_provider/path_provider.dart';
 
 class AppState extends ChangeNotifier {
   final VPNManager _vpnManager = VPNManager();
@@ -2244,7 +2245,7 @@ class AppState extends ChangeNotifier {
                 'username': currentConfig.settings['username'] ?? '',
                 'password': currentConfig.settings['password'] ?? '',
                 'latency': existingProxy?['latency'] ?? -2, // -2表示未测试
-                'isSelected': false, 
+                'isSelected': false,
               };
 
               Logger.info('创建OpenVPN代理信息: $proxyInfo');
@@ -3087,7 +3088,7 @@ class AppState extends ChangeNotifier {
     await prefs.setString(_languageKey, _language);
   }
 
-    // 启动日志清理定时器
+  // 启动日志清理定时器
   void _startLogCleanupTimer() {
     // 每小时检查一次是否需要清理日志
     _logCleanupTimer = Timer.periodic(const Duration(hours: 1), (timer) {
@@ -3095,27 +3096,46 @@ class AppState extends ChangeNotifier {
     });
   }
 
-    // 根据设置清理日志
+  // 根据设置清理日志
   Future<void> _cleanupLogsIfNeeded() async {
     try {
       // 这里可以添加检查逻辑，比如检查磁盘空间或日志文件数量
       // 目前我们直接调用清理方法
-      final helperService = HelperService();
 
-      // 调用macOS层清理日志
-      try {
-        await const MethodChannel(
-          'dualvpn_manager/macos',
-        ).invokeMethod('cleanupLogs');
-      } catch (e) {
-        Logger.error('macOS层日志清理失败: $e');
-      }
-
-      // 调用特权助手清理日志
-      await helperService.cleanupLogs();
+      // 直接清理日志文件，不再依赖特权助手
+      await _cleanupLogsDirectly();
     } catch (e) {
       Logger.error('定时清理日志失败: $e');
     }
   }
 
+  // 直接清理日志文件
+  Future<void> _cleanupLogsDirectly() async {
+    try {
+      // 获取应用临时目录
+      final tempDir = await getTemporaryDirectory();
+      final logDir = '${tempDir.path}/dualvpn_logs';
+      final logPattern = 'dualvpn_macos_*.log';
+
+      // 查找并清理过期的日志文件（7天前的文件）
+      final result = await Process.run('find', [
+        logDir,
+        '-name',
+        logPattern,
+        '-type',
+        'f',
+        '-mtime',
+        '+7', // 7天前的文件
+        '-delete',
+      ]);
+
+      if (result.exitCode == 0) {
+        Logger.info('成功清理过期日志文件');
+      } else {
+        Logger.error('清理过期日志文件失败: ${result.stderr}');
+      }
+    } catch (e) {
+      Logger.error('直接清理日志文件失败: $e');
+    }
+  }
 }

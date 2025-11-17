@@ -23,10 +23,10 @@ mkdir -p "${BUILD_DIR}"
 # 2. 构建Go代理核心
 echo "步骤2: 构建Go代理核心..."
 cd "${WORKSPACE_DIR}/go-proxy-core"
-go build -o "${WORKSPACE_DIR}/go-proxy-core/bin/go-proxy-core" ./cmd/main.go
+./build.sh
 
-if [ ! -f "${WORKSPACE_DIR}/go-proxy-core/bin/go-proxy-core" ]; then
-    echo "错误: Go代理核心构建失败"
+if [ ! -d "${WORKSPACE_DIR}/go-proxy-core/bin/go-proxy-core.app" ]; then
+    echo "错误: Go代理核心bundle构建失败"
     exit 1
 fi
 
@@ -44,24 +44,25 @@ fi
 
 echo "Flutter应用构建成功"
 
-# 4. 复制Go代理核心到应用包中
-echo "步骤4: 复制Go代理核心到应用包中..."
+# 4. 复制Go代理核心bundle到应用包中
+echo "步骤4: 复制Go代理核心bundle到应用包中..."
 APP_CONTENTS_DIR="${WORKSPACE_DIR}/build/macos/Build/Products/Release/Dualvpn Manager.app/Contents"
-mkdir -p "${APP_CONTENTS_DIR}/Resources/bin"
-cp "${WORKSPACE_DIR}/go-proxy-core/bin/go-proxy-core" "${APP_CONTENTS_DIR}/Resources/bin/"
-cp "${WORKSPACE_DIR}/go-proxy-core/config.yaml" "${APP_CONTENTS_DIR}/Resources/bin/"
+mkdir -p "${APP_CONTENTS_DIR}/Resources"
 
-# 4.1 复制OpenVPN二进制文件到应用包Resources/bin目录
-echo "步骤4.1: 复制OpenVPN二进制文件到应用包Resources/bin目录..."
-cp "${WORKSPACE_DIR}/go-proxy-core/openvpn/openvpn_bin/openvpn" "${APP_CONTENTS_DIR}/Resources/bin/"
-chmod +x "${APP_CONTENTS_DIR}/Resources/bin/openvpn"
+# 复制整个go-proxy-core.app bundle到Resources目录
+cp -R "${WORKSPACE_DIR}/go-proxy-core/bin/go-proxy-core.app" "${APP_CONTENTS_DIR}/Resources/"
+
+# 4.1 复制OpenVPN二进制文件到应用包Resources目录
+echo "步骤4.1: 复制OpenVPN二进制文件到应用包Resources目录..."
+cp "${WORKSPACE_DIR}/go-proxy-core/openvpn/openvpn_bin/openvpn" "${APP_CONTENTS_DIR}/Resources/"
+chmod +x "${APP_CONTENTS_DIR}/Resources/openvpn"
 
 # 4.2 复制OpenVPN库文件到应用包Resources目录
 echo "步骤4.2: 复制OpenVPN库文件到应用包Resources目录..."
 mkdir -p "${APP_CONTENTS_DIR}/Resources/openvpn_frameworks"
 cp -R "${WORKSPACE_DIR}/go-proxy-core/openvpn/frameworks/" "${APP_CONTENTS_DIR}/Resources/openvpn_frameworks/"
 
-echo "Go代理核心和OpenVPN文件复制完成"
+echo "Go代理核心bundle和OpenVPN文件复制完成"
 
 # 5. 创建DMG安装文件
 echo "步骤5: 创建DMG安装文件..."

@@ -14,12 +14,8 @@ if [ ! -z "$PIDS" ]; then
         PROCESS_OWNER=$(ps -o user= -p $PID)
         echo "  终止进程 PID: $PID (所有者: $PROCESS_OWNER)"
         
-        # 根据进程所有者来终止进程
-        if [ "$PROCESS_OWNER" = "root" ]; then
-            sudo kill $PID
-        else
-            kill $PID
-        fi
+        # 在sandbox环境中直接终止进程
+        kill $PID
     done
     
     # 等待进程终止
@@ -29,13 +25,8 @@ if [ ! -z "$PIDS" ]; then
     for PID in $PIDS; do
         if kill -0 $PID 2>/dev/null; then
             echo "  进程 $PID 仍未终止，强制终止..."
-            # 重新检查进程所有者
-            PROCESS_OWNER=$(ps -o user= -p $PID)
-            if [ "$PROCESS_OWNER" = "root" ]; then
-                sudo kill -9 $PID
-            else
-                kill -9 $PID
-            fi
+            # 在sandbox环境中直接强制终止进程
+            kill -9 $PID
         else
             echo "  进程 $PID 已成功终止"
         fi
@@ -53,12 +44,8 @@ if [ ! -z "$GO_RUN_PIDS" ]; then
         PROCESS_OWNER=$(ps -o user= -p $PID)
         echo "  终止进程 PID: $PID (所有者: $PROCESS_OWNER)"
         
-        # 根据进程所有者来终止进程
-        if [ "$PROCESS_OWNER" = "root" ]; then
-            sudo kill $PID
-        else
-            kill $PID
-        fi
+        # 在sandbox环境中直接终止进程
+        kill $PID
     done
     
     # 等待进程终止
@@ -68,13 +55,8 @@ if [ ! -z "$GO_RUN_PIDS" ]; then
     for PID in $GO_RUN_PIDS; do
         if kill -0 $PID 2>/dev/null; then
             echo "  进程 $PID 仍未终止，强制终止..."
-            # 重新检查进程所有者
-            PROCESS_OWNER=$(ps -o user= -p $PID)
-            if [ "$PROCESS_OWNER" = "root" ]; then
-                sudo kill -9 $PID
-            else
-                kill -9 $PID
-            fi
+            # 在sandbox环境中直接强制终止进程
+            kill -9 $PID
         else
             echo "  进程 $PID 已成功终止"
         fi
@@ -94,12 +76,8 @@ for PORT in 6160 6161 6162; do
             PROCESS_OWNER=$(ps -o user= -p $PID)
             echo "  终止进程 PID: $PID (所有者: $PROCESS_OWNER)"
             
-            # 根据进程所有者来终止进程
-            if [ "$PROCESS_OWNER" = "root" ]; then
-                sudo kill $PID
-            else
-                kill $PID
-            fi
+            # 在sandbox环境中直接终止进程
+            kill $PID
         done
     fi
 done

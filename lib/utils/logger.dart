@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 import 'dart:io';
 import 'package:path/path.dart' as path;
 import 'dart:convert';
+import 'package:path_provider/path_provider.dart';
 
 class Logger {
   static const bool _isDebugMode = kDebugMode;
@@ -29,9 +30,8 @@ class Logger {
     if (_logFile != null) return;
 
     try {
-      // final directory = await getApplicationDocumentsDirectory();
-      // final logDir = Directory(path.join(directory.path, 'logs'));
-      final logDir = Directory('/private/var/tmp');
+      final directory = await getTemporaryDirectory();
+      final logDir = Directory(path.join(directory.path, 'dualvpn_logs'));
       if (!await logDir.exists()) {
         await logDir.create(recursive: true);
       }

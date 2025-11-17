@@ -18,6 +18,12 @@ class AppLocalizationsFr {
     'log_management_setting': 'Gestion des journaux',
     'log_management_subtitle':
         'Configurer la taille des fichiers journaux et le temps de rétention',
+    'log_cleanup_success': 'Nettoyage des journaux terminé',
+    'log_cleanup_failed': 'Échec du nettoyage des journaux',
+    'log_location': 'Emplacement des journaux',
+    'log_location_copied':
+        'Emplacement des journaux copié dans le presse-papiers',
+    'copy_path': 'Copier le chemin',
     'import_export_setting': 'Import/Export de config',
     'import_export_subtitle':
         'Sauvegarder et restaurer les fichiers de configuration',

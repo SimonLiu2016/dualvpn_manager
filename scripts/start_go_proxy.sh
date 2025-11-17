@@ -78,58 +78,31 @@ cd "$PROJECT_ROOT/go-proxy-core"
 # 检查go-proxy-core可执行文件是否存在
 if [ -f "./bin/go-proxy-core" ]; then
     echo "使用已编译的可执行文件启动服务..."
-    # OpenVPN需要管理员权限来创建TUN设备
-    if [ "$NEEDS_ROOT" = "true" ]; then
-        echo "以管理员权限启动服务..."
-        # 检查是否在macOS上运行
-        if [[ "$OSTYPE" == "darwin"* ]]; then
-            # 在macOS上，使用sudo启动并确保TUN设备可访问
-            sudo -b nohup ./bin/go-proxy-core > /private/var/tmp/go-proxy-core.log 2>&1
-            echo "服务启动命令已执行（管理员权限）"
-        else
-            # 在其他系统上直接使用sudo
-            sudo -b nohup ./bin/go-proxy-core > /private/var/tmp/go-proxy-core.log 2>&1
-            echo "服务启动命令已执行（管理员权限）"
-        fi
+    # 在sandbox环境中直接启动，不使用管理员权限
+    # 在macOS sandbox环境中直接启动
+    if [[ "$OSTYPE" == "darwin"* ]]; then
+        echo "在macOS sandbox环境中启动服务..."
+        nohup ./bin/go-proxy-core > /private/var/tmp/go-proxy-core.log 2>&1 &
+        PID=$!
+        echo "服务启动命令已执行，PID: $PID"
     else
-        # 在macOS上，优先尝试通过特权助手工具启动
-        if [[ "$OSTYPE" == "darwin"* ]]; then
-            echo "在macOS上启动服务，尝试使用特权助手工具..."
-            nohup ./bin/go-proxy-core > /private/var/tmp/go-proxy-core.log 2>&1 &
-            PID=$!
-            echo "服务启动命令已执行，PID: $PID"
-        else
-            nohup ./bin/go-proxy-core > /private/var/tmp/go-proxy-core.log 2>&1 &
-            PID=$!
-            echo "服务启动命令已执行，PID: $PID"
-        fi
+        nohup ./bin/go-proxy-core > /private/var/tmp/go-proxy-core.log 2>&1 &
+        PID=$!
+        echo "服务启动命令已执行，PID: $PID"
     fi
 else
     echo "未找到可执行文件，使用go run启动服务..."
-    if [ "$NEEDS_ROOT" = "true" ]; then
-        echo "以管理员权限启动服务..."
-        # 检查是否在macOS上运行
-        if [[ "$OSTYPE" == "darwin"* ]]; then
-            # 在macOS上，使用sudo启动并确保TUN设备可访问
-            sudo -b nohup go run . > /private/var/tmp/go-proxy-core.log 2>&1
-            echo "服务启动命令已执行（管理员权限）"
-        else
-            # 在其他系统上直接使用sudo
-            sudo -b nohup go run . > /private/var/tmp/go-proxy-core.log 2>&1
-            echo "服务启动命令已执行（管理员权限）"
-        fi
+    # 在sandbox环境中直接启动，不使用管理员权限
+    # 在macOS sandbox环境中直接启动
+    if [[ "$OSTYPE" == "darwin"* ]]; then
+        echo "在macOS sandbox环境中启动服务..."
+        nohup go run . > /private/var/tmp/go-proxy-core.log 2>&1 &
+        PID=$!
+        echo "服务启动命令已执行，PID: $PID"
     else
-        # 在macOS上，优先尝试通过特权助手工具启动
-        if [[ "$OSTYPE" == "darwin"* ]]; then
-            echo "在macOS上启动服务，尝试使用特权助手工具..."
-            nohup go run . > /private/var/tmp/go-proxy-core.log 2>&1 &
-            PID=$!
-            echo "服务启动命令已执行，PID: $PID"
-        else
-            nohup go run . > /private/var/tmp/go-proxy-core.log 2>&1 &
-            PID=$!
-            echo "服务启动命令已执行，PID: $PID"
-        fi
+        nohup go run . > /private/var/tmp/go-proxy-core.log 2>&1 &
+        PID=$!
+        echo "服务启动命令已执行，PID: $PID"
     fi
 fi
 
